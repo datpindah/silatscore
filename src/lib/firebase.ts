@@ -5,13 +5,13 @@ import { getFirestore } from 'firebase/firestore';
 // import { getStorage } from 'firebase/storage'; // Uncomment if you need Storage
 
 const firebaseConfig = {
-  apiKey: "AIzaSyDZiChqftbZmze_dt26d-vOasEt4PcVilU",
-  authDomain: "newilek-15d47.firebaseapp.com",
-  projectId: "newilek-15d47",
-  storageBucket: "newilek-15d47.firebasestorage.app",
-  messagingSenderId: "713781638903",
-  appId: "1:713781638903:web:cf8c8956c5cc9dad7005f2",
-  measurementId: "G-4FJFZV2JXP"
+  apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY,
+  authDomain: process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN,
+  projectId: process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID,
+  storageBucket: process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET,
+  messagingSenderId: process.env.NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID,
+  appId: process.env.NEXT_PUBLIC_FIREBASE_APP_ID,
+  measurementId: process.env.NEXT_PUBLIC_FIREBASE_MEASUREMENT_ID,
 };
 
 // Initialize Firebase
