@@ -6,11 +6,11 @@ import Link from 'next/link';
 import { Header } from '@/components/layout/Header';
 import { PageTitle } from '@/components/shared/PageTitle';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent } from '@/components/ui/card';
 import { ArrowLeft, MinusSquare, Target, Shield, Lock, Unlock } from 'lucide-react';
 import type { ScheduleTanding } from '@/lib/types';
 import { db } from '@/lib/firebase';
-import { doc, onSnapshot, setDoc, getDoc, Timestamp, collection } from 'firebase/firestore';
+import { doc, onSnapshot, setDoc, getDoc, Timestamp } from 'firebase/firestore';
 
 const ACTIVE_TANDING_SCHEDULE_CONFIG_PATH = 'app_settings/active_match_tanding';
 const SCHEDULE_TANDING_COLLECTION = 'schedules_tanding';
@@ -21,16 +21,20 @@ interface PesilatInfo {
   contingent: string;
 }
 
+interface ScoreEntry {
+  points: 1 | 2;
+  timestamp: Timestamp;
+}
+
 interface RoundScores {
-  round1: number[];
-  round2: number[];
-  round3: number[];
+  round1: ScoreEntry[];
+  round2: ScoreEntry[];
+  round3: ScoreEntry[];
 }
 
 interface JuriMatchData {
   merah: RoundScores;
   biru: RoundScores;
-  // activeRound: 1 | 2 | 3; // This will now be primarily controlled by Dewan
   lastUpdated?: Timestamp;
 }
 
@@ -49,7 +53,6 @@ const initialRoundScores = (): RoundScores => ({
 const initialJuriMatchData = (): JuriMatchData => ({
   merah: initialRoundScores(),
   biru: initialRoundScores(),
-  // activeRound: 1,
 });
 
 export default function JuriDynamicPage({ params: paramsPromise }: { params: Promise<{ juriId: string }> }) {
@@ -61,8 +64,8 @@ export default function JuriDynamicPage({ params: paramsPromise }: { params: Pro
   const [pesilatMerah, setPesilatMerah] = useState<PesilatInfo | null>(null);
   const [pesilatBiru, setPesilatBiru] = useState<PesilatInfo | null>(null);
   
-  const [configMatchId, setConfigMatchId] = useState<string | null>(null); // From app_settings
-  const [activeMatchId, setActiveMatchId] = useState<string | null>(null); // Actual match ID being scored
+  const [configMatchId, setConfigMatchId] = useState<string | null>(null);
+  const [activeMatchId, setActiveMatchId] = useState<string | null>(null); 
   
   const [matchDetailsLoaded, setMatchDetailsLoaded] = useState(false);
   const [scoresData, setScoresData] = useState<JuriMatchData>(initialJuriMatchData());
@@ -72,14 +75,12 @@ export default function JuriDynamicPage({ params: paramsPromise }: { params: Pro
   const [isTimerRunningByDewan, setIsTimerRunningByDewan] = useState<boolean>(false);
   const [dewanMatchStatus, setDewanMatchStatus] = useState<string>('Pending');
 
-  // Effect to get configMatchId (active schedule ID)
   useEffect(() => {
     const unsubConfig = onSnapshot(doc(db, ACTIVE_TANDING_SCHEDULE_CONFIG_PATH), (docSnap) => {
       if (docSnap.exists() && docSnap.data()?.activeScheduleId) {
         setConfigMatchId(docSnap.data().activeScheduleId);
       } else {
         setConfigMatchId(null);
-        // Reset all if no active schedule
         setActiveMatchId(null);
         setPesilatMerah(null);
         setPesilatBiru(null);
@@ -90,32 +91,33 @@ export default function JuriDynamicPage({ params: paramsPromise }: { params: Pro
     }, (error) => {
       console.error("Error fetching active schedule config:", error);
       setConfigMatchId(null);
-      setActiveMatchId(null); // Ensure reset on error
+      setActiveMatchId(null);
     });
     return () => unsubConfig();
   }, []);
 
-  // Effect to load match details, Juri scores, and listen to Dewan's timer_status
   useEffect(() => {
     let unsubScores = () => {};
     let unsubTimerStatus = () => {};
 
     if (!configMatchId) {
-      setActiveMatchId(null); // Clear activeMatchId if configMatchId is null
+      setActiveMatchId(null);
       setPesilatMerah(null);
       setPesilatBiru(null);
       setMatchDetailsLoaded(false);
       setScoresData(initialJuriMatchData());
+      setDewanControlledRound(1);
+      setIsTimerRunningByDewan(false);
+      setDewanMatchStatus('Pending');
       setIsLoading(false);
       return;
     }
 
     setIsLoading(true);
-    setActiveMatchId(configMatchId); // Set the active match ID for scoring
+    setActiveMatchId(configMatchId);
 
     const loadAllData = async () => {
       try {
-        // Fetch schedule details
         const scheduleDocRef = doc(db, SCHEDULE_TANDING_COLLECTION, configMatchId);
         const scheduleDoc = await getDoc(scheduleDocRef);
 
@@ -133,7 +135,6 @@ export default function JuriDynamicPage({ params: paramsPromise }: { params: Pro
         setPesilatBiru({ name: scheduleData.pesilatBiruName, contingent: scheduleData.pesilatBiruContingent });
         setMatchDetailsLoaded(true);
 
-        // Listen to Dewan's timer_status for currentRound and isTimerRunning
         const timerStatusDocRef = doc(db, MATCHES_TANDING_COLLECTION, configMatchId);
         unsubTimerStatus = onSnapshot(timerStatusDocRef, (docSnap) => {
           if (docSnap.exists() && docSnap.data()?.timer_status) {
@@ -142,27 +143,37 @@ export default function JuriDynamicPage({ params: paramsPromise }: { params: Pro
             setIsTimerRunningByDewan(dewanStatus.isTimerRunning || false);
             setDewanMatchStatus(dewanStatus.matchStatus || 'Pending');
           } else {
-            // Default if timer_status not yet set by Dewan
             setDewanControlledRound(1);
             setIsTimerRunningByDewan(false);
             setDewanMatchStatus('Pending');
           }
+        }, (error) => {
+            console.error("Error fetching timer status:", error);
+            setDewanControlledRound(1);
+            setIsTimerRunningByDewan(false);
+            setDewanMatchStatus('Pending');
         });
         
-        // Load and subscribe to Juri's scores for this specific Juri
         const juriScoreDocRef = doc(db, MATCHES_TANDING_COLLECTION, configMatchId, 'juri_scores', juriId);
         unsubScores = onSnapshot(juriScoreDocRef, (scoreDoc) => {
           if (scoreDoc.exists()) {
             const data = scoreDoc.data() as JuriMatchData;
-            const ensuredData = {
-              ...initialJuriMatchData(),
-              ...data,
-              merah: { ...initialRoundScores(), ...(data.merah || {}) },
-              biru: { ...initialRoundScores(), ...(data.biru || {}) },
+            const ensuredData: JuriMatchData = {
+              merah: {
+                round1: data.merah?.round1 || [],
+                round2: data.merah?.round2 || [],
+                round3: data.merah?.round3 || [],
+              },
+              biru: {
+                round1: data.biru?.round1 || [],
+                round2: data.biru?.round2 || [],
+                round3: data.biru?.round3 || [],
+              },
+              lastUpdated: data.lastUpdated
             };
             setScoresData(ensuredData);
           } else {
-            setScoresData(initialJuriMatchData()); // Initialize if no doc for this juri yet
+            setScoresData(initialJuriMatchData());
           }
           setIsLoading(false); 
         }, (error) => {
@@ -186,13 +197,12 @@ export default function JuriDynamicPage({ params: paramsPromise }: { params: Pro
       unsubScores();
       unsubTimerStatus();
     };
-  }, [configMatchId, juriId]); // Re-run when configMatchId or juriId changes
+  }, [configMatchId, juriId]);
 
   const saveScoresToFirestore = useCallback(async (newScoresData: JuriMatchData) => {
     if (!activeMatchId || !juriId) return;
     const juriScoreDocRef = doc(db, MATCHES_TANDING_COLLECTION, activeMatchId, 'juri_scores', juriId);
     try {
-      // We don't save activeRound here anymore as it's controlled by Dewan
       const dataToSave = {
         merah: newScoresData.merah,
         biru: newScoresData.biru,
@@ -204,24 +214,29 @@ export default function JuriDynamicPage({ params: paramsPromise }: { params: Pro
     }
   }, [activeMatchId, juriId]);
 
-  const handleScore = (pesilatColor: 'merah' | 'biru', points: 1 | 2) => {
-    if (!activeMatchId || isLoading || !isTimerRunningByDewan || dewanMatchStatus === 'MatchFinished') return;
+  const handleScore = (pesilatColor: 'merah' | 'biru', pointsValue: 1 | 2) => {
+    if (!activeMatchId || isLoading || !isTimerRunningByDewan || dewanMatchStatus === 'MatchFinished' || dewanMatchStatus.startsWith('FinishedRound') || dewanMatchStatus.startsWith('Paused')) return;
     
     setScoresData(prevScores => {
       const newScores = JSON.parse(JSON.stringify(prevScores)) as JuriMatchData; 
       const roundKey = `round${dewanControlledRound}` as keyof RoundScores;
       
+      const newEntry: ScoreEntry = {
+        points: pointsValue,
+        timestamp: Timestamp.now()
+      };
+
       if (!newScores[pesilatColor][roundKey]) {
         newScores[pesilatColor][roundKey] = [];
       }
-      newScores[pesilatColor][roundKey].push(points);
-      saveScoresToFirestore(newScores); // Save immediately
+      newScores[pesilatColor][roundKey].push(newEntry);
+      saveScoresToFirestore(newScores);
       return newScores;
     });
   };
 
   const handleDeleteScore = (pesilatColor: 'merah' | 'biru') => {
-    if (!activeMatchId || isLoading || !isTimerRunningByDewan || dewanMatchStatus === 'MatchFinished') return;
+    if (!activeMatchId || isLoading || !isTimerRunningByDewan || dewanMatchStatus === 'MatchFinished' || dewanMatchStatus.startsWith('FinishedRound') || dewanMatchStatus.startsWith('Paused')) return;
     
     setScoresData(prevScores => {
       const newScores = JSON.parse(JSON.stringify(prevScores)) as JuriMatchData;
@@ -230,36 +245,34 @@ export default function JuriDynamicPage({ params: paramsPromise }: { params: Pro
       if (newScores[pesilatColor][roundKey] && newScores[pesilatColor][roundKey].length > 0) {
         newScores[pesilatColor][roundKey].pop();
       }
-      saveScoresToFirestore(newScores); // Save immediately
+      saveScoresToFirestore(newScores);
       return newScores;
     });
   };
 
-  // Juri no longer sets the round, it's read from Dewan.
-  // const handleSetRound = (round: 1 | 2 | 3) => { ... removed ... }
-
-  const calculateTotalScoreForPesilat = (roundScores: RoundScores): number => {
-    return Object.values(roundScores).reduce((total, roundData) => 
-      total + (roundData?.reduce((sum, score) => sum + score, 0) || 0), 0);
+  const calculateTotalScoreForPesilatDisplay = (roundScores: RoundScores): number => {
+    return Object.values(roundScores).reduce((total, roundDataArray) => 
+      total + (roundDataArray?.reduce((sum, scoreEntry) => sum + scoreEntry.points, 0) || 0), 0);
   };
 
-  const totalMerah = calculateTotalScoreForPesilat(scoresData.merah);
-  const totalBiru = calculateTotalScoreForPesilat(scoresData.biru);
+  const totalMerahDisplay = calculateTotalScoreForPesilatDisplay(scoresData.merah);
+  const totalBiruDisplay = calculateTotalScoreForPesilatDisplay(scoresData.biru);
 
-  const renderRoundScores = (roundData: number[] | undefined) => {
+  const renderRoundScoresDisplay = (roundData: ScoreEntry[] | undefined) => {
     if (!roundData || roundData.length === 0) return '-';
-    return roundData.join(' ');
+    return roundData.map(entry => entry.points).join(' ');
   };
   
-  const isInputDisabled = isLoading || !isTimerRunningByDewan || !activeMatchId || dewanMatchStatus === 'MatchFinished';
+  const isInputDisabled = isLoading || !activeMatchId || dewanMatchStatus === 'MatchFinished' || !isTimerRunningByDewan || dewanMatchStatus.startsWith('FinishedRound') || dewanMatchStatus.startsWith('Paused');
   const inputDisabledReason = () => {
     if (isLoading) return "Memuat data...";
     if (!activeMatchId) return "Tidak ada pertandingan aktif.";
     if (dewanMatchStatus === 'MatchFinished') return "Pertandingan telah Selesai.";
+    if (dewanMatchStatus.startsWith('FinishedRound')) return `Babak ${dewanControlledRound} Selesai. Input ditutup.`;
+    if (dewanMatchStatus.startsWith('Paused')) return `Babak ${dewanControlledRound} Jeda. Input ditutup.`;
     if (!isTimerRunningByDewan) return "Input nilai ditutup (timer tidak berjalan).";
     return "";
   };
-
 
   if (isLoading && !configMatchId) {
     return (
@@ -289,7 +302,7 @@ export default function JuriDynamicPage({ params: paramsPromise }: { params: Pro
     );
   }
   
-  if (isLoading) {
+  if (isLoading && activeMatchId) { // Changed condition to allow rendering skeleton when activeMatchId is set but data is loading
      return (
       <div className="flex flex-col min-h-screen">
         <Header />
@@ -307,7 +320,7 @@ export default function JuriDynamicPage({ params: paramsPromise }: { params: Pro
       <main className="flex-1 container mx-auto px-4 py-8">
         <PageTitle
           title={`${juriDisplayName} - Scoring Tanding`}
-          description={matchDetailsLoaded ? `${pesilatMerah?.name || 'Merah'} vs ${pesilatBiru?.name || 'Biru'} - Babak ${dewanControlledRound}` : 'Menunggu info pertandingan...'}
+          description={matchDetailsLoaded && activeMatchId ? `${pesilatMerah?.name || 'Merah'} vs ${pesilatBiru?.name || 'Biru'} - Babak ${dewanControlledRound}` : 'Menunggu info pertandingan...'}
         >
           <div className="flex items-center gap-2">
              {isInputDisabled ? <Lock className="h-5 w-5 text-red-500" /> : <Unlock className="h-5 w-5 text-green-500" />}
@@ -342,21 +355,21 @@ export default function JuriDynamicPage({ params: paramsPromise }: { params: Pro
                   {[1, 2, 3].map((round) => (
                     <div key={round} className={`grid grid-cols-3 text-center border-t ${dewanControlledRound === round ? 'bg-yellow-100 font-semibold' : ''}`}>
                       <div className="p-3 tabular-nums min-h-[3rem] flex items-center justify-center">
-                        {renderRoundScores(scoresData.merah[`round${round as 1 | 2 | 3}` as keyof RoundScores])}
+                        {renderRoundScoresDisplay(scoresData.merah[`round${round as 1 | 2 | 3}` as keyof RoundScores])}
                       </div>
                       <div className={`p-3 font-medium flex items-center justify-center`}>
                         {round === 1 ? 'I' : round === 2 ? 'II' : 'III'}
                       </div>
                       <div className="p-3 tabular-nums min-h-[3rem] flex items-center justify-center">
-                        {renderRoundScores(scoresData.biru[`round${round as 1 | 2 | 3}` as keyof RoundScores])}
+                        {renderRoundScoresDisplay(scoresData.biru[`round${round as 1 | 2 | 3}` as keyof RoundScores])}
                       </div>
                     </div>
                   ))}
                 </div>
 
                 <div className="flex justify-between mt-4 text-xl font-bold">
-                  <p className="text-red-600">Total Merah: {totalMerah}</p>
-                  <p className="text-blue-600">Total Biru: {totalBiru}</p>
+                  <p className="text-red-600">Total Poin Juri (Merah): {totalMerahDisplay}</p>
+                  <p className="text-blue-600">Total Poin Juri (Biru): {totalBiruDisplay}</p>
                 </div>
               </CardContent>
             </Card>
@@ -417,3 +430,4 @@ export default function JuriDynamicPage({ params: paramsPromise }: { params: Pro
   );
 }
 
+    
