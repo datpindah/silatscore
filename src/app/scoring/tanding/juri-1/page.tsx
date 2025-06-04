@@ -6,7 +6,7 @@ import Link from 'next/link';
 import { Header } from '@/components/layout/Header';
 import { PageTitle } from '@/components/shared/PageTitle';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent } from '@/components/ui/card'; // Removed CardHeader, CardTitle
+import { Card, CardContent } from '@/components/ui/card';
 import { ArrowLeft, MinusSquare, Target, Shield } from 'lucide-react';
 import type { ScheduleTanding } from '@/lib/types';
 import { db } from '@/lib/firebase';
@@ -50,113 +50,108 @@ const initialJuriMatchData = (): JuriMatchData => ({
 export default function JuriSatuPage() {
   const [pesilatMerah, setPesilatMerah] = useState<PesilatInfo | null>(null);
   const [pesilatBiru, setPesilatBiru] = useState<PesilatInfo | null>(null);
-  const [activeMatchId, setActiveMatchId] = useState<string | null>(null);
+  
+  const [configMatchId, setConfigMatchId] = useState<string | null>(null); // ID from Firestore config
+  const [activeMatchId, setActiveMatchId] = useState<string | null>(null); // Actual ID being used for operations
+  
   const [matchDetailsLoaded, setMatchDetailsLoaded] = useState(false);
-
   const [scoresData, setScoresData] = useState<JuriMatchData>(initialJuriMatchData());
   const [isLoading, setIsLoading] = useState(true);
 
-  // Effect to fetch active match ID and then schedule details
+  // 1. Listen to Firestore config for the active match ID
   useEffect(() => {
-    setIsLoading(true);
-    const unsubActiveMatch = onSnapshot(doc(db, ACTIVE_TANDING_SCHEDULE_CONFIG_PATH), async (docSnap) => {
+    setIsLoading(true); // Start with loading true when setting up config listener
+    const unsubConfig = onSnapshot(doc(db, ACTIVE_TANDING_SCHEDULE_CONFIG_PATH), (docSnap) => {
       if (docSnap.exists() && docSnap.data()?.activeScheduleId) {
-        const currentActiveMatchId = docSnap.data().activeScheduleId;
-        if (activeMatchId !== currentActiveMatchId) { // Only refetch if match ID changes
-          setActiveMatchId(currentActiveMatchId);
-          // Fetch schedule details
-          try {
-            const scheduleDocRef = doc(db, SCHEDULE_TANDING_COLLECTION, currentActiveMatchId);
-            const scheduleDoc = await getDoc(scheduleDocRef);
-            if (scheduleDoc.exists()) {
-              const scheduleData = scheduleDoc.data() as ScheduleTanding;
-              setPesilatMerah({ name: scheduleData.pesilatMerahName, contingent: scheduleData.pesilatMerahContingent });
-              setPesilatBiru({ name: scheduleData.pesilatBiruName, contingent: scheduleData.pesilatBiruContingent });
-              setMatchDetailsLoaded(true);
-            } else {
-              console.error("Active schedule document not found.");
-              setPesilatMerah(null);
-              setPesilatBiru(null);
-              setActiveMatchId(null);
-              setMatchDetailsLoaded(false);
-            }
-          } catch (error) {
-            console.error("Error fetching schedule details:", error);
-            setPesilatMerah(null);
-            setPesilatBiru(null);
-            setActiveMatchId(null);
-            setMatchDetailsLoaded(false);
-          }
-        } else if (activeMatchId === currentActiveMatchId && !matchDetailsLoaded) {
-          // If match ID is the same but details weren't loaded (e.g. on initial load after ID is set)
-           try {
-            const scheduleDocRef = doc(db, SCHEDULE_TANDING_COLLECTION, currentActiveMatchId);
-            const scheduleDoc = await getDoc(scheduleDocRef);
-            if (scheduleDoc.exists()) {
-              const scheduleData = scheduleDoc.data() as ScheduleTanding;
-              setPesilatMerah({ name: scheduleData.pesilatMerahName, contingent: scheduleData.pesilatMerahContingent });
-              setPesilatBiru({ name: scheduleData.pesilatBiruName, contingent: scheduleData.pesilatBiruContingent });
-              setMatchDetailsLoaded(true);
-            }
-          } catch (error) {
-            console.error("Error refetching schedule details:", error);
-          }
-        }
+        setConfigMatchId(docSnap.data().activeScheduleId);
       } else {
-        console.log("No active tanding schedule found or ID is null.");
-        setPesilatMerah(null);
-        setPesilatBiru(null);
-        setActiveMatchId(null);
-        setMatchDetailsLoaded(false);
-        setScoresData(initialJuriMatchData()); // Reset scores if no active match
+        setConfigMatchId(null);
       }
+    }, (error) => {
+      console.error("Error fetching active schedule config:", error);
+      setConfigMatchId(null);
+      setIsLoading(false); // Error in config, stop loading
     });
-    return () => unsubActiveMatch();
-  }, [activeMatchId, matchDetailsLoaded]);
+    return () => unsubConfig();
+  }, []);
 
-
-  // Effect to fetch/subscribe to juri scores once activeMatchId is set
+  // 2. When configMatchId changes, load all necessary data (schedule details AND juri scores)
   useEffect(() => {
-    if (!activeMatchId) {
-      setScoresData(initialJuriMatchData()); // Reset scores if no active match
+    let unsubScores = () => {};
+
+    if (!configMatchId) {
+      setActiveMatchId(null);
+      setPesilatMerah(null);
+      setPesilatBiru(null);
+      setMatchDetailsLoaded(false);
+      setScoresData(initialJuriMatchData());
       setIsLoading(false);
       return;
     }
+
     setIsLoading(true);
-    const juriScoreDocRef = doc(db, MATCHES_TANDING_COLLECTION, activeMatchId, 'juri_scores', JURI_ID);
-    const unsubScores = onSnapshot(juriScoreDocRef, (docSnap) => {
-      if (docSnap.exists()) {
-        const data = docSnap.data() as JuriMatchData;
-        // Ensure all rounds exist, even if empty
-        const ensuredData = {
-          ...initialJuriMatchData(), // provides default for activeRound
-          ...data,
-          merah: {
-            ...initialRoundScores(),
-            ...data.merah,
-          },
-          biru: {
-            ...initialRoundScores(),
-            ...data.biru,
-          },
-        };
-        setScoresData(ensuredData);
-      } else {
-        setScoresData(initialJuriMatchData()); // No scores yet for this juri/match, use initial
+    setActiveMatchId(configMatchId); // Update the operational activeMatchId
+
+    const loadAllData = async () => {
+      try {
+        // Fetch schedule details
+        const scheduleDocRef = doc(db, SCHEDULE_TANDING_COLLECTION, configMatchId);
+        const scheduleDoc = await getDoc(scheduleDocRef);
+
+        if (!scheduleDoc.exists()) {
+          console.error("Active schedule document not found for ID:", configMatchId);
+          setPesilatMerah(null); setPesilatBiru(null); setMatchDetailsLoaded(false);
+          setActiveMatchId(null); // Clear operational ID
+          setScoresData(initialJuriMatchData());
+          setIsLoading(false);
+          return; 
+        }
+        
+        const scheduleData = scheduleDoc.data() as ScheduleTanding;
+        setPesilatMerah({ name: scheduleData.pesilatMerahName, contingent: scheduleData.pesilatMerahContingent });
+        setPesilatBiru({ name: scheduleData.pesilatBiruName, contingent: scheduleData.pesilatBiruContingent });
+        setMatchDetailsLoaded(true);
+
+        // If schedule details are loaded, proceed to load/subscribe to juri scores
+        const juriScoreDocRef = doc(db, MATCHES_TANDING_COLLECTION, configMatchId, 'juri_scores', JURI_ID);
+        unsubScores = onSnapshot(juriScoreDocRef, (scoreDoc) => {
+          if (scoreDoc.exists()) {
+            const data = scoreDoc.data() as JuriMatchData;
+            const ensuredData = {
+              ...initialJuriMatchData(), 
+              ...data,
+              merah: { ...initialRoundScores(), ...data.merah },
+              biru: { ...initialRoundScores(), ...data.biru },
+            };
+            setScoresData(ensuredData);
+          } else {
+            setScoresData(initialJuriMatchData());
+          }
+          setIsLoading(false); // Successfully loaded/subscribed to scores
+        }, (error) => {
+          console.error(`Error fetching/subscribing to juri scores for ${JURI_ID}:`, error);
+          setScoresData(initialJuriMatchData());
+          setIsLoading(false); // Error loading scores
+        });
+
+      } catch (error) {
+        console.error("Error in loadAllData (fetching schedule details):", error);
+        setPesilatMerah(null); setPesilatBiru(null); setMatchDetailsLoaded(false);
+        setActiveMatchId(null); // Clear operational ID
+        setScoresData(initialJuriMatchData());
+        setIsLoading(false);
       }
-      setIsLoading(false);
-    }, (error) => {
-      console.error(`Error fetching scores for ${JURI_ID}:`, error);
-      setScoresData(initialJuriMatchData());
-      setIsLoading(false);
-    });
+    };
 
-    return () => unsubScores();
-  }, [activeMatchId]);
+    loadAllData();
 
+    return () => {
+      unsubScores(); // Cleanup juri_scores subscription
+    };
+  }, [configMatchId]); // React to changes in the ID from config
 
   const saveScoresToFirestore = useCallback(async (newScoresData: JuriMatchData) => {
-    if (!activeMatchId) return;
+    if (!activeMatchId) return; // Use the operational activeMatchId
     const juriScoreDocRef = doc(db, MATCHES_TANDING_COLLECTION, activeMatchId, 'juri_scores', JURI_ID);
     try {
       await setDoc(juriScoreDocRef, { ...newScoresData, lastUpdated: Timestamp.now() }, { merge: true });
@@ -166,8 +161,9 @@ export default function JuriSatuPage() {
   }, [activeMatchId]);
 
   const handleScore = (pesilatColor: 'merah' | 'biru', points: 1 | 2) => {
+    if (!activeMatchId || isLoading) return; // Guard against actions if no active match or still loading
     setScoresData(prevScores => {
-      const newScores = JSON.parse(JSON.stringify(prevScores)); // Deep copy
+      const newScores = JSON.parse(JSON.stringify(prevScores)); 
       const roundKey = `round${prevScores.activeRound}` as keyof RoundScores;
       
       if (!newScores[pesilatColor][roundKey]) {
@@ -180,8 +176,9 @@ export default function JuriSatuPage() {
   };
 
   const handleDeleteScore = (pesilatColor: 'merah' | 'biru') => {
+    if (!activeMatchId || isLoading) return;
     setScoresData(prevScores => {
-      const newScores = JSON.parse(JSON.stringify(prevScores)); // Deep copy
+      const newScores = JSON.parse(JSON.stringify(prevScores)); 
       const roundKey = `round${prevScores.activeRound}` as keyof RoundScores;
       
       if (newScores[pesilatColor][roundKey] && newScores[pesilatColor][roundKey].length > 0) {
@@ -193,6 +190,7 @@ export default function JuriSatuPage() {
   };
 
   const handleSetRound = (round: 1 | 2 | 3) => {
+    if (!activeMatchId || isLoading) return;
     setScoresData(prevScores => {
         const newScores = { ...prevScores, activeRound: round };
         saveScoresToFirestore(newScores);
@@ -200,10 +198,9 @@ export default function JuriSatuPage() {
     });
   };
 
-
   const calculateTotalScoreForPesilat = (roundScores: RoundScores): number => {
-    return Object.values(roundScores).reduce((total, round) => 
-      total + (round?.reduce((sum, score) => sum + score, 0) || 0), 0);
+    return Object.values(roundScores).reduce((total, roundData) => 
+      total + (roundData?.reduce((sum, score) => sum + score, 0) || 0), 0);
   };
 
   const totalMerah = calculateTotalScoreForPesilat(scoresData.merah);
@@ -214,19 +211,19 @@ export default function JuriSatuPage() {
     return roundData.join(' ');
   };
   
-  if (isLoading && !matchDetailsLoaded) {
+  if (isLoading && !matchDetailsLoaded && !activeMatchId) { // Show loading primarily if configMatchId is still being processed or no ID yet
     return (
       <div className="flex flex-col min-h-screen">
         <Header />
         <main className="flex-1 container mx-auto px-4 py-8">
           <PageTitle title={`Juri ${JURI_ID.split('-')[1]} - Scoring Tanding`} description="Memuat data pertandingan..." />
-          <p>Loading...</p>
+          <Card className="mt-6"><CardContent className="p-6 text-center">Loading...</CardContent></Card>
         </main>
       </div>
     );
   }
 
-  if (!activeMatchId && !isLoading) {
+  if (!activeMatchId && !isLoading) { // No active match configured, and not in a loading state
     return (
       <div className="flex flex-col min-h-screen">
         <Header />
@@ -249,14 +246,14 @@ export default function JuriSatuPage() {
     );
   }
 
-
+  // Main UI Render
   return (
     <div className="flex flex-col min-h-screen">
       <Header />
       <main className="flex-1 container mx-auto px-4 py-8">
         <PageTitle
           title={`Juri ${JURI_ID.split('-')[1]} - Scoring Tanding`}
-          description={`Input penilaian untuk ${JURI_ID}. Pertandingan: ${activeMatchId || 'Belum Ada'}`}
+          description={`Input penilaian untuk ${JURI_ID}. Pertandingan: ${activeMatchId || 'Memuat...'}`}
         >
           <Button variant="outline" asChild>
             <Link href="/scoring/tanding">
@@ -271,13 +268,13 @@ export default function JuriSatuPage() {
             <div className="flex justify-between text-sm mb-4">
               <div className="text-red-600">
                 <p className="font-semibold">MERAH</p>
-                <p>Kontingen: {pesilatMerah?.contingent || '-'}</p>
-                <p>Pesilat: {pesilatMerah?.name || '-'}</p>
+                <p>Kontingen: {pesilatMerah?.contingent || (isLoading ? 'Memuat...' : '-')}</p>
+                <p>Pesilat: {pesilatMerah?.name || (isLoading ? 'Memuat...' : '-')}</p>
               </div>
               <div className="text-blue-600 text-right">
                 <p className="font-semibold">BIRU</p>
-                <p>Kontingen: {pesilatBiru?.contingent || '-'}</p>
-                <p>Pesilat: {pesilatBiru?.name || '-'}</p>
+                <p>Kontingen: {pesilatBiru?.contingent || (isLoading ? 'Memuat...' : '-')}</p>
+                <p>Pesilat: {pesilatBiru?.name || (isLoading ? 'Memuat...' : '-')}</p>
               </div>
             </div>
 
@@ -290,24 +287,25 @@ export default function JuriSatuPage() {
               {[1, 2, 3].map((round) => (
                 <div key={round} className="grid grid-cols-3 text-center border-t">
                   <div className="p-3 tabular-nums min-h-[3rem] flex items-center justify-center">
-                    {renderRoundScores(scoresData.merah[`round${round as 1 | 2 | 3}` as keyof RoundScores])}
+                    {isLoading && !scoresData.merah[`round${round as 1 | 2 | 3}` as keyof RoundScores]?.length ? '...' : renderRoundScores(scoresData.merah[`round${round as 1 | 2 | 3}` as keyof RoundScores])}
                   </div>
                   <button 
                     onClick={() => handleSetRound(round as 1 | 2 | 3)}
-                    className={`p-3 font-medium ${scoresData.activeRound === round ? 'bg-yellow-400 text-black scale-105 ring-2 ring-yellow-500' : 'bg-gray-100 hover:bg-gray-200'} transition-all`}
+                    disabled={isLoading || !activeMatchId}
+                    className={`p-3 font-medium ${scoresData.activeRound === round ? 'bg-yellow-400 text-black scale-105 ring-2 ring-yellow-500' : 'bg-gray-100 hover:bg-gray-200'} transition-all disabled:opacity-50 disabled:cursor-not-allowed`}
                   >
                     {round === 1 ? 'I' : round === 2 ? 'II' : 'III'}
                   </button>
                   <div className="p-3 tabular-nums min-h-[3rem] flex items-center justify-center">
-                     {renderRoundScores(scoresData.biru[`round${round as 1 | 2 | 3}` as keyof RoundScores])}
+                     {isLoading && !scoresData.biru[`round${round as 1 | 2 | 3}` as keyof RoundScores]?.length ? '...' : renderRoundScores(scoresData.biru[`round${round as 1 | 2 | 3}` as keyof RoundScores])}
                   </div>
                 </div>
               ))}
             </div>
 
             <div className="flex justify-between mt-4 text-lg font-semibold">
-              <p className="text-red-600">Total Merah: {totalMerah}</p>
-              <p className="text-blue-600">Total Biru: {totalBiru}</p>
+              <p className="text-red-600">Total Merah: {isLoading && totalMerah === 0 ? '...' : totalMerah}</p>
+              <p className="text-blue-600">Total Biru: {isLoading && totalBiru === 0 ? '...' : totalBiru}</p>
             </div>
           </CardContent>
         </Card>
@@ -367,3 +365,4 @@ export default function JuriSatuPage() {
     </div>
   );
 }
+
