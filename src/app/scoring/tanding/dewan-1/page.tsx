@@ -10,6 +10,7 @@ import { ArrowLeft, Play, Pause, RotateCcw, ChevronRight, CheckCircle2, RadioTow
 import type { ScheduleTanding } from '@/lib/types';
 import { db } from '@/lib/firebase';
 import { doc, onSnapshot, setDoc, getDoc, Timestamp, collection, writeBatch } from 'firebase/firestore';
+import { cn } from '@/lib/utils';
 
 const ACTIVE_TANDING_SCHEDULE_CONFIG_PATH = 'app_settings/active_match_tanding';
 const SCHEDULE_TANDING_COLLECTION = 'schedules_tanding';
@@ -40,6 +41,11 @@ interface JuriMatchData {
   lastUpdated?: Timestamp;
 }
 
+// Enhanced JuriMatchData to include juriId
+interface JuriMatchDataWithId extends JuriMatchData {
+  juriId: string;
+}
+
 interface TimerStatus {
   currentRound: 1 | 2 | 3;
   timerSeconds: number;
@@ -60,6 +66,11 @@ interface CombinedScoreEntry extends ScoreEntry {
   juriId: string;
 }
 
+interface ConfirmedScoreResult {
+  score: number;
+  contributingEntryKeys: Set<string>; // Set of "juriId_timestampMillis_points"
+}
+
 
 export default function ScoringTandingDewanSatuPage() {
   const [activeScheduleId, setActiveScheduleId] = useState<string | null>(null);
@@ -70,12 +81,13 @@ export default function ScoringTandingDewanSatuPage() {
 
   const [timerStatus, setTimerStatus] = useState<TimerStatus>(initialTimerStatus);
   
-  const [juri1Scores, setJuri1Scores] = useState<JuriMatchData | null>(null);
-  const [juri2Scores, setJuri2Scores] = useState<JuriMatchData | null>(null);
-  const [juri3Scores, setJuri3Scores] = useState<JuriMatchData | null>(null);
+  const [juri1Scores, setJuri1Scores] = useState<JuriMatchDataWithId | null>(null);
+  const [juri2Scores, setJuri2Scores] = useState<JuriMatchDataWithId | null>(null);
+  const [juri3Scores, setJuri3Scores] = useState<JuriMatchDataWithId | null>(null);
 
   const [confirmedScoreMerah, setConfirmedScoreMerah] = useState(0);
   const [confirmedScoreBiru, setConfirmedScoreBiru] = useState(0);
+  const [allContributingEntryKeys, setAllContributingEntryKeys] = useState<Set<string>>(new Set());
   
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -97,6 +109,7 @@ export default function ScoringTandingDewanSatuPage() {
           setJuri3Scores(null);
           setConfirmedScoreMerah(0); 
           setConfirmedScoreBiru(0);
+          setAllContributingEntryKeys(new Set());
           setError(null); 
         } else if (!activeScheduleId && !newActiveId) {
             console.log("[Dewan-1] No active schedule ID found (both null/undefined).");
@@ -116,6 +129,7 @@ export default function ScoringTandingDewanSatuPage() {
         setJuri3Scores(null);
         setConfirmedScoreMerah(0);
         setConfirmedScoreBiru(0);
+        setAllContributingEntryKeys(new Set());
         setIsLoading(false); 
       }
     }, (err) => {
@@ -136,6 +150,7 @@ export default function ScoringTandingDewanSatuPage() {
       setTimerStatus(initialTimerStatus);
       setJuri1Scores(null); setJuri2Scores(null); setJuri3Scores(null);
       setConfirmedScoreMerah(0); setConfirmedScoreBiru(0);
+      setAllContributingEntryKeys(new Set());
       setIsLoading(false);
       return;
     }
@@ -188,7 +203,7 @@ export default function ScoringTandingDewanSatuPage() {
           const unsubJuri = onSnapshot(juriDocRef, (docSnap) => {
             if (docSnap.exists()) {
               console.log(`[Dewan-1] Scores updated from Firestore for ${juriId}:`, docSnap.data());
-              juriSetters[index](docSnap.data() as JuriMatchData);
+              juriSetters[index]({ ...(docSnap.data() as JuriMatchData), juriId });
             } else {
               console.log(`[Dewan-1] No scores document found for ${juriId}, match ID: ${activeScheduleId}. Setting to null.`);
               juriSetters[index](null); 
@@ -219,15 +234,15 @@ export default function ScoringTandingDewanSatuPage() {
   const calculateConfirmedScoreForPesilat = useCallback((
     pesilatColor: 'merah' | 'biru',
     targetRound: 1 | 2 | 3, 
-    allJuriScoresData: (JuriMatchData | null)[]
-  ): number => {
+    allJuriScoresData: (JuriMatchDataWithId | null)[]
+  ): ConfirmedScoreResult => {
     const roundKey = `round${targetRound}` as keyof JuriRoundScores;
     let allEntriesForRound: CombinedScoreEntry[] = [];
 
-    allJuriScoresData.forEach((juriData, index) => {
-      if (juriData && juriData[pesilatColor] && juriData[pesilatColor][roundKey]) {
-        const juriId = JURI_IDS[index];
-        const scoresForRoundByJuri: ScoreEntry[] = juriData[pesilatColor][roundKey];
+    allJuriScoresData.forEach((juriCompleteData) => {
+      if (juriCompleteData && juriCompleteData[pesilatColor] && juriCompleteData[pesilatColor][roundKey]) {
+        const juriId = juriCompleteData.juriId;
+        const scoresForRoundByJuri: ScoreEntry[] = juriCompleteData[pesilatColor][roundKey];
         scoresForRoundByJuri.forEach(score => {
           allEntriesForRound.push({ ...score, juriId });
         });
@@ -247,16 +262,17 @@ export default function ScoringTandingDewanSatuPage() {
     
     console.log(`[CalcScore] For ${pesilatColor}, round ${targetRound}, valid entries (with toMillis):`, JSON.parse(JSON.stringify(validEntriesForRound)));
 
-    if (validEntriesForRound.length < 2) {
-      console.log(`[CalcScore] Not enough valid entries for ${pesilatColor}, round ${targetRound} to form a pair. Count: ${validEntriesForRound.length}`);
-      return 0;
+    if (validEntriesForRound.length < 2) { // Need at least two entries to potentially form a pair
+      console.log(`[CalcScore] Not enough valid entries for ${pesilatColor}, round ${targetRound} to form any pair. Count: ${validEntriesForRound.length}`);
+      return { score: 0, contributingEntryKeys: new Set() };
     }
 
     validEntriesForRound.sort((a, b) => a.timestamp.toMillis() - b.timestamp.toMillis());
     console.log(`[CalcScore] For ${pesilatColor}, round ${targetRound}, sorted valid entries:`, JSON.parse(JSON.stringify(validEntriesForRound)));
 
     let confirmedPointsTotalForRound = 0;
-    const consumedEntryKeysForConfirmedPoints = new Set<string>(); 
+    const consumedEntryKeysForConfirmedPoints = new Set<string>(); // Tracks "juriId_timestampMillis_points" of entries already used in a confirmed score
+    const contributingEntryKeysThisRound = new Set<string>(); // Tracks keys of entries that contributed to this round's score
 
     for (let i = 0; i < validEntriesForRound.length; i++) {
       const e1 = validEntriesForRound[i];
@@ -269,8 +285,8 @@ export default function ScoringTandingDewanSatuPage() {
         continue;
       }
 
-      let confirmingJuriesForE1 = new Set<string>([e1.juriId]);
-      let entriesInThisAgreement = new Set<string>([e1Key]); 
+      let confirmingJuriesForE1 = new Set<string>([e1.juriId]); // Juries involved in this specific potential agreement starting with e1
+      let entriesInThisAgreement = new Set<string>([e1Key]); // Keys of entries forming this specific agreement
 
       for (let j = i + 1; j < validEntriesForRound.length; j++) {
         const e2 = validEntriesForRound[j];
@@ -278,16 +294,16 @@ export default function ScoringTandingDewanSatuPage() {
         console.log(`[CalcScore]  Comparing with e2: ${e2Key}`);
 
         if (consumedEntryKeysForConfirmedPoints.has(e2Key)) {
-          console.log(`[CalcScore]   e2 ${e2Key} already consumed. Skipping for this e1.`);
+          console.log(`[CalcScore]   e2 ${e2Key} already consumed for a prior agreement. Skipping for this e1.`);
           continue;
         }
-        if (confirmingJuriesForE1.has(e2.juriId)) { // A juri cannot confirm their own initial point with another point from themselves for THE SAME e1 agreement
-            console.log(`[CalcScore]   e2 ${e2Key} is from a juri (${e2.juriId}) already in this agreement set for e1. Skipping.`);
+        if (confirmingJuriesForE1.has(e2.juriId)) { 
+            console.log(`[CalcScore]   e2 ${e2Key} is from a juri (${e2.juriId}) already in this current agreement set for e1. Skipping.`);
             continue;
         }
         
         const timeDifference = e2.timestamp.toMillis() - e1.timestamp.toMillis();
-        console.log(`[CalcScore]   Time difference between e1 and e2: ${timeDifference}ms`);
+        console.log(`[CalcScore]   Time difference between e1 (${e1.timestamp.toMillis()}) and e2 (${e2.timestamp.toMillis()}): ${timeDifference}ms`);
 
         if (timeDifference > 2000) { 
            console.log(`[CalcScore]   Time difference > 2000ms. Breaking inner loop for e1 ${e1Key}.`);
@@ -303,17 +319,20 @@ export default function ScoringTandingDewanSatuPage() {
         }
       }
       
-      console.log(`[CalcScore] For e1 ${e1Key}, confirming juris count: ${confirmingJuriesForE1.size}`);
-      if (confirmingJuriesForE1.size >= 2) {
+      console.log(`[CalcScore] For e1 ${e1Key}, unique confirming juris count: ${confirmingJuriesForE1.size}`);
+      if (confirmingJuriesForE1.size >= 2) { // At least e1 and one other juri agree
         console.log(`[CalcScore]   CONFIRMED: Score of ${e1.points} for ${pesilatColor}, round ${targetRound} from e1 ${e1Key}. Consuming entries:`, Array.from(entriesInThisAgreement));
         confirmedPointsTotalForRound += e1.points; 
-        entriesInThisAgreement.forEach(key => consumedEntryKeysForConfirmedPoints.add(key));
+        entriesInThisAgreement.forEach(key => {
+            consumedEntryKeysForConfirmedPoints.add(key);
+            contributingEntryKeysThisRound.add(key);
+        });
       } else {
-        console.log(`[CalcScore]   NOT CONFIRMED: Score for e1 ${e1Key} (confirming juris: ${confirmingJuriesForE1.size}).`);
+        console.log(`[CalcScore]   NOT CONFIRMED: Score for e1 ${e1Key} (confirming juris: ${confirmingJuriesForE1.size}). This entry might be 'struck'.`);
       }
     }
     console.log(`[CalcScore] Total confirmed points for ${pesilatColor}, round ${targetRound}: ${confirmedPointsTotalForRound}`);
-    return confirmedPointsTotalForRound;
+    return { score: confirmedPointsTotalForRound, contributingEntryKeys: contributingEntryKeysThisRound };
   }, []);
 
 
@@ -322,6 +341,7 @@ export default function ScoringTandingDewanSatuPage() {
     if (!activeScheduleId) {
       setConfirmedScoreMerah(0);
       setConfirmedScoreBiru(0);
+      setAllContributingEntryKeys(new Set());
       setIsLoading(false); 
       console.log("[Dewan-1] No active schedule ID, confirmed scores reset, loading set to false.");
       return;
@@ -332,18 +352,27 @@ export default function ScoringTandingDewanSatuPage() {
     
     let totalMerahOverall = 0;
     let totalBiruOverall = 0;
+    const newAllContributingKeys = new Set<string>();
 
     for (let roundNum: 1 | 2 | 3 = 1; roundNum <= TOTAL_ROUNDS; roundNum = (roundNum + 1) as (1 | 2 | 3)) {
         console.log(`[Dewan-1] Calculating confirmed score for MERAH, round ${roundNum}`);
-        totalMerahOverall += calculateConfirmedScoreForPesilat('merah', roundNum, allJuriData);
+        const merahResult = calculateConfirmedScoreForPesilat('merah', roundNum, allJuriData);
+        totalMerahOverall += merahResult.score;
+        merahResult.contributingEntryKeys.forEach(key => newAllContributingKeys.add(key));
+        
         console.log(`[Dewan-1] Calculating confirmed score for BIRU, round ${roundNum}`);
-        totalBiruOverall += calculateConfirmedScoreForPesilat('biru', roundNum, allJuriData);
+        const biruResult = calculateConfirmedScoreForPesilat('biru', roundNum, allJuriData);
+        totalBiruOverall += biruResult.score;
+        biruResult.contributingEntryKeys.forEach(key => newAllContributingKeys.add(key));
+
         if (roundNum === TOTAL_ROUNDS) break; 
     }
 
     console.log("[Dewan-1] Final calculated confirmed scores: Merah =", totalMerahOverall, "Biru =", totalBiruOverall);
+    console.log("[Dewan-1] All contributing entry keys:", newAllContributingKeys);
     setConfirmedScoreMerah(totalMerahOverall);
     setConfirmedScoreBiru(totalBiruOverall);
+    setAllContributingEntryKeys(newAllContributingKeys);
     
     if (matchDetails || error) { 
         console.log("[Dewan-1] Match details or error exists, setting isLoading to false.");
@@ -363,9 +392,7 @@ export default function ScoringTandingDewanSatuPage() {
     let interval: NodeJS.Timeout | null = null;
     if (timerStatus.isTimerRunning && timerStatus.timerSeconds > 0 && activeScheduleId) {
       interval = setInterval(() => {
-        // Directly update Firestore, state will follow via onSnapshot
         if (activeScheduleId) {
-             // Fetch the latest timerStatus from state before updating, to avoid overwriting rapid changes
             setTimerStatus(currentStatus => {
                 const newSeconds = Math.max(0, currentStatus.timerSeconds - 1);
                 let newMatchStatus = currentStatus.matchStatus;
@@ -384,14 +411,16 @@ export default function ScoringTandingDewanSatuPage() {
                     isTimerRunning: newIsTimerRunning,
                     matchStatus: newMatchStatus,
                 };
-
-                // Update Firestore. Do not await here to avoid blocking. State updates will come from onSnapshot.
+                
                 const matchDocRef = doc(db, MATCHES_TANDING_COLLECTION, activeScheduleId);
-                setDoc(matchDocRef, { timer_status: { ...currentStatus, ...updatedStatusForFirestore } }, { merge: true })
+                // Optimistically update local state, Firestore update can happen in background
+                const newLocalState = { ...currentStatus, ...updatedStatusForFirestore };
+
+                // Update Firestore. Do not await here.
+                setDoc(matchDocRef, { timer_status: newLocalState }, { merge: true })
                     .catch(e => console.error("[Dewan-1] Error updating timer in interval (async): ", e));
                 
-                // Return the new state for immediate local update if onSnapshot is slow
-                return { ...currentStatus, ...updatedStatusForFirestore };
+                return newLocalState;
             });
         }
       }, 1000);
@@ -399,22 +428,20 @@ export default function ScoringTandingDewanSatuPage() {
     return () => {
       if (interval) clearInterval(interval);
     };
-  }, [timerStatus.isTimerRunning, activeScheduleId]); // Removed timerStatus.timerSeconds to prevent re-creating interval every second
+  }, [timerStatus.isTimerRunning, timerStatus.timerSeconds, activeScheduleId]);
 
 
   const updateTimerStatusInFirestore = useCallback(async (newStatusUpdates: Partial<TimerStatus>) => {
     if (!activeScheduleId) return;
     try {
       const matchDocRef = doc(db, MATCHES_TANDING_COLLECTION, activeScheduleId);
-      // Get current status from Firestore to merge, or use local state as base if Firestore is not yet populated
       const docSnap = await getDoc(matchDocRef);
       const currentDBTimerStatus = docSnap.exists() && docSnap.data()?.timer_status 
                                    ? docSnap.data()?.timer_status as TimerStatus 
-                                   : timerStatus; // Fallback to local state if DB is empty
+                                   : timerStatus; 
       
       const newFullStatus = { ...currentDBTimerStatus, ...newStatusUpdates };
       await setDoc(matchDocRef, { timer_status: newFullStatus }, { merge: true });
-      // State will be updated by onSnapshot listener
     } catch (e) {
       console.error("[Dewan-1] Error updating timer status in Firestore:", e);
       setError("Gagal memperbarui status timer di server.");
@@ -489,23 +516,18 @@ export default function ScoringTandingDewanSatuPage() {
         const matchDocRef = doc(db, MATCHES_TANDING_COLLECTION, activeScheduleId);
         batch.set(matchDocRef, { timer_status: initialTimerStatus }, { merge: true });
 
-        const initialJuriData: JuriMatchData = { 
+        const initialJuriDataContent: JuriMatchData = { 
             merah: { round1: [], round2: [], round3: [] },
             biru: { round1: [], round2: [], round3: [] },
             lastUpdated: Timestamp.now(),
         };
         JURI_IDS.forEach(juriId => {
             const juriDocRef = doc(db, MATCHES_TANDING_COLLECTION, activeScheduleId, 'juri_scores', juriId);
-            batch.set(juriDocRef, initialJuriData); 
+            batch.set(juriDocRef, initialJuriDataContent); 
         });
         
         await batch.commit();
-        setTimerStatus(initialTimerStatus); 
-        setConfirmedScoreBiru(0);
-        setConfirmedScoreMerah(0);
-        setJuri1Scores(initialJuriData); 
-        setJuri2Scores(initialJuriData);
-        setJuri3Scores(initialJuriData);
+        // Local state updates will be triggered by onSnapshot listeners
         alert("Pertandingan telah direset.");
     } catch (e) {
       console.error("[Dewan-1] Error resetting match:", e);
@@ -565,20 +587,41 @@ export default function ScoringTandingDewanSatuPage() {
     return "Status Tidak Diketahui";
   };
 
-  const getJuriScoreForDisplay = (juriData: JuriMatchData | null, pesilatColor: 'merah' | 'biru', round: 1 | 2 | 3): string => {
+  const getJuriScoreForDisplay = (
+    juriId: string,
+    juriData: JuriMatchDataWithId | null,
+    pesilatColor: 'merah' | 'biru',
+    round: 1 | 2 | 3,
+    contributingKeys: Set<string>
+  ): React.ReactNode => {
     if (!juriData) return '-';
     const roundKey = `round${round}` as keyof JuriRoundScores;
     const scoresForRound = juriData[pesilatColor]?.[roundKey];
-    if (!scoresForRound || !Array.isArray(scoresForRound)) return '0';
+    if (!scoresForRound || !Array.isArray(scoresForRound) || scoresForRound.length === 0) return '0';
     
-    const numericScores = scoresForRound
-        .map(s => s?.points) // Extract points
-        .filter(p => typeof p === 'number'); // Ensure they are numbers
-    
-    return numericScores.length > 0 ? numericScores.join(',') : '0';
+    return scoresForRound.map((entry, index) => {
+      // Ensure timestamp is valid before calling toMillis()
+      let entryTimestampMillis: number;
+      if (entry.timestamp && typeof entry.timestamp.toMillis === 'function') {
+        entryTimestampMillis = entry.timestamp.toMillis();
+      } else {
+        // Fallback or error handling for invalid timestamp
+        console.warn(`[Dewan-1 Display] Invalid timestamp for entry in juri ${juriId}, round ${round}, pesilat ${pesilatColor}:`, entry);
+        entryTimestampMillis = Date.now(); // Or some default to avoid breaking, though key might be wrong
+      }
+
+      const entryKey = `${juriId}_${entryTimestampMillis}_${entry.points}`;
+      const isConfirmed = contributingKeys.has(entryKey);
+
+      return (
+        <span key={`${juriId}-${round}-${pesilatColor}-${index}`} className={cn(!isConfirmed && "line-through text-gray-400 dark:text-gray-600 opacity-70", "mr-1.5")}>
+          {entry.points}
+        </span>
+      );
+    }).reduce((prev, curr, idx) => <>{prev}{idx > 0 && ', '}{curr}</>, <></>);
   };
 
-  const getTotalJuriScoreForDisplay = (juriData: JuriMatchData | null, pesilatColor: 'merah' | 'biru'): number => {
+  const getTotalJuriRawScoreForDisplay = (juriData: JuriMatchDataWithId | null, pesilatColor: 'merah' | 'biru'): number => {
     if (!juriData) return 0;
     let total = 0;
     ([1,2,3] as const).forEach(roundNum => {
@@ -612,6 +655,8 @@ export default function ScoringTandingDewanSatuPage() {
     timerStatus.matchStatus === 'MatchFinished' ||
     timerStatus.matchStatus.startsWith('OngoingRound') ||
     (timerStatus.matchStatus.startsWith('FinishedRound') && timerStatus.currentRound < round);
+
+  const juriDataArray = [juri1Scores, juri2Scores, juri3Scores];
 
   return (
     <div className="flex flex-col min-h-screen bg-gray-100 dark:bg-gray-900 font-body">
@@ -718,25 +763,29 @@ export default function ScoringTandingDewanSatuPage() {
                 <CardTitle className="text-lg font-headline flex items-center text-gray-800 dark:text-gray-200">
                     <RadioTower className="mr-2 h-5 w-5 text-primary"/> Status Juri &amp; Skor Mentah (Detail per Juri)
                 </CardTitle>
-                 <CardDescription>Skor di bawah adalah input mentah dari tiap juri, skor utama di atas adalah yang terkonfirmasi.</CardDescription>
+                 <CardDescription>Skor di bawah adalah input mentah dari tiap juri. Skor yang dicoret tidak memenuhi syarat konfirmasi (min. 2 juri, nilai sama, rentang 2 detik).</CardDescription>
             </CardHeader>
             <CardContent className="text-xs md:text-sm grid grid-cols-1 sm:grid-cols-3 gap-3 md:gap-4">
-                {[juri1Scores, juri2Scores, juri3Scores].map((jS, idx) => (
-                    <div key={`juri-status-${idx+1}`} className="border border-gray-200 dark:border-gray-700 p-2 md:p-3 rounded-md bg-gray-50 dark:bg-gray-700/50">
-                        <p className="font-semibold text-primary mb-1">Juri {idx + 1}: {jS && jS.lastUpdated ? <CheckCircle2 className="inline h-4 w-4 text-green-500"/> : <span className="text-yellow-600 italic">Menunggu data...</span>}</p>
-                        {jS && (
-                            <div className="space-y-0.5 text-gray-700 dark:text-gray-300">
-                                <p><span className='font-medium text-red-500'>Merah:</span> R1:[{getJuriScoreForDisplay(jS, 'merah', 1)}] R2:[{getJuriScoreForDisplay(jS, 'merah', 2)}] R3:[{getJuriScoreForDisplay(jS, 'merah', 3)}] = <span className='font-semibold'>{getTotalJuriScoreForDisplay(jS, 'merah')}</span></p>
-                                <p><span className='font-medium text-blue-500'>Biru:</span> R1:[{getJuriScoreForDisplay(jS, 'biru', 1)}] R2:[{getJuriScoreForDisplay(jS, 'biru', 2)}] R3:[{getJuriScoreForDisplay(jS, 'biru', 3)}] = <span className='font-semibold'>{getTotalJuriScoreForDisplay(jS, 'biru')}</span></p>
-                                {jS.lastUpdated && <p className="text-gray-400 dark:text-gray-500 text-xxs">Update: {jS.lastUpdated.toDate().toLocaleTimeString()}</p>}
-                            </div>
-                        )}
-                         {!jS && <p className="italic text-gray-500 dark:text-gray-400">Belum ada input dari Juri {idx+1} untuk pertandingan ini.</p>}
-                    </div>
-                ))}
+                {juriDataArray.map((jS, idx) => {
+                    const juriId = JURI_IDS[idx];
+                    return (
+                        <div key={`juri-status-${juriId}`} className="border border-gray-200 dark:border-gray-700 p-2 md:p-3 rounded-md bg-gray-50 dark:bg-gray-700/50">
+                            <p className="font-semibold text-primary mb-1">Juri {idx + 1}: {jS && jS.lastUpdated ? <CheckCircle2 className="inline h-4 w-4 text-green-500"/> : <span className="text-yellow-600 italic">Menunggu data...</span>}</p>
+                            {jS && (
+                                <div className="space-y-0.5 text-gray-700 dark:text-gray-300">
+                                    <p><span className='font-medium text-red-500'>Merah:</span> R1:[{getJuriScoreForDisplay(juriId, jS, 'merah', 1, allContributingEntryKeys)}] R2:[{getJuriScoreForDisplay(juriId, jS, 'merah', 2, allContributingEntryKeys)}] R3:[{getJuriScoreForDisplay(juriId, jS, 'merah', 3, allContributingEntryKeys)}] = <span className='font-semibold'>{getTotalJuriRawScoreForDisplay(jS, 'merah')}</span></p>
+                                    <p><span className='font-medium text-blue-500'>Biru:</span> R1:[{getJuriScoreForDisplay(juriId, jS, 'biru', 1, allContributingEntryKeys)}] R2:[{getJuriScoreForDisplay(juriId, jS, 'biru', 2, allContributingEntryKeys)}] R3:[{getJuriScoreForDisplay(juriId, jS, 'biru', 3, allContributingEntryKeys)}] = <span className='font-semibold'>{getTotalJuriRawScoreForDisplay(jS, 'biru')}</span></p>
+                                    {jS.lastUpdated && <p className="text-gray-400 dark:text-gray-500 text-xxs">Update: {jS.lastUpdated.toDate().toLocaleTimeString()}</p>}
+                                </div>
+                            )}
+                            {!jS && <p className="italic text-gray-500 dark:text-gray-400">Belum ada input dari Juri {idx+1} untuk pertandingan ini.</p>}
+                        </div>
+                    );
+                })}
             </CardContent>
         </Card>
       </main>
     </div>
   );
 }
+
