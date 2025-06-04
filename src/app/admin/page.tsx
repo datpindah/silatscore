@@ -1,3 +1,4 @@
+
 "use client";
 
 import { useState } from 'react';
@@ -9,12 +10,14 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Download, Filter } from 'lucide-react';
 import { ageCategories, type AgeCategory } from '@/lib/types';
 
+const ALL_CATEGORIES_VALUE = "ALL_CATEGORIES";
+
 export default function AdminDashboardPage() {
-  const [selectedAgeCategory, setSelectedAgeCategory] = useState<AgeCategory | ''>('');
+  const [selectedAgeCategory, setSelectedAgeCategory] = useState<string>(ALL_CATEGORIES_VALUE);
 
   const handleDownloadData = () => {
-    // Placeholder for data download logic
-    alert(`Mendownload data untuk kategori: ${selectedAgeCategory || 'Semua Kategori'}`);
+    const categoryToDownload = selectedAgeCategory === ALL_CATEGORIES_VALUE ? 'Semua Kategori' : selectedAgeCategory;
+    alert(`Mendownload data untuk kategori: ${categoryToDownload}`);
   };
 
   return (
@@ -35,12 +38,12 @@ export default function AdminDashboardPage() {
         </CardHeader>
         <CardContent>
           <div className="max-w-sm">
-            <Select onValueChange={(value) => setSelectedAgeCategory(value as AgeCategory)} value={selectedAgeCategory}>
+            <Select onValueChange={(value) => setSelectedAgeCategory(value)} value={selectedAgeCategory}>
               <SelectTrigger id="age-category">
                 <SelectValue placeholder="Pilih Kategori Usia" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="">Semua Kategori</SelectItem>
+                <SelectItem value={ALL_CATEGORIES_VALUE}>Semua Kategori</SelectItem>
                 {ageCategories.map(category => (
                   <SelectItem key={category} value={category}>{category}</SelectItem>
                 ))}
