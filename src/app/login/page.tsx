@@ -21,13 +21,6 @@ const partaiOptions = [
 ];
 
 const halamanOptions = [
-  { value: '/', label: 'Halaman Utama' },
-  { value: '/admin', label: 'Admin Dashboard' },
-  { value: '/admin/schedule-tanding', label: 'Admin - Jadwal Tanding' },
-  { value: '/admin/schedule-tgr', label: 'Admin - Jadwal TGR' },
-  { value: '/admin/rule-clarifier', label: 'Admin - Klarifikasi Aturan' },
-  { value: '/scoring', label: 'Scoring - Pilihan Mode' },
-  { value: '/scoring/tanding', label: 'Scoring - Pilihan Peran Tanding' },
   { value: '/scoring/tanding/dewan-1', label: 'Scoring - Dewan 1 (Tanding)' },
   { value: '/scoring/tanding/dewan-2', label: 'Scoring - Dewan 2 (Tanding)' },
   { value: '/scoring/tanding/juri-1', label: 'Scoring - Juri 1 (Tanding)' },
@@ -35,7 +28,6 @@ const halamanOptions = [
   { value: '/scoring/tanding/juri-3', label: 'Scoring - Juri 3 (Tanding)' },
   { value: '/scoring/tanding/monitoring-skor', label: 'Scoring - Monitoring Skor (Tanding)' },
   { value: '/scoring/tanding/ketua-pertandingan', label: 'Scoring - Ketua Pertandingan (Tanding)' },
-  { value: '/scoring/tgr', label: 'Scoring - TGR' },
 ];
 
 const CORRECT_PASSWORD = "123456";
