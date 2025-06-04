@@ -3,6 +3,7 @@
 
 import type { ChangeEvent } from 'react';
 import { useState, useEffect, useCallback } from 'react';
+import Link from 'next/link';
 import { Header } from '@/components/layout/Header';
 import { PageTitle } from '@/components/shared/PageTitle';
 import { Button } from '@/components/ui/button';
@@ -13,7 +14,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Separator } from '@/components/ui/separator';
 import { Textarea } from '@/components/ui/textarea';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { PlusCircle, MinusCircle, Play, Pause, RotateCcw, AlertTriangle, ShieldAlert, Ban, Info } from 'lucide-react';
+import { PlusCircle, MinusCircle, Play, Pause, RotateCcw, AlertTriangle, ShieldAlert, Ban, Info, ArrowLeft } from 'lucide-react';
 import type { PesilatColor, Foul, Warning, ScoreDetail } from '@/lib/types';
 import { foulIcons } from '@/lib/types'; 
 
@@ -234,7 +235,17 @@ export default function ScoringTandingDewanSatuPage() {
     <div className="flex flex-col min-h-screen">
       <Header />
       <main className="flex-1 container mx-auto px-4 py-8">
-        <PageTitle title="Scoring Tanding - Dewan 1" description={`Babak ${currentRound} dari ${TOTAL_ROUNDS} - Status: ${matchStatus}`} />
+        <PageTitle 
+          title="Scoring Tanding - Dewan 1" 
+          description={`Babak ${currentRound} dari ${TOTAL_ROUNDS} - Status: ${matchStatus}`}
+        >
+          <Button variant="outline" asChild>
+            <Link href="/scoring/tanding">
+              <ArrowLeft className="mr-2 h-4 w-4" />
+              Kembali ke Pilihan Peran
+            </Link>
+          </Button>
+        </PageTitle>
 
         <Card className="mb-6 shadow-lg">
           <CardHeader>

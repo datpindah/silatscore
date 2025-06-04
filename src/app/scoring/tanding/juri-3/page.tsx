@@ -1,10 +1,12 @@
 
 "use client";
 
+import Link from "next/link";
 import { Header } from "@/components/layout/Header";
 import { PageTitle } from "@/components/shared/PageTitle";
+import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
-import { AlertTriangle } from "lucide-react";
+import { AlertTriangle, ArrowLeft } from "lucide-react";
 
 export default function JuriTigaPage() {
   return (
@@ -14,7 +16,14 @@ export default function JuriTigaPage() {
         <PageTitle
           title="Juri 3 - Scoring Tanding"
           description="Halaman input penilaian untuk Juri 3. Fitur akan segera tersedia."
-        />
+        >
+          <Button variant="outline" asChild>
+            <Link href="/scoring/tanding">
+              <ArrowLeft className="mr-2 h-4 w-4" />
+              Kembali ke Pilihan Peran
+            </Link>
+          </Button>
+        </PageTitle>
         <Card>
           <CardContent className="p-6 text-center">
             <AlertTriangle className="mx-auto h-12 w-12 text-yellow-500 mb-4" />
