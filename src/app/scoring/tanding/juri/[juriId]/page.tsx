@@ -12,6 +12,7 @@ import type { ScheduleTanding } from '@/lib/types';
 import { db } from '@/lib/firebase';
 import { doc, onSnapshot, setDoc, getDoc, Timestamp } from 'firebase/firestore';
 import { cn } from '@/lib/utils';
+import { Skeleton } from '@/components/ui/skeleton'; // Added Skeleton import
 
 const ACTIVE_TANDING_SCHEDULE_CONFIG_PATH = 'app_settings/active_match_tanding';
 const SCHEDULE_TANDING_COLLECTION = 'schedules_tanding';
@@ -42,7 +43,7 @@ interface JuriMatchData {
 interface TimerStatusFromDewan {
   currentRound: 1 | 2 | 3;
   isTimerRunning: boolean;
-  matchStatus: string;
+  matchStatus: string; // e.g., 'Pending', 'OngoingRound1', 'PausedRound1', 'FinishedRound1', 'MatchFinished'
 }
 
 const initialRoundScores = (): RoundScores => ({
@@ -65,52 +66,49 @@ export default function JuriDynamicPage({ params: paramsPromise }: { params: Pro
   const [pesilatMerah, setPesilatMerah] = useState<PesilatInfo | null>(null);
   const [pesilatBiru, setPesilatBiru] = useState<PesilatInfo | null>(null);
   
-  const [configMatchId, setConfigMatchId] = useState<string | null | undefined>(undefined); // undefined: initial, null: no active, string: active
-  const [activeMatchId, setActiveMatchId] = useState<string | null>(null); // The ID currently being processed
+  const [configMatchId, setConfigMatchId] = useState<string | null | undefined>(undefined); 
+  const [activeMatchId, setActiveMatchId] = useState<string | null>(null); 
   
   const [matchDetailsLoaded, setMatchDetailsLoaded] = useState(false);
   const [scoresData, setScoresData] = useState<JuriMatchData>(initialJuriMatchData());
-  const [isLoading, setIsLoading] = useState(true); // General loading state
+  const [isLoading, setIsLoading] = useState(true);
   
   const [dewanControlledRound, setDewanControlledRound] = useState<1 | 2 | 3>(1);
   const [isTimerRunningByDewan, setIsTimerRunningByDewan] = useState<boolean>(false);
   const [dewanMatchStatus, setDewanMatchStatus] = useState<string>('Pending');
   const [confirmedEntryKeysFromDewan, setConfirmedEntryKeysFromDewan] = useState<Set<string>>(new Set());
 
-  // Effect 1: Listen to active match configuration
   useEffect(() => {
-    console.log(`[Juri ${juriId}] Setting up config listener.`);
+    console.log(`[Juri ${juriId}] Setting up config listener. Current configMatchId: ${configMatchId}`);
     setIsLoading(true); 
     const unsubConfig = onSnapshot(doc(db, ACTIVE_TANDING_SCHEDULE_CONFIG_PATH), (docSnap) => {
       const newDbConfigId = docSnap.exists() ? docSnap.data()?.activeScheduleId : null;
       console.log(`[Juri ${juriId}] Firestore config updated. New DBConfigId: ${newDbConfigId}. Current state configMatchId: ${configMatchId}`);
       
-      // Update configMatchId state only if it's different to trigger data loading effect
-      if (newDbConfigId !== configMatchId) {
+      if (newDbConfigId !== configMatchId) { // Only update if it's different
         setConfigMatchId(newDbConfigId);
-      } else if (newDbConfigId === null && configMatchId === null) {
-        // If it was null and remains null, ensure loading stops
-        setIsLoading(false);
+      } else if (configMatchId === undefined && newDbConfigId === null) { // Initial load and no active match
+        setConfigMatchId(null); // Ensure it's not undefined anymore
+        setIsLoading(false); // Stop loading if there's nothing to load
       }
     }, (error) => {
       console.error(`[Juri ${juriId}] Error fetching active schedule config:`, error);
-      setConfigMatchId(null); // Treat error as no active config
+      setConfigMatchId(null); 
       setIsLoading(false);
     });
     return () => {
       console.log(`[Juri ${juriId}] Cleaning up config listener.`);
       unsubConfig();
     };
-  }, [juriId]); // Removed configMatchId from deps to avoid loop with setConfigMatchId
+  }, [juriId]); // Removed configMatchId from deps
 
-  // Effect 2: Load match data when configMatchId changes (or juriId, though juriId is from param)
   useEffect(() => {
     let unsubScores = () => {};
     let unsubMatchDoc = () => {};
     let mounted = true;
 
-    const resetAllMatchData = () => {
-      console.log(`[Juri ${juriId}] Resetting all match specific data.`);
+    const resetAllMatchData = (reason: string) => {
+      console.log(`[Juri ${juriId}] Resetting all match specific data. Reason: ${reason}`);
       setActiveMatchId(null);
       setPesilatMerah(null);
       setPesilatBiru(null);
@@ -123,27 +121,34 @@ export default function JuriDynamicPage({ params: paramsPromise }: { params: Pro
     };
 
     if (configMatchId === undefined) {
-      console.log(`[Juri ${juriId}] configMatchId is undefined. Waiting for initial config.`);
-      setIsLoading(true); // Still waiting for config
-      resetAllMatchData(); // Ensure UI is clear
+      console.log(`[Juri ${juriId}] Data loading useEffect: configMatchId is undefined. Waiting for initial config. Setting isLoading: true.`);
+      setIsLoading(true);
+      // No need to reset here as initial states are already default
       return;
     }
 
     if (configMatchId === null) {
-      console.log(`[Juri ${juriId}] configMatchId is null. No active match.`);
-      resetAllMatchData();
+      console.log(`[Juri ${juriId}] Data loading useEffect: configMatchId is null. No active match. Setting isLoading: false.`);
+      resetAllMatchData("configMatchId is null");
       setIsLoading(false);
       return;
     }
 
     // If configMatchId is a string, it means there's an active match to load.
-    console.log(`[Juri ${juriId}] configMatchId is ${configMatchId}. Proceeding to load data.`);
+    console.log(`[Juri ${juriId}] Data loading useEffect: configMatchId is ${configMatchId}. Proceeding to load data. Setting isLoading: true.`);
     setIsLoading(true);
+    
+    // Reset previous match data if activeMatchId changes to the new configMatchId
+    // or if activeMatchId is null and configMatchId is now set
+    if (activeMatchId !== configMatchId) {
+      console.log(`[Juri ${juriId}] Active match ID changing from ${activeMatchId} to ${configMatchId}. Resetting previous match state.`);
+      resetAllMatchData(`Switching to new match ${configMatchId}`);
+    }
     setActiveMatchId(configMatchId); // Set the current working match ID
 
     const loadData = async (currentMatchId: string) => {
+      console.log(`[Juri ${juriId}] loadData called for matchId: ${currentMatchId}`);
       try {
-        console.log(`[Juri ${juriId}] Fetching schedule details for ${currentMatchId}`);
         const scheduleDocRef = doc(db, SCHEDULE_TANDING_COLLECTION, currentMatchId);
         const scheduleDoc = await getDoc(scheduleDocRef);
 
@@ -152,10 +157,10 @@ export default function JuriDynamicPage({ params: paramsPromise }: { params: Pro
         if (!scheduleDoc.exists()) {
           console.error(`[Juri ${juriId}] Active schedule document NOT FOUND for ID: ${currentMatchId}`);
           if (mounted) {
-            resetAllMatchData(); // Reset data as the configured match is invalid
-            // No need to set isLoading false here, finally block will do
+            resetAllMatchData(`Schedule doc ${currentMatchId} not found`);
+            // setIsLoading(false) will be handled by finally
           }
-          return; // Stop further loading for this invalid ID
+          return;
         }
         
         const scheduleData = scheduleDoc.data() as Omit<ScheduleTanding, 'id' | 'date'> & { date: Timestamp | string };
@@ -176,18 +181,26 @@ export default function JuriDynamicPage({ params: paramsPromise }: { params: Pro
               setDewanControlledRound(dewanStatus.currentRound || 1);
               setIsTimerRunningByDewan(dewanStatus.isTimerRunning || false);
               setDewanMatchStatus(dewanStatus.matchStatus || 'Pending');
+            } else {
+              setDewanControlledRound(1);
+              setIsTimerRunningByDewan(false);
+              setDewanMatchStatus('Pending');
             }
             if (data?.confirmed_entry_keys_log) {
               setConfirmedEntryKeysFromDewan(new Set(data.confirmed_entry_keys_log as string[]));
             } else {
               setConfirmedEntryKeysFromDewan(new Set());
             }
-          } else { // Match doc might not exist yet if Dewan hasn't started interaction
+            console.log(`[Juri ${juriId}] Updated timer status from Dewan for ${currentMatchId}: Round ${dewanControlledRound}, Running ${isTimerRunningByDewan}, Status ${dewanMatchStatus}`);
+          } else {
+            console.log(`[Juri ${juriId}] Match document ${currentMatchId} does not exist or no timer_status. Using defaults.`);
             setDewanControlledRound(1);
             setIsTimerRunningByDewan(false);
             setDewanMatchStatus('Pending');
             setConfirmedEntryKeysFromDewan(new Set());
           }
+        }, (error) => {
+          console.error(`[Juri ${juriId}] Error fetching timer status/confirmed keys for ${currentMatchId}:`, error);
         });
         
         const juriScoreDocRef = doc(db, MATCHES_TANDING_COLLECTION, currentMatchId, 'juri_scores', juriId);
@@ -200,18 +213,24 @@ export default function JuriDynamicPage({ params: paramsPromise }: { params: Pro
               biru: { round1: data.biru?.round1 || [], round2: data.biru?.round2 || [], round3: data.biru?.round3 || [] },
               lastUpdated: data.lastUpdated,
             });
+            console.log(`[Juri ${juriId}] Juri scores updated for ${currentMatchId}`);
           } else {
+            console.log(`[Juri ${juriId}] No juri_scores document for ${juriId} in match ${currentMatchId}. Initializing scores.`);
             setScoresData(initialJuriMatchData());
           }
+        }, (error) => {
+          console.error(`[Juri ${juriId}] Error fetching/subscribing to juri scores for ${currentMatchId}:`, error);
         });
 
       } catch (error) {
         console.error(`[Juri ${juriId}] Error in loadData for ${currentMatchId}:`, error);
-        if (mounted) resetAllMatchData();
+        if (mounted) {
+             resetAllMatchData(`Error in loadData: ${error}`);
+        }
       } finally {
         if (mounted) {
           setIsLoading(false);
-          console.log(`[Juri ${juriId}] Data loading attempt finished for ${currentMatchId}. isLoading: ${false}`);
+          console.log(`[Juri ${juriId}] Data loading attempt finished for ${currentMatchId}. isLoading: ${false}, matchDetailsLoaded: ${matchDetailsLoaded}`);
         }
       }
     };
@@ -224,7 +243,7 @@ export default function JuriDynamicPage({ params: paramsPromise }: { params: Pro
       unsubScores();
       unsubMatchDoc();
     };
-  }, [configMatchId, juriId]);
+  }, [configMatchId, juriId]); // Added activeMatchId to re-run if it's reset externally or for clarity
 
 
   const saveScoresToFirestore = useCallback(async (newScoresData: JuriMatchData) => {
@@ -305,27 +324,12 @@ export default function JuriDynamicPage({ params: paramsPromise }: { params: Pro
   };
 
   const pageDescription = () => {
-    if (configMatchId === undefined) return "Memuat konfigurasi...";
+    if (isLoading && !activeMatchId && configMatchId === undefined) return "Memuat konfigurasi...";
     if (isLoading && activeMatchId) return `Memuat data untuk pertandingan... Babak ${dewanControlledRound}`;
     if (!activeMatchId && !isLoading) return "Tidak ada pertandingan yang aktif.";
     if (matchDetailsLoaded && activeMatchId) return `${pesilatMerah?.name || 'Merah'} vs ${pesilatBiru?.name || 'Biru'} - Babak ${dewanControlledRound}`;
     return 'Menunggu info pertandingan...';
   };
-
-
-  if (configMatchId === undefined && isLoading) { 
-    return (
-      <div className="flex flex-col min-h-screen">
-        <Header />
-        <main className="flex-1 container mx-auto px-4 py-8 flex items-center justify-center">
-          <div>
-            <Loader2 className="h-12 w-12 animate-spin text-primary mx-auto mb-4" />
-            <PageTitle title={`${juriDisplayName} - Scoring Tanding`} description="Memuat konfigurasi pertandingan..." />
-          </div>
-        </main>
-      </div>
-    );
-  }
 
   return (
     <div className="flex flex-col min-h-screen">
@@ -336,8 +340,10 @@ export default function JuriDynamicPage({ params: paramsPromise }: { params: Pro
           description={pageDescription()}
         >
           <div className="flex items-center gap-2">
-             {isInputDisabled && activeMatchId ? <Lock className="h-5 w-5 text-red-500" /> : (!isInputDisabled && activeMatchId ? <Unlock className="h-5 w-5 text-green-500" /> :  <Loader2 className="h-5 w-5 text-yellow-500 animate-spin"/>)}
-            <span className={`text-sm font-medium ${isInputDisabled && activeMatchId ? 'text-red-500' : (!isInputDisabled && activeMatchId ? 'text-green-500' : 'text-yellow-600')}`}>{inputDisabledReason() || (activeMatchId ? "Input Nilai Terbuka" : "Menunggu Pertandingan Aktif")}</span>
+             {isLoading && activeMatchId ? <Loader2 className="h-5 w-5 text-yellow-500 animate-spin"/> : (isInputDisabled && activeMatchId ? <Lock className="h-5 w-5 text-red-500" /> : (!isInputDisabled && activeMatchId ? <Unlock className="h-5 w-5 text-green-500" /> :  <Loader2 className="h-5 w-5 text-yellow-500 animate-spin"/>))}
+            <span className={`text-sm font-medium ${isLoading && activeMatchId ? 'text-yellow-600' : (isInputDisabled && activeMatchId ? 'text-red-500' : (!isInputDisabled && activeMatchId ? 'text-green-500' : 'text-yellow-600'))}`}>
+                {inputDisabledReason() || (activeMatchId ? "Input Nilai Terbuka" : "Menunggu Pertandingan Aktif")}
+            </span>
             <Button variant="outline" asChild>
               <Link href="/login"><ArrowLeft className="mr-2 h-4 w-4" /> Kembali ke Login</Link>
             </Button>
@@ -348,15 +354,15 @@ export default function JuriDynamicPage({ params: paramsPromise }: { params: Pro
           <CardContent className="p-4">
             <div className="flex justify-between items-center text-sm mb-4">
               <div className="text-red-600">
-                <p className="font-semibold text-lg">{ (activeMatchId && matchDetailsLoaded) ? (pesilatMerah?.name || 'PESILAT MERAH') : (isLoading ? <Skeleton className="h-6 w-32" /> : 'PESILAT MERAH')}</p>
-                <p>Kontingen: { (activeMatchId && matchDetailsLoaded) ? (pesilatMerah?.contingent || '-') : (isLoading ? <Skeleton className="h-4 w-24 mt-1" /> : '-')}</p>
+                <p className="font-semibold text-lg">{ (activeMatchId && matchDetailsLoaded) ? (pesilatMerah?.name || 'PESILAT MERAH') : (isLoading && activeMatchId ? <Skeleton className="h-6 w-32" /> : 'PESILAT MERAH')}</p>
+                <p>Kontingen: { (activeMatchId && matchDetailsLoaded) ? (pesilatMerah?.contingent || '-') : (isLoading && activeMatchId ? <Skeleton className="h-4 w-24 mt-1" /> : '-')}</p>
               </div>
               <div className="text-lg font-bold text-gray-700 dark:text-gray-300">
                 Babak Aktif: <span className="text-primary">{dewanControlledRound}</span>
               </div>
               <div className="text-blue-600 text-right">
-                <p className="font-semibold text-lg">{(activeMatchId && matchDetailsLoaded) ? (pesilatBiru?.name || 'PESILAT BIRU') : (isLoading ? <Skeleton className="h-6 w-32" /> : 'PESILAT BIRU')}</p>
-                <p>Kontingen: {(activeMatchId && matchDetailsLoaded) ? (pesilatBiru?.contingent || '-') : (isLoading ? <Skeleton className="h-4 w-24 mt-1" /> : '-')}</p>
+                <p className="font-semibold text-lg">{(activeMatchId && matchDetailsLoaded) ? (pesilatBiru?.name || 'PESILAT BIRU') : (isLoading && activeMatchId ? <Skeleton className="h-6 w-32" /> : 'PESILAT BIRU')}</p>
+                <p>Kontingen: {(activeMatchId && matchDetailsLoaded) ? (pesilatBiru?.contingent || '-') : (isLoading && activeMatchId ? <Skeleton className="h-4 w-24 mt-1" /> : '-')}</p>
               </div>
             </div>
 
@@ -450,3 +456,4 @@ export default function JuriDynamicPage({ params: paramsPromise }: { params: Pro
   );
 }
 
+    
