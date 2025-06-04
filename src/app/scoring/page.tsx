@@ -44,6 +44,8 @@ const foulIconComponentsMap: Record<string, React.ElementType> = {
   'AlertTriangle': AlertTriangle,
   'ShieldAlert': ShieldAlert,
   'Ban': Ban,
+  // Add other icons if needed, or a fallback
+  'Info': Info, // Fallback icon
 };
 
 export default function ScoringPage() {
@@ -174,8 +176,8 @@ export default function ScoringPage() {
   };
   
   const renderFoulIcon = (foulType: Foul['type']) => {
-    const iconNameString = foulIcons[foulType]; // Get the string name e.g., "MinusCircle"
-    const IconComponent = foulIconComponentsMap[iconNameString] || Info; // Look up the component, fallback to Info
+    const iconNameString = foulIcons[foulType]; 
+    const IconComponent = foulIconComponentsMap[iconNameString] || foulIconComponentsMap['Info'];
     return <IconComponent className="h-4 w-4 mr-1" />;
   };
 
@@ -194,14 +196,14 @@ export default function ScoringPage() {
             type="text" 
             value={state.name} 
             onChange={(e: ChangeEvent<HTMLInputElement>) => onUpdateDetails('name', e.target.value)}
-            className="text-sm mt-1 bg-background/80"
+            className="text-sm mt-1 bg-background/80 w-full"
             placeholder="Nama Pesilat"
           />
           <Input 
             type="text" 
             value={state.contingent} 
             onChange={(e: ChangeEvent<HTMLInputElement>) => onUpdateDetails('contingent', e.target.value)}
-            className="text-sm mt-1 bg-background/80"
+            className="text-sm mt-1 bg-background/80 w-full"
             placeholder="Kontingen"
           />
         </CardHeader>
