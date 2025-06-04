@@ -1,7 +1,7 @@
 
 "use client";
 
-import { useState, type FormEvent, type ChangeEvent, useEffect } from 'react';
+import { useState, type FormEvent, type ChangeEvent, useEffect, useCallback } from 'react';
 import { PageTitle } from '@/components/shared/PageTitle';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardFooter } from '@/components/ui/card';
@@ -11,6 +11,8 @@ import { PrintScheduleButton } from '@/components/admin/PrintScheduleButton';
 import { Upload, PlusCircle, PlayCircle } from 'lucide-react';
 import type { ScheduleTanding } from '@/lib/types';
 import { TableCell } from '@/components/ui/table';
+import { db } from '@/lib/firebase';
+import { collection, addDoc, getDocs, doc, updateDoc, deleteDoc, onSnapshot, setDoc, getDoc, Timestamp } from 'firebase/firestore';
 
 const initialFormState: Omit<ScheduleTanding, 'id'> = {
   date: new Date().toISOString().split('T')[0],
@@ -24,26 +26,60 @@ const initialFormState: Omit<ScheduleTanding, 'id'> = {
   matchNumber: 1,
 };
 
-const ACTIVE_TANDING_SCHEDULE_KEY = 'SILATSCORE_ACTIVE_TANDING_SCHEDULE';
+const ACTIVE_TANDING_SCHEDULE_CONFIG_PATH = 'app_settings/active_match_tanding';
+const SCHEDULE_TANDING_COLLECTION = 'schedules_tanding';
 
 export default function ScheduleTandingPage() {
   const [schedules, setSchedules] = useState<ScheduleTanding[]>([]);
   const [formData, setFormData] = useState<Omit<ScheduleTanding, 'id'>>(initialFormState);
   const [isEditing, setIsEditing] = useState<string | null>(null);
   const [activeScheduleId, setActiveScheduleId] = useState<string | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
 
+  // Fetch active schedule ID
   useEffect(() => {
-    const storedActiveSchedule = localStorage.getItem(ACTIVE_TANDING_SCHEDULE_KEY);
-    if (storedActiveSchedule) {
-      try {
-        const activeSchedule: ScheduleTanding = JSON.parse(storedActiveSchedule);
-        setActiveScheduleId(activeSchedule.id);
-      } catch (error) {
-        console.error("Error parsing active schedule from localStorage:", error);
-        localStorage.removeItem(ACTIVE_TANDING_SCHEDULE_KEY);
+    const unsub = onSnapshot(doc(db, ACTIVE_TANDING_SCHEDULE_CONFIG_PATH), (docSnap) => {
+      if (docSnap.exists()) {
+        setActiveScheduleId(docSnap.data()?.activeScheduleId || null);
+      } else {
+        setActiveScheduleId(null);
       }
-    }
+    }, (error) => {
+      console.error("Error fetching active schedule ID:", error);
+      setActiveScheduleId(null);
+    });
+    return () => unsub();
   }, []);
+
+  // Fetch all schedules
+  useEffect(() => {
+    setIsLoading(true);
+    const unsub = onSnapshot(collection(db, SCHEDULE_TANDING_COLLECTION), (querySnapshot) => {
+      const schedulesData: ScheduleTanding[] = [];
+      querySnapshot.forEach((doc) => {
+        const data = doc.data();
+        schedulesData.push({
+          id: doc.id,
+          date: data.date instanceof Timestamp ? data.date.toDate().toISOString().split('T')[0] : data.date,
+          place: data.place,
+          pesilatMerahName: data.pesilatMerahName,
+          pesilatMerahContingent: data.pesilatMerahContingent,
+          pesilatBiruName: data.pesilatBiruName,
+          pesilatBiruContingent: data.pesilatBiruContingent,
+          round: data.round,
+          class: data.class,
+          matchNumber: data.matchNumber,
+        });
+      });
+      setSchedules(schedulesData.sort((a, b) => a.matchNumber - b.matchNumber));
+      setIsLoading(false);
+    }, (error) => {
+      console.error("Error fetching schedules:", error);
+      setIsLoading(false);
+    });
+    return () => unsub();
+  }, []);
+
 
   const handleChange = (e: ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
     const { name, value, type } = e.target;
@@ -53,32 +89,55 @@ export default function ScheduleTandingPage() {
     }));
   };
 
-  const handleSubmit = (e: FormEvent<HTMLFormElement>) => {
+  const handleSubmit = async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
-    if (isEditing) {
-      setSchedules(schedules.map(s => s.id === isEditing ? { ...formData, id: isEditing } : s));
-      setIsEditing(null);
-    } else {
-      const newScheduleId = Date.now().toString();
-      setSchedules([...schedules, { ...formData, id: newScheduleId }]);
+    
+    const scheduleDataForFirestore = {
+      ...formData,
+      date: Timestamp.fromDate(new Date(formData.date)), // Store date as Firestore Timestamp
+    };
+
+    try {
+      if (isEditing) {
+        const scheduleDocRef = doc(db, SCHEDULE_TANDING_COLLECTION, isEditing);
+        await updateDoc(scheduleDocRef, scheduleDataForFirestore);
+        setIsEditing(null);
+      } else {
+        const newScheduleId = Date.now().toString(); // Using timestamp for ID for simplicity
+        const newScheduleRef = doc(db, SCHEDULE_TANDING_COLLECTION, newScheduleId);
+        await setDoc(newScheduleRef, scheduleDataForFirestore);
+      }
+      setFormData(initialFormState);
+    } catch (error) {
+      console.error("Error saving schedule: ", error);
+      alert(`Gagal menyimpan jadwal: ${error instanceof Error ? error.message : String(error)}`);
     }
-    setFormData(initialFormState);
   };
 
   const handleEdit = (id: string) => {
     const scheduleToEdit = schedules.find(s => s.id === id);
     if (scheduleToEdit) {
-      setFormData(scheduleToEdit);
+      // Ensure date is in YYYY-MM-DD string format for the form
+      const formDate = scheduleToEdit.date instanceof Date 
+        ? scheduleToEdit.date.toISOString().split('T')[0]
+        : String(scheduleToEdit.date);
+
+      setFormData({...scheduleToEdit, date: formDate});
       setIsEditing(id);
     }
   };
 
-  const handleDelete = (id: string) => {
+  const handleDelete = async (id: string) => {
     if (confirm('Apakah Anda yakin ingin menghapus jadwal ini?')) {
-      setSchedules(schedules.filter(s => s.id !== id));
-      if (id === activeScheduleId) {
-        localStorage.removeItem(ACTIVE_TANDING_SCHEDULE_KEY);
-        setActiveScheduleId(null);
+      try {
+        await deleteDoc(doc(db, SCHEDULE_TANDING_COLLECTION, id));
+        if (id === activeScheduleId) {
+          await setDoc(doc(db, ACTIVE_TANDING_SCHEDULE_CONFIG_PATH), { activeScheduleId: null });
+          setActiveScheduleId(null);
+        }
+      } catch (error) {
+        console.error("Error deleting schedule: ", error);
+        alert(`Gagal menghapus jadwal: ${error instanceof Error ? error.message : String(error)}`);
       }
     }
   };
@@ -87,13 +146,22 @@ export default function ScheduleTandingPage() {
     alert('Fungsi unggah XLS belum diimplementasikan.');
   };
 
-  const handleActivateSchedule = (schedule: ScheduleTanding) => {
-    localStorage.setItem(ACTIVE_TANDING_SCHEDULE_KEY, JSON.stringify(schedule));
-    setActiveScheduleId(schedule.id);
-    alert(`Jadwal Pertandingan No. ${schedule.matchNumber} (${schedule.pesilatMerahName} vs ${schedule.pesilatBiruName}) telah diaktifkan.`);
+  const handleActivateSchedule = async (schedule: ScheduleTanding) => {
+    try {
+      await setDoc(doc(db, ACTIVE_TANDING_SCHEDULE_CONFIG_PATH), { activeScheduleId: schedule.id });
+      // setActiveScheduleId(schedule.id); // State will update via onSnapshot
+      alert(`Jadwal Pertandingan No. ${schedule.matchNumber} (${schedule.pesilatMerahName} vs ${schedule.pesilatBiruName}) telah diaktifkan.`);
+    } catch (error) {
+      console.error("Error activating schedule: ", error);
+      alert(`Gagal mengaktifkan jadwal: ${error instanceof Error ? error.message : String(error)}`);
+    }
   };
 
   const tandingTableHeaders = ["No. Match", "Tanggal", "Tempat", "Pesilat Merah", "Pesilat Biru", "Babak", "Kelas"];
+
+  if (isLoading) {
+    return <PageTitle title="Jadwal Pertandingan Tanding" description="Memuat data jadwal..."><div className="flex gap-2"><Button variant="outline" disabled><Upload className="mr-2 h-4 w-4" /> Unggah XLS</Button><PrintScheduleButton scheduleType="Tanding" disabled /></div></PageTitle>;
+  }
 
   return (
     <>
@@ -181,5 +249,3 @@ export default function ScheduleTandingPage() {
     </>
   );
 }
-
-    

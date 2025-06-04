@@ -13,12 +13,14 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { LogIn, AlertCircle } from 'lucide-react';
 import type { ScheduleTanding } from '@/lib/types';
+import { db } from '@/lib/firebase';
+import { doc, getDoc, onSnapshot, Timestamp } from 'firebase/firestore';
 
-const ACTIVE_TANDING_SCHEDULE_KEY = 'SILATSCORE_ACTIVE_TANDING_SCHEDULE';
+const ACTIVE_TANDING_SCHEDULE_CONFIG_PATH = 'app_settings/active_match_tanding';
+const SCHEDULE_TANDING_COLLECTION = 'schedules_tanding';
 
 const defaultPartaiOptions = [
   { value: '', label: 'Tidak ada jadwal aktif' },
-  // { value: 'partai-1-static', label: 'Partai Pertandingan 1 (Contoh Statis)' }, // Can be kept if needed
 ];
 
 const halamanOptions = [
@@ -40,35 +42,60 @@ export default function LoginPage() {
   const [selectedHalaman, setSelectedHalaman] = useState<string>('');
   const [password, setPassword] = useState<string>('');
   const [error, setError] = useState<string | null>(null);
-  const [isLoading, setIsLoading] = useState<boolean>(false);
+  const [isLoading, setIsLoading] = useState<boolean>(true); // Start with loading true
 
   useEffect(() => {
-    const storedActiveSchedule = localStorage.getItem(ACTIVE_TANDING_SCHEDULE_KEY);
-    if (storedActiveSchedule) {
-      try {
-        const activeSchedule: ScheduleTanding = JSON.parse(storedActiveSchedule);
-        const formattedLabel = `Partai ${activeSchedule.matchNumber}: ${activeSchedule.pesilatMerahName} vs ${activeSchedule.pesilatBiruName} (${activeSchedule.class} - ${new Date(activeSchedule.date).toLocaleDateString('id-ID')})`;
-        setPartaiOptions([{ value: activeSchedule.id, label: formattedLabel }]);
-        setSelectedPartai(activeSchedule.id); // Auto-select the active schedule
-      } catch (err) {
-        console.error("Error parsing active schedule from localStorage:", err);
+    setIsLoading(true);
+    const unsub = onSnapshot(doc(db, ACTIVE_TANDING_SCHEDULE_CONFIG_PATH), async (docSnap) => {
+      if (docSnap.exists() && docSnap.data()?.activeScheduleId) {
+        const activeScheduleId = docSnap.data().activeScheduleId;
+        try {
+          const scheduleDocRef = doc(db, SCHEDULE_TANDING_COLLECTION, activeScheduleId);
+          const scheduleDoc = await getDoc(scheduleDocRef);
+
+          if (scheduleDoc.exists()) {
+            const activeScheduleData = scheduleDoc.data() as Omit<ScheduleTanding, 'id'>;
+            // Convert Firestore Timestamp to Date string if necessary
+            const scheduleDate = activeScheduleData.date instanceof Timestamp 
+              ? activeScheduleData.date.toDate().toLocaleDateString('id-ID')
+              : new Date(activeScheduleData.date).toLocaleDateString('id-ID');
+
+            const formattedLabel = `Partai ${activeScheduleData.matchNumber}: ${activeScheduleData.pesilatMerahName} vs ${activeScheduleData.pesilatBiruName} (${activeScheduleData.class} - ${scheduleDate})`;
+            setPartaiOptions([{ value: activeScheduleId, label: formattedLabel }]);
+            setSelectedPartai(activeScheduleId);
+          } else {
+            setPartaiOptions(defaultPartaiOptions);
+            setSelectedPartai('');
+          }
+        } catch (err) {
+          console.error("Error fetching active schedule details:", err);
+          setPartaiOptions(defaultPartaiOptions);
+          setSelectedPartai('');
+        }
+      } else {
         setPartaiOptions(defaultPartaiOptions);
-        localStorage.removeItem(ACTIVE_TANDING_SCHEDULE_KEY); // Clear corrupted data
+        setSelectedPartai('');
       }
-    } else {
+      setIsLoading(false);
+    }, (error) => {
+      console.error("Error subscribing to active schedule config:", error);
       setPartaiOptions(defaultPartaiOptions);
-    }
+      setSelectedPartai('');
+      setIsLoading(false);
+    });
+
+    return () => unsub(); // Cleanup subscription on unmount
   }, []);
 
   const handleSubmit = (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     setError(null);
 
-    if (!selectedPartai && partaiOptions[0]?.value !== '') { // if there's an active schedule, it must be selected
+    if (!selectedPartai && partaiOptions.length > 0 && partaiOptions[0]?.value !== '') {
       setError('Silakan pilih partai terlebih dahulu.');
       return;
     }
-    if (partaiOptions[0]?.value === '' && selectedPartai === '') {
+    if (partaiOptions.length === 1 && partaiOptions[0]?.value === '' && selectedPartai === '') {
         setError('Tidak ada jadwal aktif yang bisa dipilih.');
         return;
     }
@@ -81,12 +108,11 @@ export default function LoginPage() {
       return;
     }
 
-    setIsLoading(true);
+    setIsLoading(true); // Set loading for password check
 
+    // Simulate password check delay
     setTimeout(() => {
       if (password === CORRECT_PASSWORD) {
-        // Store selected partai info for the target page if needed
-        // For now, just navigate
         router.push(selectedHalaman);
       } else {
         setError('Password yang Anda masukkan salah.');
@@ -117,7 +143,11 @@ export default function LoginPage() {
               )}
               <div className="space-y-2">
                 <Label htmlFor="partai" className="font-headline">Pilih Partai</Label>
-                <Select onValueChange={setSelectedPartai} value={selectedPartai} disabled={isLoading || (partaiOptions.length === 1 && partaiOptions[0]?.value === '')}>
+                <Select 
+                  onValueChange={setSelectedPartai} 
+                  value={selectedPartai} 
+                  disabled={isLoading || (partaiOptions.length === 1 && partaiOptions[0]?.value === '')}
+                >
                   <SelectTrigger id="partai">
                     <SelectValue placeholder="Pilih Partai Pertandingan" />
                   </SelectTrigger>
@@ -129,6 +159,7 @@ export default function LoginPage() {
                     ))}
                   </SelectContent>
                 </Select>
+                 {isLoading && partaiOptions[0]?.value === '' && <p className="text-xs text-muted-foreground">Memuat jadwal aktif...</p>}
               </div>
               <div className="space-y-2">
                 <Label htmlFor="halaman" className="font-headline">Pilih Halaman Tujuan</Label>
@@ -178,5 +209,3 @@ export default function LoginPage() {
     </div>
   );
 }
-
-    
