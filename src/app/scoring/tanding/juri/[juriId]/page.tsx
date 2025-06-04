@@ -1,14 +1,14 @@
 
 "use client";
 
-import { useState, useEffect, useCallback } from 'react';
+import { use, useState, useEffect, useCallback } from 'react'; // Import 'use'
 import Link from 'next/link';
 import { Header } from '@/components/layout/Header';
 import { PageTitle } from '@/components/shared/PageTitle';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { ArrowLeft, MinusSquare, Target, Shield } from 'lucide-react';
-import type { ScheduleTanding } from '@/lib/types';
+import type { ScheduleTanding } from '@/lib/types'; // Assuming ScheduleTanding might be used or adapted
 import { db } from '@/lib/firebase';
 import { doc, onSnapshot, setDoc, getDoc, Timestamp, collection } from 'firebase/firestore';
 
@@ -46,9 +46,11 @@ const initialJuriMatchData = (): JuriMatchData => ({
   activeRound: 1,
 });
 
-export default function JuriDynamicPage({ params }: { params: { juriId: string } }) {
-  const { juriId } = params; // e.g., "juri-1", "juri-2"
-  const juriDisplayName = `Juri ${juriId.split('-')[1] || 'Tidak Dikenal'}`;
+export default function JuriDynamicPage({ params: paramsPromise }: { params: Promise<{ juriId: string }> }) {
+  const params = use(paramsPromise); // Unwrap the params promise
+  const { juriId } = params; // juriId is now from the resolved params
+
+  const juriDisplayName = `Juri ${juriId?.split('-')[1] || 'Tidak Dikenal'}`;
 
   const [pesilatMerah, setPesilatMerah] = useState<PesilatInfo | null>(null);
   const [pesilatBiru, setPesilatBiru] = useState<PesilatInfo | null>(null);
@@ -67,7 +69,6 @@ export default function JuriDynamicPage({ params }: { params: { juriId: string }
         setConfigMatchId(docSnap.data().activeScheduleId);
       } else {
         setConfigMatchId(null);
-        // If no active config, ensure we also clear dependent states
         setActiveMatchId(null);
         setPesilatMerah(null);
         setPesilatBiru(null);
@@ -106,49 +107,59 @@ export default function JuriDynamicPage({ params }: { params: { juriId: string }
 
     const loadAllData = async () => {
       try {
+        // Fetch schedule details (pesilat names, contingents)
         const scheduleDocRef = doc(db, SCHEDULE_TANDING_COLLECTION, configMatchId);
         const scheduleDoc = await getDoc(scheduleDocRef);
 
         if (!scheduleDoc.exists()) {
           console.error("Active schedule document not found for ID:", configMatchId);
           setPesilatMerah(null); setPesilatBiru(null); setMatchDetailsLoaded(false);
-          setActiveMatchId(null);
-          setScoresData(initialJuriMatchData());
+          setActiveMatchId(null); // Clear activeMatchId if schedule not found
+          setScoresData(initialJuriMatchData()); // Reset scores
           setIsLoading(false);
           return; 
         }
         
-        const scheduleData = scheduleDoc.data() as ScheduleTanding;
+        const scheduleData = scheduleDoc.data() as Omit<ScheduleTanding, 'id' | 'date'> & { date: Timestamp | string };
         setPesilatMerah({ name: scheduleData.pesilatMerahName, contingent: scheduleData.pesilatMerahContingent });
         setPesilatBiru({ name: scheduleData.pesilatBiruName, contingent: scheduleData.pesilatBiruContingent });
         setMatchDetailsLoaded(true);
 
+        // Load and subscribe to Juri's scores
         const juriScoreDocRef = doc(db, MATCHES_TANDING_COLLECTION, configMatchId, 'juri_scores', juriId);
         unsubScores = onSnapshot(juriScoreDocRef, (scoreDoc) => {
           if (scoreDoc.exists()) {
             const data = scoreDoc.data() as JuriMatchData;
+            // Ensure all round arrays exist to prevent undefined errors
             const ensuredData = {
-              ...initialJuriMatchData(), 
-              ...data,
-              merah: { ...initialRoundScores(), ...data.merah },
-              biru: { ...initialRoundScores(), ...data.biru },
+              ...initialJuriMatchData(), // Start with full initial structure
+              ...data, // Override with fetched data
+              merah: { // Ensure nested structures also merge correctly
+                ...initialRoundScores(),
+                ...(data.merah || {}),
+              },
+              biru: {
+                ...initialRoundScores(),
+                ...(data.biru || {}),
+              },
             };
             setScoresData(ensuredData);
           } else {
+            // If no score doc, reset to initial (important for new matches or if doc deleted)
             setScoresData(initialJuriMatchData());
           }
-          setIsLoading(false); 
+          setIsLoading(false); // Loading complete after scores (or lack thereof) are handled
         }, (error) => {
           console.error(`Error fetching/subscribing to juri scores for ${juriId}:`, error);
-          setScoresData(initialJuriMatchData());
+          setScoresData(initialJuriMatchData()); // Reset on error
           setIsLoading(false);
         });
 
       } catch (error) {
         console.error("Error in loadAllData (fetching schedule details):", error);
         setPesilatMerah(null); setPesilatBiru(null); setMatchDetailsLoaded(false);
-        setActiveMatchId(null);
-        setScoresData(initialJuriMatchData());
+        setActiveMatchId(null); // Clear activeMatchId on error
+        setScoresData(initialJuriMatchData()); // Reset scores
         setIsLoading(false);
       }
     };
@@ -156,9 +167,9 @@ export default function JuriDynamicPage({ params }: { params: { juriId: string }
     loadAllData();
 
     return () => {
-      unsubScores(); 
+      unsubScores(); // Cleanup Firestore listener
     };
-  }, [configMatchId, juriId]);
+  }, [configMatchId, juriId]); // juriId is now stable after being resolved by use(paramsPromise)
 
   const saveScoresToFirestore = useCallback(async (newScoresData: JuriMatchData) => {
     if (!activeMatchId || !juriId) return;
@@ -173,7 +184,7 @@ export default function JuriDynamicPage({ params }: { params: { juriId: string }
   const handleScore = (pesilatColor: 'merah' | 'biru', points: 1 | 2) => {
     if (!activeMatchId || isLoading) return;
     setScoresData(prevScores => {
-      const newScores = JSON.parse(JSON.stringify(prevScores)); 
+      const newScores = JSON.parse(JSON.stringify(prevScores)) as JuriMatchData; 
       const roundKey = `round${prevScores.activeRound}` as keyof RoundScores;
       
       if (!newScores[pesilatColor][roundKey]) {
@@ -188,7 +199,7 @@ export default function JuriDynamicPage({ params }: { params: { juriId: string }
   const handleDeleteScore = (pesilatColor: 'merah' | 'biru') => {
     if (!activeMatchId || isLoading) return;
     setScoresData(prevScores => {
-      const newScores = JSON.parse(JSON.stringify(prevScores)); 
+      const newScores = JSON.parse(JSON.stringify(prevScores)) as JuriMatchData;
       const roundKey = `round${prevScores.activeRound}` as keyof RoundScores;
       
       if (newScores[pesilatColor][roundKey] && newScores[pesilatColor][roundKey].length > 0) {
@@ -221,19 +232,19 @@ export default function JuriDynamicPage({ params }: { params: { juriId: string }
     return roundData.join(' ');
   };
   
-  if (isLoading && !matchDetailsLoaded && !activeMatchId) {
+  if (isLoading && !configMatchId) { // Show initial loading if configMatchId isn't even set yet
     return (
       <div className="flex flex-col min-h-screen">
         <Header />
         <main className="flex-1 container mx-auto px-4 py-8">
-          <PageTitle title={`${juriDisplayName} - Scoring Tanding`} description="Memuat data pertandingan..." />
+          <PageTitle title={`${juriDisplayName} - Scoring Tanding`} description="Memuat konfigurasi pertandingan..." />
           <Card className="mt-6"><CardContent className="p-6 text-center">Loading...</CardContent></Card>
         </main>
       </div>
     );
   }
 
-  if (!activeMatchId && !isLoading) {
+  if (!activeMatchId && !isLoading) { // No active match configured, and not currently loading one
     return (
       <div className="flex flex-col min-h-screen">
         <Header />
@@ -255,6 +266,20 @@ export default function JuriDynamicPage({ params }: { params: { juriId: string }
       </div>
     );
   }
+  
+  // If loading specific match details or juri scores
+  if (isLoading) {
+     return (
+      <div className="flex flex-col min-h-screen">
+        <Header />
+        <main className="flex-1 container mx-auto px-4 py-8">
+          <PageTitle title={`${juriDisplayName} - Scoring Tanding`} description={`Memuat data untuk pertandingan: ${activeMatchId || '...'}`} />
+          <Card className="mt-6"><CardContent className="p-6 text-center">Loading match details...</CardContent></Card>
+        </main>
+      </div>
+    );
+  }
+
 
   return (
     <div className="flex flex-col min-h-screen">
@@ -262,7 +287,7 @@ export default function JuriDynamicPage({ params }: { params: { juriId: string }
       <main className="flex-1 container mx-auto px-4 py-8">
         <PageTitle
           title={`${juriDisplayName} - Scoring Tanding`}
-          description={`Input penilaian untuk ${juriDisplayName}. Pertandingan: ${activeMatchId || 'Memuat...'}`}
+          description={`Input penilaian untuk ${juriDisplayName}. Pertandingan Aktif: ${activeMatchId ? pesilatMerah?.name + ' vs ' + pesilatBiru?.name : 'Tidak ada'}`}
         >
           <Button variant="outline" asChild>
             <Link href="/scoring/tanding">
@@ -272,105 +297,108 @@ export default function JuriDynamicPage({ params }: { params: { juriId: string }
           </Button>
         </PageTitle>
 
-        <Card className="mb-6 shadow-lg">
-          <CardContent className="p-4">
-            <div className="flex justify-between text-sm mb-4">
-              <div className="text-red-600">
-                <p className="font-semibold">MERAH</p>
-                <p>Kontingen: {pesilatMerah?.contingent || (isLoading ? 'Memuat...' : '-')}</p>
-                <p>Pesilat: {pesilatMerah?.name || (isLoading ? 'Memuat...' : '-')}</p>
-              </div>
-              <div className="text-blue-600 text-right">
-                <p className="font-semibold">BIRU</p>
-                <p>Kontingen: {pesilatBiru?.contingent || (isLoading ? 'Memuat...' : '-')}</p>
-                <p>Pesilat: {pesilatBiru?.name || (isLoading ? 'Memuat...' : '-')}</p>
-              </div>
-            </div>
-
-            <div className="border rounded-lg overflow-hidden">
-              <div className="grid grid-cols-3 text-center font-semibold">
-                <div className="bg-red-500 text-white p-2">MERAH</div>
-                <div className="bg-yellow-400 text-black p-2">BABAK</div>
-                <div className="bg-blue-500 text-white p-2">BIRU</div>
-              </div>
-              {[1, 2, 3].map((round) => (
-                <div key={round} className="grid grid-cols-3 text-center border-t">
-                  <div className="p-3 tabular-nums min-h-[3rem] flex items-center justify-center">
-                    {isLoading && !scoresData.merah[`round${round as 1 | 2 | 3}` as keyof RoundScores]?.length ? '...' : renderRoundScores(scoresData.merah[`round${round as 1 | 2 | 3}` as keyof RoundScores])}
+        {/* Only render scoring UI if match details are loaded and not loading */}
+        {matchDetailsLoaded && !isLoading && activeMatchId ? (
+          <>
+            <Card className="mb-6 shadow-lg">
+              <CardContent className="p-4">
+                <div className="flex justify-between text-sm mb-4">
+                  <div className="text-red-600">
+                    <p className="font-semibold">MERAH</p>
+                    <p>Kontingen: {pesilatMerah?.contingent || '-'}</p>
+                    <p>Pesilat: {pesilatMerah?.name || '-'}</p>
                   </div>
-                  <button 
-                    onClick={() => handleSetRound(round as 1 | 2 | 3)}
-                    disabled={isLoading || !activeMatchId}
-                    className={`p-3 font-medium ${scoresData.activeRound === round ? 'bg-yellow-400 text-black scale-105 ring-2 ring-yellow-500' : 'bg-gray-100 hover:bg-gray-200'} transition-all disabled:opacity-50 disabled:cursor-not-allowed`}
-                  >
-                    {round === 1 ? 'I' : round === 2 ? 'II' : 'III'}
-                  </button>
-                  <div className="p-3 tabular-nums min-h-[3rem] flex items-center justify-center">
-                     {isLoading && !scoresData.biru[`round${round as 1 | 2 | 3}` as keyof RoundScores]?.length ? '...' : renderRoundScores(scoresData.biru[`round${round as 1 | 2 | 3}` as keyof RoundScores])}
+                  <div className="text-blue-600 text-right">
+                    <p className="font-semibold">BIRU</p>
+                    <p>Kontingen: {pesilatBiru?.contingent || '-'}</p>
+                    <p>Pesilat: {pesilatBiru?.name || '-'}</p>
                   </div>
                 </div>
-              ))}
+
+                <div className="border rounded-lg overflow-hidden">
+                  <div className="grid grid-cols-3 text-center font-semibold">
+                    <div className="bg-red-500 text-white p-2">MERAH</div>
+                    <div className="bg-yellow-400 text-black p-2">BABAK</div>
+                    <div className="bg-blue-500 text-white p-2">BIRU</div>
+                  </div>
+                  {[1, 2, 3].map((round) => (
+                    <div key={round} className="grid grid-cols-3 text-center border-t">
+                      <div className="p-3 tabular-nums min-h-[3rem] flex items-center justify-center">
+                        {renderRoundScores(scoresData.merah[`round${round as 1 | 2 | 3}` as keyof RoundScores])}
+                      </div>
+                      <button 
+                        onClick={() => handleSetRound(round as 1 | 2 | 3)}
+                        disabled={isLoading || !activeMatchId}
+                        className={`p-3 font-medium ${scoresData.activeRound === round ? 'bg-yellow-400 text-black scale-105 ring-2 ring-yellow-500' : 'bg-gray-100 hover:bg-gray-200'} transition-all disabled:opacity-50 disabled:cursor-not-allowed`}
+                      >
+                        {round === 1 ? 'I' : round === 2 ? 'II' : 'III'}
+                      </button>
+                      <div className="p-3 tabular-nums min-h-[3rem] flex items-center justify-center">
+                        {renderRoundScores(scoresData.biru[`round${round as 1 | 2 | 3}` as keyof RoundScores])}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+
+                <div className="flex justify-between mt-4 text-lg font-semibold">
+                  <p className="text-red-600">Total Merah: {totalMerah}</p>
+                  <p className="text-blue-600">Total Biru: {totalBiru}</p>
+                </div>
+              </CardContent>
+            </Card>
+
+            <div className="grid grid-cols-2 gap-4 md:gap-8">
+              <div className="space-y-3">
+                <Button 
+                  onClick={() => handleScore('merah', 1)} 
+                  className="w-full bg-red-500 hover:bg-red-600 text-white text-lg py-6 h-auto"
+                  disabled={!activeMatchId || isLoading}
+                >
+                  <Target className="mr-2 h-5 w-5" /> Pukulan (+1)
+                </Button>
+                <Button 
+                  onClick={() => handleScore('merah', 2)} 
+                  className="w-full bg-red-500 hover:bg-red-600 text-white text-lg py-6 h-auto"
+                  disabled={!activeMatchId || isLoading}
+                >
+                  <Shield className="mr-2 h-5 w-5" /> Tendangan (+2)
+                </Button>
+                <Button 
+                  onClick={() => handleDeleteScore('merah')} 
+                  className="w-full bg-red-700 hover:bg-red-800 text-white text-lg py-6 h-auto"
+                  disabled={!activeMatchId || isLoading || (scoresData.merah[`round${scoresData.activeRound}` as keyof RoundScores]?.length === 0)}
+                >
+                  <MinusSquare className="mr-2 h-5 w-5" /> Hapus
+                </Button>
+              </div>
+
+              <div className="space-y-3">
+                <Button 
+                  onClick={() => handleScore('biru', 1)} 
+                  className="w-full bg-blue-500 hover:bg-blue-600 text-white text-lg py-6 h-auto"
+                  disabled={!activeMatchId || isLoading}
+                >
+                  <Target className="mr-2 h-5 w-5" /> Pukulan (+1)
+                </Button>
+                <Button 
+                  onClick={() => handleScore('biru', 2)} 
+                  className="w-full bg-blue-500 hover:bg-blue-600 text-white text-lg py-6 h-auto"
+                  disabled={!activeMatchId || isLoading}
+                >
+                  <Shield className="mr-2 h-5 w-5" /> Tendangan (+2)
+                </Button>
+                <Button 
+                  onClick={() => handleDeleteScore('biru')} 
+                  className="w-full bg-blue-700 hover:bg-blue-800 text-white text-lg py-6 h-auto"
+                  disabled={!activeMatchId || isLoading || (scoresData.biru[`round${scoresData.activeRound}` as keyof RoundScores]?.length === 0)}
+                >
+                  <MinusSquare className="mr-2 h-5 w-5" /> Hapus
+                </Button>
+              </div>
             </div>
-
-            <div className="flex justify-between mt-4 text-lg font-semibold">
-              <p className="text-red-600">Total Merah: {isLoading && totalMerah === 0 ? '...' : totalMerah}</p>
-              <p className="text-blue-600">Total Biru: {isLoading && totalBiru === 0 ? '...' : totalBiru}</p>
-            </div>
-          </CardContent>
-        </Card>
-
-        <div className="grid grid-cols-2 gap-4 md:gap-8">
-          <div className="space-y-3">
-            <Button 
-              onClick={() => handleScore('merah', 1)} 
-              className="w-full bg-red-500 hover:bg-red-600 text-white text-lg py-6 h-auto"
-              disabled={!activeMatchId || isLoading}
-            >
-              <Target className="mr-2 h-5 w-5" /> Pukulan (+1)
-            </Button>
-            <Button 
-              onClick={() => handleScore('merah', 2)} 
-              className="w-full bg-red-500 hover:bg-red-600 text-white text-lg py-6 h-auto"
-              disabled={!activeMatchId || isLoading}
-            >
-              <Shield className="mr-2 h-5 w-5" /> Tendangan (+2)
-            </Button>
-            <Button 
-              onClick={() => handleDeleteScore('merah')} 
-              className="w-full bg-red-700 hover:bg-red-800 text-white text-lg py-6 h-auto"
-              disabled={!activeMatchId || isLoading || (scoresData.merah[`round${scoresData.activeRound}` as keyof RoundScores]?.length === 0)}
-            >
-              <MinusSquare className="mr-2 h-5 w-5" /> Hapus
-            </Button>
-          </div>
-
-          <div className="space-y-3">
-            <Button 
-              onClick={() => handleScore('biru', 1)} 
-              className="w-full bg-blue-500 hover:bg-blue-600 text-white text-lg py-6 h-auto"
-              disabled={!activeMatchId || isLoading}
-            >
-              <Target className="mr-2 h-5 w-5" /> Pukulan (+1)
-            </Button>
-            <Button 
-              onClick={() => handleScore('biru', 2)} 
-              className="w-full bg-blue-500 hover:bg-blue-600 text-white text-lg py-6 h-auto"
-              disabled={!activeMatchId || isLoading}
-            >
-              <Shield className="mr-2 h-5 w-5" /> Tendangan (+2)
-            </Button>
-            <Button 
-              onClick={() => handleDeleteScore('biru')} 
-              className="w-full bg-blue-700 hover:bg-blue-800 text-white text-lg py-6 h-auto"
-              disabled={!activeMatchId || isLoading || (scoresData.biru[`round${scoresData.activeRound}` as keyof RoundScores]?.length === 0)}
-            >
-              <MinusSquare className="mr-2 h-5 w-5" /> Hapus
-            </Button>
-          </div>
-        </div>
+          </>
+        ) : null } {/* End of conditional rendering for scoring UI */}
       </main>
     </div>
   );
 }
-
-    
