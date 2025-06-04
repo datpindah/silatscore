@@ -1,0 +1,67 @@
+
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Pengaturan Aplikasi (cth: jadwal aktif)
+    // TODO: Amankan! Idealnya, hanya admin terotentikasi yang boleh menulis.
+    match /app_settings/{settingId} {
+      allow read: if true; // Diperlukan oleh halaman login untuk mengambil jadwal aktif
+      allow write: if true; // Diperlukan oleh halaman admin untuk mengatur jadwal aktif
+                           // INI TIDAK AMAN UNTUK PRODUKSI TANPA OTENTIKASI ADMIN
+    }
+
+    // Jadwal Pertandingan Tanding
+    // TODO: Amankan! Idealnya, hanya admin terotentikasi yang boleh menulis.
+    match /schedules_tanding/{scheduleId} {
+      allow read: if true; // Diperlukan oleh halaman admin dan login
+      allow create, update, delete: if true; // Diperlukan oleh halaman admin
+                                       // INI TIDAK AMAN UNTUK PRODUKSI TANPA OTENTIKASI ADMIN
+    }
+
+    // Jadwal Pertandingan TGR
+    // TODO: Amankan! Idealnya, hanya admin terotentikasi yang boleh menulis.
+    match /schedules_tgr/{scheduleId} {
+      allow read: if true; // Untuk fungsionalitas TGR di masa depan
+      allow create, update, delete: if true; // Untuk fungsionalitas admin TGR di masa depan
+                                       // INI TIDAK AMAN UNTUK PRODUKSI TANPA OTENTIKASI ADMIN
+    }
+
+    // Data Pertandingan Tanding Live
+    match /matches_tanding/{matchId} {
+      // Data utama pertandingan (skor dewan, timer)
+      // TODO: Amankan! Penulisan idealnya oleh Dewan terotentikasi. Pembacaan oleh pengguna terotentikasi atau publik (untuk monitor).
+      allow read: if true;
+      allow write: if true; // Halaman Dewan 1 akan menulis di sini
+
+      // Skor dari masing-masing Juri Tanding
+      match /juri_scores/{juriId} {
+        // TODO: Amankan! Penulisan idealnya oleh Juri spesifik yang terotentikasi (request.auth.uid == juriId).
+        // Pembacaan oleh Dewan/Ketua terotentikasi.
+        allow read: if true;
+        allow write: if true; // Halaman Juri akan menulis di sini
+      }
+    }
+
+    // Data Pertandingan TGR Live
+    match /matches_tgr/{matchId} {
+      // Data utama TGR (timer, data peserta agregat)
+      // TODO: Amankan! Penulisan idealnya oleh Dewan/Admin TGR terotentikasi.
+      allow read: if true;
+      allow write: if true; // Halaman scoring TGR akan menulis di sini
+
+      // Skor dari masing-masing Juri TGR
+      match /juri_scores/{juriId} {
+        // TODO: Amankan! Penulisan idealnya oleh Juri spesifik yang terotentikasi.
+        allow read: if true;
+        allow write: if true; // Halaman scoring TGR (jika per juri) akan menulis di sini
+      }
+    }
+
+    // Aturan default untuk menolak akses ke path lain yang tidak secara eksplisit diizinkan.
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}
