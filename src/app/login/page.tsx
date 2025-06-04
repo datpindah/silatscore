@@ -18,9 +18,10 @@ import { doc, getDoc, onSnapshot, Timestamp } from 'firebase/firestore';
 
 const ACTIVE_TANDING_SCHEDULE_CONFIG_PATH = 'app_settings/active_match_tanding';
 const SCHEDULE_TANDING_COLLECTION = 'schedules_tanding';
+const NO_ACTIVE_SCHEDULE_VALUE = "NO_ACTIVE_SCHEDULE";
 
 const defaultPartaiOptions = [
-  { value: '', label: 'Tidak ada jadwal aktif' },
+  { value: NO_ACTIVE_SCHEDULE_VALUE, label: 'Tidak ada jadwal aktif' },
 ];
 
 const halamanOptions = [
@@ -38,11 +39,11 @@ const CORRECT_PASSWORD = "123456";
 export default function LoginPage() {
   const router = useRouter();
   const [partaiOptions, setPartaiOptions] = useState<{value: string; label: string}[]>(defaultPartaiOptions);
-  const [selectedPartai, setSelectedPartai] = useState<string>('');
+  const [selectedPartai, setSelectedPartai] = useState<string>(NO_ACTIVE_SCHEDULE_VALUE);
   const [selectedHalaman, setSelectedHalaman] = useState<string>('');
   const [password, setPassword] = useState<string>('');
   const [error, setError] = useState<string | null>(null);
-  const [isLoading, setIsLoading] = useState<boolean>(true); // Start with loading true
+  const [isLoading, setIsLoading] = useState<boolean>(true);
 
   useEffect(() => {
     setIsLoading(true);
@@ -55,7 +56,6 @@ export default function LoginPage() {
 
           if (scheduleDoc.exists()) {
             const activeScheduleData = scheduleDoc.data() as Omit<ScheduleTanding, 'id'>;
-            // Convert Firestore Timestamp to Date string if necessary
             const scheduleDate = activeScheduleData.date instanceof Timestamp 
               ? activeScheduleData.date.toDate().toLocaleDateString('id-ID')
               : new Date(activeScheduleData.date).toLocaleDateString('id-ID');
@@ -65,52 +65,55 @@ export default function LoginPage() {
             setSelectedPartai(activeScheduleId);
           } else {
             setPartaiOptions(defaultPartaiOptions);
-            setSelectedPartai('');
+            setSelectedPartai(NO_ACTIVE_SCHEDULE_VALUE);
           }
         } catch (err) {
           console.error("Error fetching active schedule details:", err);
           setPartaiOptions(defaultPartaiOptions);
-          setSelectedPartai('');
+          setSelectedPartai(NO_ACTIVE_SCHEDULE_VALUE);
         }
       } else {
         setPartaiOptions(defaultPartaiOptions);
-        setSelectedPartai('');
+        setSelectedPartai(NO_ACTIVE_SCHEDULE_VALUE);
       }
       setIsLoading(false);
     }, (error) => {
       console.error("Error subscribing to active schedule config:", error);
       setPartaiOptions(defaultPartaiOptions);
-      setSelectedPartai('');
+      setSelectedPartai(NO_ACTIVE_SCHEDULE_VALUE);
       setIsLoading(false);
     });
 
-    return () => unsub(); // Cleanup subscription on unmount
+    return () => unsub();
   }, []);
 
   const handleSubmit = (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     setError(null);
 
-    if (!selectedPartai && partaiOptions.length > 0 && partaiOptions[0]?.value !== '') {
-      setError('Silakan pilih partai terlebih dahulu.');
+    if (selectedPartai === NO_ACTIVE_SCHEDULE_VALUE) {
+      setError('Tidak ada jadwal aktif yang bisa dipilih.');
+      setIsLoading(false);
       return;
     }
-    if (partaiOptions.length === 1 && partaiOptions[0]?.value === '' && selectedPartai === '') {
-        setError('Tidak ada jadwal aktif yang bisa dipilih.');
-        return;
+     if (!selectedPartai) { // Should ideally not be hit if NO_ACTIVE_SCHEDULE_VALUE is handled
+      setError('Silakan pilih partai terlebih dahulu.');
+      setIsLoading(false);
+      return;
     }
     if (!selectedHalaman) {
       setError('Silakan pilih halaman tujuan terlebih dahulu.');
+      setIsLoading(false);
       return;
     }
     if (!password) {
       setError('Password tidak boleh kosong.');
+      setIsLoading(false);
       return;
     }
 
-    setIsLoading(true); // Set loading for password check
+    setIsLoading(true);
 
-    // Simulate password check delay
     setTimeout(() => {
       if (password === CORRECT_PASSWORD) {
         router.push(selectedHalaman);
@@ -146,20 +149,20 @@ export default function LoginPage() {
                 <Select 
                   onValueChange={setSelectedPartai} 
                   value={selectedPartai} 
-                  disabled={isLoading || (partaiOptions.length === 1 && partaiOptions[0]?.value === '')}
+                  disabled={isLoading || (partaiOptions.length === 1 && partaiOptions[0]?.value === NO_ACTIVE_SCHEDULE_VALUE)}
                 >
                   <SelectTrigger id="partai">
                     <SelectValue placeholder="Pilih Partai Pertandingan" />
                   </SelectTrigger>
                   <SelectContent>
                     {partaiOptions.map(option => (
-                      <SelectItem key={option.value} value={option.value} disabled={option.value === ''}>
+                      <SelectItem key={option.value} value={option.value} disabled={option.value === NO_ACTIVE_SCHEDULE_VALUE}>
                         {option.label}
                       </SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
-                 {isLoading && partaiOptions[0]?.value === '' && <p className="text-xs text-muted-foreground">Memuat jadwal aktif...</p>}
+                 {isLoading && partaiOptions[0]?.value === NO_ACTIVE_SCHEDULE_VALUE && <p className="text-xs text-muted-foreground">Memuat jadwal aktif...</p>}
               </div>
               <div className="space-y-2">
                 <Label htmlFor="halaman" className="font-headline">Pilih Halaman Tujuan</Label>
