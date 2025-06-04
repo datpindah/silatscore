@@ -1,13 +1,14 @@
+
 "use client";
 
-import { useState, type FormEvent, type ChangeEvent } from 'react';
+import { useState, type FormEvent, type ChangeEvent, useEffect } from 'react';
 import { PageTitle } from '@/components/shared/PageTitle';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardFooter } from '@/components/ui/card';
 import { FormField } from '@/components/admin/ScheduleFormFields';
 import { ScheduleTable } from '@/components/admin/ScheduleTable';
 import { PrintScheduleButton } from '@/components/admin/PrintScheduleButton';
-import { Upload, PlusCircle } from 'lucide-react';
+import { Upload, PlusCircle, PlayCircle } from 'lucide-react';
 import type { ScheduleTanding } from '@/lib/types';
 import { TableCell } from '@/components/ui/table';
 
@@ -23,10 +24,26 @@ const initialFormState: Omit<ScheduleTanding, 'id'> = {
   matchNumber: 1,
 };
 
+const ACTIVE_TANDING_SCHEDULE_KEY = 'SILATSCORE_ACTIVE_TANDING_SCHEDULE';
+
 export default function ScheduleTandingPage() {
   const [schedules, setSchedules] = useState<ScheduleTanding[]>([]);
   const [formData, setFormData] = useState<Omit<ScheduleTanding, 'id'>>(initialFormState);
   const [isEditing, setIsEditing] = useState<string | null>(null);
+  const [activeScheduleId, setActiveScheduleId] = useState<string | null>(null);
+
+  useEffect(() => {
+    const storedActiveSchedule = localStorage.getItem(ACTIVE_TANDING_SCHEDULE_KEY);
+    if (storedActiveSchedule) {
+      try {
+        const activeSchedule: ScheduleTanding = JSON.parse(storedActiveSchedule);
+        setActiveScheduleId(activeSchedule.id);
+      } catch (error) {
+        console.error("Error parsing active schedule from localStorage:", error);
+        localStorage.removeItem(ACTIVE_TANDING_SCHEDULE_KEY);
+      }
+    }
+  }, []);
 
   const handleChange = (e: ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
     const { name, value, type } = e.target;
@@ -42,7 +59,8 @@ export default function ScheduleTandingPage() {
       setSchedules(schedules.map(s => s.id === isEditing ? { ...formData, id: isEditing } : s));
       setIsEditing(null);
     } else {
-      setSchedules([...schedules, { ...formData, id: Date.now().toString() }]);
+      const newScheduleId = Date.now().toString();
+      setSchedules([...schedules, { ...formData, id: newScheduleId }]);
     }
     setFormData(initialFormState);
   };
@@ -58,12 +76,21 @@ export default function ScheduleTandingPage() {
   const handleDelete = (id: string) => {
     if (confirm('Apakah Anda yakin ingin menghapus jadwal ini?')) {
       setSchedules(schedules.filter(s => s.id !== id));
+      if (id === activeScheduleId) {
+        localStorage.removeItem(ACTIVE_TANDING_SCHEDULE_KEY);
+        setActiveScheduleId(null);
+      }
     }
   };
   
   const handleFileUpload = () => {
-    // Placeholder for XLS upload logic
     alert('Fungsi unggah XLS belum diimplementasikan.');
+  };
+
+  const handleActivateSchedule = (schedule: ScheduleTanding) => {
+    localStorage.setItem(ACTIVE_TANDING_SCHEDULE_KEY, JSON.stringify(schedule));
+    setActiveScheduleId(schedule.id);
+    alert(`Jadwal Pertandingan No. ${schedule.matchNumber} (${schedule.pesilatMerahName} vs ${schedule.pesilatBiruName}) telah diaktifkan.`);
   };
 
   const tandingTableHeaders = ["No. Match", "Tanggal", "Tempat", "Pesilat Merah", "Pesilat Biru", "Babak", "Kelas"];
@@ -133,9 +160,26 @@ export default function ScheduleTandingPage() {
             )}
             onEdit={handleEdit}
             onDelete={handleDelete}
+            renderCustomActions={(schedule) => (
+              <>
+                {schedule.id === activeScheduleId ? (
+                  <Button variant="default" size="sm" disabled className="bg-green-500 hover:bg-green-600">
+                    <PlayCircle className="mr-1 h-4 w-4" />
+                    Jadwal Aktif
+                  </Button>
+                ) : (
+                  <Button variant="outline" size="sm" onClick={() => handleActivateSchedule(schedule)}>
+                    <PlayCircle className="mr-1 h-4 w-4" />
+                    Aktifkan Jadwal
+                  </Button>
+                )}
+              </>
+            )}
           />
         </CardContent>
       </Card>
     </>
   );
 }
+
+    

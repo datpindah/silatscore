@@ -1,7 +1,7 @@
 
 "use client";
 
-import { useState, type FormEvent } from 'react';
+import { useState, type FormEvent, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { Header } from '@/components/layout/Header';
 import { PageTitle } from '@/components/shared/PageTitle';
@@ -12,12 +12,13 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { LogIn, AlertCircle } from 'lucide-react';
+import type { ScheduleTanding } from '@/lib/types';
 
-const partaiOptions = [
-  { value: 'partai-1', label: 'Partai Pertandingan 1' },
-  { value: 'partai-2', label: 'Partai Pertandingan 2' },
-  { value: 'partai-final-a', label: 'Partai Final A Putra' },
-  { value: 'partai-final-b', label: 'Partai Final B Putri' },
+const ACTIVE_TANDING_SCHEDULE_KEY = 'SILATSCORE_ACTIVE_TANDING_SCHEDULE';
+
+const defaultPartaiOptions = [
+  { value: '', label: 'Tidak ada jadwal aktif' },
+  // { value: 'partai-1-static', label: 'Partai Pertandingan 1 (Contoh Statis)' }, // Can be kept if needed
 ];
 
 const halamanOptions = [
@@ -34,19 +35,42 @@ const CORRECT_PASSWORD = "123456";
 
 export default function LoginPage() {
   const router = useRouter();
+  const [partaiOptions, setPartaiOptions] = useState<{value: string; label: string}[]>(defaultPartaiOptions);
   const [selectedPartai, setSelectedPartai] = useState<string>('');
   const [selectedHalaman, setSelectedHalaman] = useState<string>('');
   const [password, setPassword] = useState<string>('');
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState<boolean>(false);
 
+  useEffect(() => {
+    const storedActiveSchedule = localStorage.getItem(ACTIVE_TANDING_SCHEDULE_KEY);
+    if (storedActiveSchedule) {
+      try {
+        const activeSchedule: ScheduleTanding = JSON.parse(storedActiveSchedule);
+        const formattedLabel = `Partai ${activeSchedule.matchNumber}: ${activeSchedule.pesilatMerahName} vs ${activeSchedule.pesilatBiruName} (${activeSchedule.class} - ${new Date(activeSchedule.date).toLocaleDateString('id-ID')})`;
+        setPartaiOptions([{ value: activeSchedule.id, label: formattedLabel }]);
+        setSelectedPartai(activeSchedule.id); // Auto-select the active schedule
+      } catch (err) {
+        console.error("Error parsing active schedule from localStorage:", err);
+        setPartaiOptions(defaultPartaiOptions);
+        localStorage.removeItem(ACTIVE_TANDING_SCHEDULE_KEY); // Clear corrupted data
+      }
+    } else {
+      setPartaiOptions(defaultPartaiOptions);
+    }
+  }, []);
+
   const handleSubmit = (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     setError(null);
 
-    if (!selectedPartai) {
+    if (!selectedPartai && partaiOptions[0]?.value !== '') { // if there's an active schedule, it must be selected
       setError('Silakan pilih partai terlebih dahulu.');
       return;
+    }
+    if (partaiOptions[0]?.value === '' && selectedPartai === '') {
+        setError('Tidak ada jadwal aktif yang bisa dipilih.');
+        return;
     }
     if (!selectedHalaman) {
       setError('Silakan pilih halaman tujuan terlebih dahulu.');
@@ -59,9 +83,10 @@ export default function LoginPage() {
 
     setIsLoading(true);
 
-    // Simulate API call
     setTimeout(() => {
       if (password === CORRECT_PASSWORD) {
+        // Store selected partai info for the target page if needed
+        // For now, just navigate
         router.push(selectedHalaman);
       } else {
         setError('Password yang Anda masukkan salah.');
@@ -92,13 +117,15 @@ export default function LoginPage() {
               )}
               <div className="space-y-2">
                 <Label htmlFor="partai" className="font-headline">Pilih Partai</Label>
-                <Select onValueChange={setSelectedPartai} value={selectedPartai} disabled={isLoading}>
+                <Select onValueChange={setSelectedPartai} value={selectedPartai} disabled={isLoading || (partaiOptions.length === 1 && partaiOptions[0]?.value === '')}>
                   <SelectTrigger id="partai">
                     <SelectValue placeholder="Pilih Partai Pertandingan" />
                   </SelectTrigger>
                   <SelectContent>
                     {partaiOptions.map(option => (
-                      <SelectItem key={option.value} value={option.value}>{option.label}</SelectItem>
+                      <SelectItem key={option.value} value={option.value} disabled={option.value === ''}>
+                        {option.label}
+                      </SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
@@ -151,3 +178,5 @@ export default function LoginPage() {
     </div>
   );
 }
+
+    
