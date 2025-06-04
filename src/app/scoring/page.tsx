@@ -1,3 +1,4 @@
+
 "use client";
 
 import type { ChangeEvent } from 'react';
@@ -36,6 +37,14 @@ const initialPesilatState = (name: string, contingent: string): PesilatState => 
   warnings: [],
   scoresLog: [],
 });
+
+// Mapping from icon string names to actual Lucide components
+const foulIconComponentsMap: Record<string, React.ElementType> = {
+  'MinusCircle': MinusCircle,
+  'AlertTriangle': AlertTriangle,
+  'ShieldAlert': ShieldAlert,
+  'Ban': Ban,
+};
 
 export default function ScoringPage() {
   const [pesilatMerah, setPesilatMerah] = useState<PesilatState>(initialPesilatState('Pesilat Merah', 'Kontingen A'));
@@ -165,9 +174,9 @@ export default function ScoringPage() {
   };
   
   const renderFoulIcon = (foulType: Foul['type']) => {
-    const IconName = foulIcons[foulType] as keyof typeof import('lucide-react');
-    const IconComponent = IconName ? (await import('lucide-react'))[IconName] as any : Info;
-    return IconComponent ? <IconComponent className="h-4 w-4 mr-1" /> : <Info className="h-4 w-4 mr-1" />;
+    const iconNameString = foulIcons[foulType]; // Get the string name e.g., "MinusCircle"
+    const IconComponent = foulIconComponentsMap[iconNameString] || Info; // Look up the component, fallback to Info
+    return <IconComponent className="h-4 w-4 mr-1" />;
   };
 
 
@@ -211,7 +220,7 @@ export default function ScoringPage() {
             <ul className="space-y-1">
               {state.fouls.map(foul => (
                 <li key={foul.id} className="text-sm flex items-center">
-                  {/* {renderFoulIcon(foul.type)} */}
+                  {renderFoulIcon(foul.type)}
                   {foul.type} (-{foul.pointsDeducted})
                   {foul.description && <span className="text-xs text-muted-foreground ml-2">({foul.description})</span>}
                 </li>
@@ -304,3 +313,5 @@ export default function ScoringPage() {
     </div>
   );
 }
+
+    
