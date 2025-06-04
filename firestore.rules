@@ -4,64 +4,80 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
-    // Pengaturan Aplikasi (cth: jadwal aktif)
-    // TODO: Amankan! Idealnya, hanya admin terotentikasi yang boleh menulis.
+    // Global default: Deny all reads and writes by default.
+    // match /{document=**} {
+    //   allow read, write: if false;
+    // }
+    // THIS RULE ABOVE WILL BLOCK EVERYTHING. REPLACE IT OR COMMENT IT OUT.
+
+    // More permissive rules for development (replace with authenticated rules for production)
+
+    // App Settings: Allow reading active match configuration
     match /app_settings/{settingId} {
-      allow read: if true; // Diperlukan oleh halaman login untuk mengambil jadwal aktif
-      allow write: if true; // Diperlukan oleh halaman admin untuk mengatur jadwal aktif
-                           // INI TIDAK AMAN UNTUK PRODUKSI TANPA OTENTIKASI ADMIN
+      allow read: if true; 
+      // Allow write only for admins (requires authentication and role check)
+      // allow write: if request.auth != null && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin';
+      allow write: if true; // TEMPORARY FOR DEVELOPMENT WITHOUT AUTH
     }
 
-    // Jadwal Pertandingan Tanding
-    // TODO: Amankan! Idealnya, hanya admin terotentikasi yang boleh menulis.
+    // Schedules (Tanding & TGR): Allow reading schedules for everyone
+    // Allow creating, updating, deleting only for admins
     match /schedules_tanding/{scheduleId} {
-      allow read: if true; // Diperlukan oleh halaman admin dan login
-      allow create, update, delete: if true; // Diperlukan oleh halaman admin
-                                       // INI TIDAK AMAN UNTUK PRODUKSI TANPA OTENTIKASI ADMIN
+      allow read: if true;
+      // allow write: if request.auth != null && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin';
+      allow write: if true; // TEMPORARY FOR DEVELOPMENT WITHOUT AUTH
     }
 
-    // Jadwal Pertandingan TGR
-    // TODO: Amankan! Idealnya, hanya admin terotentikasi yang boleh menulis.
     match /schedules_tgr/{scheduleId} {
-      allow read: if true; // Untuk fungsionalitas TGR di masa depan
-      allow create, update, delete: if true; // Untuk fungsionalitas admin TGR di masa depan
-                                       // INI TIDAK AMAN UNTUK PRODUKSI TANPA OTENTIKASI ADMIN
+      allow read: if true;
+      // allow write: if request.auth != null && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin';
+      allow write: if true; // TEMPORARY FOR DEVELOPMENT WITHOUT AUTH
     }
 
-    // Data Pertandingan Tanding Live
+    // Match Data (Tanding):
+    // - Allow reading match data (e.g., for monitoring)
+    // - Allow dewan/timer to update their specific sections
+    // - Allow ketua pertandingan to update status/winner
     match /matches_tanding/{matchId} {
-      // Data utama pertandingan (skor dewan, timer)
-      // TODO: Amankan! Penulisan idealnya oleh Dewan terotentikasi. Pembacaan oleh pengguna terotentikasi atau publik (untuk monitor).
-      allow read: if true;
-      allow write: if true; // Halaman Dewan 1 akan menulis di sini
+      allow read: if true; // For monitoring score, etc.
+      // Allow dewan to write to dewan_data and timer_status
+      // allow write: if request.auth != null && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'dewan';
+      // Allow ketua_pertandingan to update specific fields like 'winner', 'status'
+      // allow update: if request.auth != null && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'ketua_pertandingan'
+      //                 && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['winner', 'status', 'lastUpdated']);
+      
+      // For development, allow general write. Secure this with auth.
+      allow write: if true; // TEMPORARY FOR DEVELOPMENT WITHOUT AUTH
 
-      // Skor dari masing-masing Juri Tanding
+
+      // Juri Scores for Tanding:
+      // - Juri can only write to their own document {juriId}
+      // - Allow reading scores (e.g., for monitoring or dewan)
       match /juri_scores/{juriId} {
-        // TODO: Amankan! Penulisan idealnya oleh Juri spesifik yang terotentikasi (request.auth.uid == juriId).
-        // Pembacaan oleh Dewan/Ketua terotentikasi.
         allow read: if true;
-        allow write: if true; // Halaman Juri akan menulis di sini
+        // allow write: if request.auth != null && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.assignedJuriId == juriId;
+        // Ensure that juriId in path matches the juri's assigned ID from their user profile (requires user profiles with roles)
+        allow write: if true; // TEMPORARY FOR DEVELOPMENT WITHOUT AUTH
       }
     }
 
-    // Data Pertandingan TGR Live
+    // Match Data (TGR) - Define similar rules as Tanding, adjusted for TGR structure
     match /matches_tgr/{matchId} {
-      // Data utama TGR (timer, data peserta agregat)
-      // TODO: Amankan! Penulisan idealnya oleh Dewan/Admin TGR terotentikasi.
       allow read: if true;
-      allow write: if true; // Halaman scoring TGR akan menulis di sini
+      allow write: if true; // TEMPORARY FOR DEVELOPMENT WITHOUT AUTH. Secure this.
 
-      // Skor dari masing-masing Juri TGR
       match /juri_scores/{juriId} {
-        // TODO: Amankan! Penulisan idealnya oleh Juri spesifik yang terotentikasi.
         allow read: if true;
-        allow write: if true; // Halaman scoring TGR (jika per juri) akan menulis di sini
+        allow write: if true; // TEMPORARY FOR DEVELOPMENT WITHOUT AUTH. Secure this.
       }
     }
 
-    // Aturan default untuk menolak akses ke path lain yang tidak secara eksplisit diizinkan.
-    match /{document=**} {
-      allow read, write: if false;
-    }
+    // Example: User profiles (if you add authentication)
+    // match /users/{userId} {
+    //   allow read: if true;
+    //   allow write: if request.auth != null && request.auth.uid == userId;
+    // }
   }
 }
+
+    

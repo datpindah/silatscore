@@ -18,7 +18,7 @@ import { doc, getDoc, onSnapshot, Timestamp } from 'firebase/firestore';
 
 const ACTIVE_TANDING_SCHEDULE_CONFIG_PATH = 'app_settings/active_match_tanding';
 const SCHEDULE_TANDING_COLLECTION = 'schedules_tanding';
-const NO_ACTIVE_SCHEDULE_VALUE = "NO_ACTIVE_SCHEDULE";
+const NO_ACTIVE_SCHEDULE_VALUE = "NO_ACTIVE_SCHEDULE_SELECTED"; // Changed from empty string
 
 const defaultPartaiOptions = [
   { value: NO_ACTIVE_SCHEDULE_VALUE, label: 'Tidak ada jadwal aktif' },
@@ -27,9 +27,9 @@ const defaultPartaiOptions = [
 const halamanOptions = [
   { value: '/scoring/tanding/dewan-1', label: 'Scoring - Dewan 1 (Tanding)' },
   { value: '/scoring/tanding/dewan-2', label: 'Scoring - Dewan 2 (Tanding)' },
-  { value: '/scoring/tanding/juri-1', label: 'Scoring - Juri 1 (Tanding)' },
-  { value: '/scoring/tanding/juri-2', label: 'Scoring - Juri 2 (Tanding)' },
-  { value: '/scoring/tanding/juri-3', label: 'Scoring - Juri 3 (Tanding)' },
+  { value: '/scoring/tanding/juri/juri-1', label: 'Scoring - Juri 1 (Tanding)' },
+  { value: '/scoring/tanding/juri/juri-2', label: 'Scoring - Juri 2 (Tanding)' },
+  { value: '/scoring/tanding/juri/juri-3', label: 'Scoring - Juri 3 (Tanding)' },
   { value: '/scoring/tanding/monitoring-skor', label: 'Scoring - Monitoring Skor (Tanding)' },
   { value: '/scoring/tanding/ketua-pertandingan', label: 'Scoring - Ketua Pertandingan (Tanding)' },
 ];
@@ -50,6 +50,12 @@ export default function LoginPage() {
     const unsub = onSnapshot(doc(db, ACTIVE_TANDING_SCHEDULE_CONFIG_PATH), async (docSnap) => {
       if (docSnap.exists() && docSnap.data()?.activeScheduleId) {
         const activeScheduleId = docSnap.data().activeScheduleId;
+        if (activeScheduleId === null || activeScheduleId === "") { // Handle case where activeScheduleId might be explicitly null or empty
+            setPartaiOptions(defaultPartaiOptions);
+            setSelectedPartai(NO_ACTIVE_SCHEDULE_VALUE);
+            setIsLoading(false);
+            return;
+        }
         try {
           const scheduleDocRef = doc(db, SCHEDULE_TANDING_COLLECTION, activeScheduleId);
           const scheduleDoc = await getDoc(scheduleDocRef);
@@ -64,6 +70,7 @@ export default function LoginPage() {
             setPartaiOptions([{ value: activeScheduleId, label: formattedLabel }]);
             setSelectedPartai(activeScheduleId);
           } else {
+            console.warn("Active schedule document not found:", activeScheduleId);
             setPartaiOptions(defaultPartaiOptions);
             setSelectedPartai(NO_ACTIVE_SCHEDULE_VALUE);
           }
@@ -90,13 +97,15 @@ export default function LoginPage() {
   const handleSubmit = (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     setError(null);
+    setIsLoading(true);
+
 
     if (selectedPartai === NO_ACTIVE_SCHEDULE_VALUE) {
-      setError('Tidak ada jadwal aktif yang bisa dipilih.');
+      setError('Tidak ada jadwal aktif yang bisa dipilih. Silakan aktifkan jadwal di halaman Admin.');
       setIsLoading(false);
       return;
     }
-     if (!selectedPartai) { // Should ideally not be hit if NO_ACTIVE_SCHEDULE_VALUE is handled
+     if (!selectedPartai) { 
       setError('Silakan pilih partai terlebih dahulu.');
       setIsLoading(false);
       return;
@@ -112,7 +121,6 @@ export default function LoginPage() {
       return;
     }
 
-    setIsLoading(true);
 
     setTimeout(() => {
       if (password === CORRECT_PASSWORD) {
@@ -156,13 +164,14 @@ export default function LoginPage() {
                   </SelectTrigger>
                   <SelectContent>
                     {partaiOptions.map(option => (
-                      <SelectItem key={option.value} value={option.value} disabled={option.value === NO_ACTIVE_SCHEDULE_VALUE}>
+                      <SelectItem key={option.value} value={option.value} disabled={option.value === NO_ACTIVE_SCHEDULE_VALUE && option.label === 'Tidak ada jadwal aktif'}>
                         {option.label}
                       </SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
                  {isLoading && partaiOptions[0]?.value === NO_ACTIVE_SCHEDULE_VALUE && <p className="text-xs text-muted-foreground">Memuat jadwal aktif...</p>}
+                 {!isLoading && partaiOptions[0]?.value === NO_ACTIVE_SCHEDULE_VALUE && <p className="text-xs text-destructive">Tidak ada jadwal aktif. Silakan atur di Admin.</p>}
               </div>
               <div className="space-y-2">
                 <Label htmlFor="halaman" className="font-headline">Pilih Halaman Tujuan</Label>
@@ -212,3 +221,5 @@ export default function LoginPage() {
     </div>
   );
 }
+
+    
