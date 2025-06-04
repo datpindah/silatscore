@@ -3,23 +3,40 @@
 
 import { Header } from '@/components/layout/Header';
 import { PageTitle } from '@/components/shared/PageTitle';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent, CardHeader, CardTitle, CardFooter } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Textarea } from '@/components/ui/textarea';
-import { useState, type FormEvent, type ChangeEvent } from 'react';
-import { PlusCircle, Users, User, UserSquare, RotateCcw, Play, Pause, AlertTriangle } from 'lucide-react';
-
-// Placeholder types, adjust as needed for TGR scoring
-interface Participant {
-  name: string;
-  score: number;
-  // Add other TGR specific fields: e.g., correctness, stamina, expression for Tunggal
-}
+import { Separator } from '@/components/ui/separator';
+import { useState, type FormEvent, type ChangeEvent, useEffect, useCallback } from 'react';
+import { PlusCircle, Users, User, UserSquare, RotateCcw, Play, Pause, AlertTriangle, MinusCircle } from 'lucide-react';
 
 type TGRCategory = 'Tunggal' | 'Ganda' | 'Regu';
+
+interface ParticipantScores {
+  baku: number;
+  teknikKemantapan: number;
+  penghayatan: number;
+}
+
+interface ParticipantHukuman {
+  waktu: number;
+  keluarArena: number;
+  lainLain: number;
+}
+
+interface Participant {
+  id: string;
+  name: string;
+  category: TGRCategory;
+  scores: ParticipantScores;
+  hukuman: ParticipantHukuman;
+  totalScore: number;
+}
+
+const initialScores: ParticipantScores = { baku: 0, teknikKemantapan: 0, penghayatan: 0 };
+const initialHukuman: ParticipantHukuman = { waktu: 0, keluarArena: 0, lainLain: 0 };
 
 export default function ScoringTGRPage() {
   const [category, setCategory] = useState<TGRCategory>('Tunggal');
@@ -29,18 +46,51 @@ export default function ScoringTGRPage() {
   const [isTimerRunning, setIsTimerRunning] = useState(false);
   const [matchStatus, setMatchStatus] = useState<'Pending' | 'Ongoing' | 'Paused' | 'Finished'>('Pending');
 
+  const calculateTotalScore = useCallback((scores: ParticipantScores, hukuman: ParticipantHukuman): number => {
+    const positiveScore = scores.baku + scores.teknikKemantapan + scores.penghayatan;
+    const totalHukuman = hukuman.waktu + hukuman.keluarArena + hukuman.lainLain;
+    return Math.max(0, positiveScore - totalHukuman);
+  }, []);
+
+  useEffect(() => {
+    setParticipants(prevParticipants => 
+      prevParticipants.map(p => ({
+        ...p,
+        totalScore: calculateTotalScore(p.scores, p.hukuman)
+      }))
+    );
+  }, [participants.map(p => p.scores), participants.map(p => p.hukuman), calculateTotalScore]);
+
+
   const handleAddParticipant = () => {
     if (!currentParticipantName.trim()) {
       alert('Nama peserta tidak boleh kosong.');
       return;
     }
-    setParticipants(prev => [...prev, { name: currentParticipantName, score: 0 }]);
+    setParticipants(prev => [...prev, { 
+      id: Date.now().toString(),
+      name: currentParticipantName, 
+      category,
+      scores: { ...initialScores }, 
+      hukuman: { ...initialHukuman },
+      totalScore: calculateTotalScore(initialScores, initialHukuman)
+    }]);
     setCurrentParticipantName('');
   };
 
-  const updateParticipantScore = (index: number, newScore: number) => {
+  const updateParticipantScore = (id: string, criteria: keyof ParticipantScores, value: number) => {
     setParticipants(prev => 
-      prev.map((p, i) => i === index ? { ...p, score: Math.max(0, newScore) } : p)
+      prev.map(p => 
+        p.id === id ? { ...p, scores: { ...p.scores, [criteria]: Math.max(0,value) } } : p
+      )
+    );
+  };
+
+  const updateParticipantHukuman = (id: string, type: keyof ParticipantHukuman, value: number) => {
+    setParticipants(prev => 
+      prev.map(p => 
+        p.id === id ? { ...p, hukuman: { ...p.hukuman, [type]: Math.max(0,value) } } : p
+      )
     );
   };
   
@@ -55,7 +105,8 @@ export default function ScoringTGRPage() {
     } else if (action === 'reset') {
       setIsTimerRunning(false);
       setTimerSeconds(180);
-      setParticipants([]); // Reset participants as well or based on specific logic
+      // Optionally reset participants or keep them for re-scoring
+      // setParticipants([]); 
       setMatchStatus('Pending');
     }
   };
@@ -66,7 +117,6 @@ export default function ScoringTGRPage() {
     return `${minutes.toString().padStart(2, '0')}:${remainingSeconds.toString().padStart(2, '0')}`;
   };
   
-  // Effect for timer countdown
   useEffect(() => {
     let interval: NodeJS.Timeout | null = null;
     if (isTimerRunning && timerSeconds > 0) {
@@ -83,11 +133,10 @@ export default function ScoringTGRPage() {
     };
   }, [isTimerRunning, timerSeconds]);
 
-
-  const renderCategoryIcon = () => {
-    if (category === 'Tunggal') return <User className="mr-2 h-5 w-5" />;
-    if (category === 'Ganda') return <Users className="mr-2 h-5 w-5" />;
-    if (category === 'Regu') return <UserSquare className="mr-2 h-5 w-5" />;
+  const renderCategoryIcon = (cat: TGRCategory) => {
+    if (cat === 'Tunggal') return <User className="mr-2 h-5 w-5" />;
+    if (cat === 'Ganda') return <Users className="mr-2 h-5 w-5" />;
+    if (cat === 'Regu') return <UserSquare className="mr-2 h-5 w-5" />;
     return null;
   };
 
@@ -106,7 +155,7 @@ export default function ScoringTGRPage() {
             <div className="flex justify-center gap-2 flex-wrap">
               <Button onClick={() => handleTimerControl('start')} disabled={isTimerRunning || matchStatus === 'Finished'} className="bg-green-500 hover:bg-green-600 text-white"><Play className="mr-2 h-4 w-4" /> Start</Button>
               <Button onClick={() => handleTimerControl('pause')} disabled={!isTimerRunning || matchStatus === 'Finished'} className="bg-yellow-500 hover:bg-yellow-600 text-white"><Pause className="mr-2 h-4 w-4" /> Pause</Button>
-              <Button onClick={() => handleTimerControl('reset')} variant="destructive"><RotateCcw className="mr-2 h-4 w-4" /> Reset</Button>
+              <Button onClick={() => handleTimerControl('reset')} variant="destructive"><RotateCcw className="mr-2 h-4 w-4" /> Reset Timer</Button>
             </div>
           </CardContent>
         </Card>
@@ -118,7 +167,14 @@ export default function ScoringTGRPage() {
           <CardContent className="space-y-4">
             <div>
               <Label htmlFor="tgr-category" className="font-headline">Pilih Kategori TGR</Label>
-              <Select onValueChange={(value) => setCategory(value as TGRCategory)} value={category}>
+              <Select 
+                onValueChange={(value) => {
+                  setCategory(value as TGRCategory);
+                  // Optionally clear participants if category changes significantly
+                  // setParticipants([]); 
+                }} 
+                value={category}
+              >
                 <SelectTrigger id="tgr-category">
                   <SelectValue placeholder="Pilih Kategori TGR" />
                 </SelectTrigger>
@@ -136,7 +192,7 @@ export default function ScoringTGRPage() {
                   id="participant-name" 
                   value={currentParticipantName} 
                   onChange={(e) => setCurrentParticipantName(e.target.value)}
-                  placeholder={category === 'Tunggal' ? "Nama Pesilat" : category === 'Ganda' ? "Nama Tim Ganda" : "Nama Tim Regu"}
+                  placeholder={category === 'Tunggal' ? "Nama Pesilat" : category === 'Ganda' ? "Nama Pasangan Ganda" : "Nama Tim Regu"}
                 />
               </div>
               <Button onClick={handleAddParticipant} className="bg-primary hover:bg-primary/90 text-primary-foreground">
@@ -146,35 +202,67 @@ export default function ScoringTGRPage() {
           </CardContent>
         </Card>
 
-        {participants.length > 0 && (
-          <Card>
+        {participants.map((participant) => (
+          <Card key={participant.id} className="mb-6">
             <CardHeader>
-              <CardTitle className="font-headline flex items-center">
-                {renderCategoryIcon()}
-                Input Nilai - {category}
+              <CardTitle className="font-headline flex items-center justify-between">
+                <div className="flex items-center">
+                  {renderCategoryIcon(participant.category)}
+                  {participant.name} ({participant.category})
+                </div>
+                <Button variant="outline" size="sm" onClick={() => setParticipants(ps => ps.filter(p => p.id !== participant.id))}>
+                  <MinusCircle className="h-4 w-4 mr-1" /> Hapus Peserta
+                </Button>
               </CardTitle>
             </CardHeader>
-            <CardContent className="space-y-4">
-              {participants.map((participant, index) => (
-                <div key={index} className="p-4 border rounded-md">
-                  <h3 className="font-semibold text-lg mb-2">{participant.name}</h3>
-                  {/* TODO: Add TGR specific scoring inputs here */}
-                  {/* Example for a generic score input */}
-                  <Label htmlFor={`score-${index}`} className="font-headline">Nilai</Label>
-                  <Input 
-                    id={`score-${index}`} 
-                    type="number" 
-                    value={participant.score} 
-                    onChange={(e) => updateParticipantScore(index, parseInt(e.target.value) || 0)}
-                    placeholder="Masukkan Nilai"
-                    className="w-full md:w-1/3"
-                  />
-                   <p className="text-xs text-muted-foreground mt-1">Detail penilaian TGR akan ditambahkan.</p>
+            <CardContent className="space-y-6">
+              <div>
+                <h4 className="font-semibold text-lg mb-2 font-headline text-primary">Nilai Penampilan</h4>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  <div>
+                    <Label htmlFor={`score-baku-${participant.id}`} className="font-headline">Nilai Baku</Label>
+                    <Input id={`score-baku-${participant.id}`} type="number" value={participant.scores.baku} onChange={(e) => updateParticipantScore(participant.id, 'baku', parseInt(e.target.value) || 0)} placeholder="0-100" />
+                  </div>
+                  <div>
+                    <Label htmlFor={`score-teknik-${participant.id}`} className="font-headline">Teknik & Kemantapan</Label>
+                    <Input id={`score-teknik-${participant.id}`} type="number" value={participant.scores.teknikKemantapan} onChange={(e) => updateParticipantScore(participant.id, 'teknikKemantapan', parseInt(e.target.value) || 0)} placeholder="0-100" />
+                  </div>
+                  <div>
+                    <Label htmlFor={`score-penghayatan-${participant.id}`} className="font-headline">Penghayatan</Label>
+                    <Input id={`score-penghayatan-${participant.id}`} type="number" value={participant.scores.penghayatan} onChange={(e) => updateParticipantScore(participant.id, 'penghayatan', parseInt(e.target.value) || 0)} placeholder="0-100" />
+                  </div>
                 </div>
-              ))}
+                 { (participant.category === 'Ganda' || participant.category === 'Regu') && (
+                    <p className="text-xs text-muted-foreground mt-2">
+                      Untuk Ganda/Regu, pertimbangkan juga nilai Keserasian/Kekompakan dalam Teknik & Kemantapan.
+                    </p>
+                  )}
+              </div>
+              <Separator />
+              <div>
+                <h4 className="font-semibold text-lg mb-2 font-headline text-destructive">Hukuman</h4>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  <div>
+                    <Label htmlFor={`hukuman-waktu-${participant.id}`} className="font-headline">Pelanggaran Waktu</Label>
+                    <Input id={`hukuman-waktu-${participant.id}`} type="number" value={participant.hukuman.waktu} onChange={(e) => updateParticipantHukuman(participant.id, 'waktu', parseInt(e.target.value) || 0)} placeholder="Poin Hukuman" />
+                  </div>
+                  <div>
+                    <Label htmlFor={`hukuman-arena-${participant.id}`} className="font-headline">Keluar Arena</Label>
+                    <Input id={`hukuman-arena-${participant.id}`} type="number" value={participant.hukuman.keluarArena} onChange={(e) => updateParticipantHukuman(participant.id, 'keluarArena', parseInt(e.target.value) || 0)} placeholder="Poin Hukuman" />
+                  </div>
+                  <div>
+                    <Label htmlFor={`hukuman-lain-${participant.id}`} className="font-headline">Lain-lain</Label>
+                    <Input id={`hukuman-lain-${participant.id}`} type="number" value={participant.hukuman.lainLain} onChange={(e) => updateParticipantHukuman(participant.id, 'lainLain', parseInt(e.target.value) || 0)} placeholder="Poin Hukuman" />
+                  </div>
+                </div>
+              </div>
+              <Separator />
+              <div className="text-right">
+                <h4 className="font-headline text-xl">Total Skor Akhir: <span className="font-bold text-accent">{participant.totalScore.toFixed(2)}</span></h4>
+              </div>
             </CardContent>
           </Card>
-        )}
+        ))}
 
         {participants.length === 0 && matchStatus !== 'Pending' && (
             <Card>
@@ -185,10 +273,7 @@ export default function ScoringTGRPage() {
                 </CardContent>
             </Card>
         )}
-
       </main>
     </div>
   );
 }
-
-    
