@@ -103,11 +103,11 @@ export default function ScoringTandingDewanSatuPage() {
     }, (err) => {
       console.error("[Dewan-1] Error fetching active schedule config:", err);
       setError("Gagal memuat konfigurasi jadwal aktif.");
-      setConfigMatchId(null); // Ensure state reflects error
+      setConfigMatchId(null); 
       setIsLoading(false);
     });
     return () => unsubConfig();
-  }, []); // configMatchId removed
+  }, []); 
 
   useEffect(() => {
     let unsubscribers: (() => void)[] = [];
@@ -129,31 +129,26 @@ export default function ScoringTandingDewanSatuPage() {
         setError(null);
     };
     
-    if (configMatchId === undefined) { // Still waiting for config from Firestore
+    if (configMatchId === undefined) { 
         setIsLoading(true); 
         return;
     }
 
-    if (configMatchId === null) { // No active schedule configured
-        if (activeScheduleId !== null) { // Only reset if there was a previous active match
+    if (configMatchId === null) { 
+        if (activeScheduleId !== null) { 
             resetAllMatchData("configMatchId became null");
         }
-        setIsLoading(false); // Not loading if no match
+        setIsLoading(false); 
         setError("Tidak ada jadwal pertandingan yang aktif.");
         return;
     }
     
-    // If configMatchId has changed to a new valid ID, or if it's the first valid ID
     if (configMatchId !== activeScheduleId) {
         resetAllMatchData(`configMatchId changed from ${activeScheduleId} to ${configMatchId}`);
         setActiveScheduleId(configMatchId); 
         setIsLoading(true); 
     } else if (!matchDetailsLoaded && activeScheduleId && isLoading) {
-        // This means activeScheduleId is set, we are loading, but details aren't loaded yet.
-        // This is a valid loading state, let loadData proceed or complete.
-    } else if (matchDetailsLoaded && activeScheduleId && isLoading) {
-      // If details are loaded but we are still in isLoading, something is off or calculation hasn't finished.
-      // For now, let the calculation useEffect handle isLoading=false.
+      // Valid loading state
     }
 
 
@@ -171,13 +166,13 @@ export default function ScoringTandingDewanSatuPage() {
             setMatchDetails(data);
             setPesilatMerahInfo({ name: data.pesilatMerahName, contingent: data.pesilatMerahContingent });
             setPesilatBiruInfo({ name: data.pesilatBiruName, contingent: data.pesilatBiruContingent });
-            setMatchDetailsLoaded(true); // Mark details as loaded
+            setMatchDetailsLoaded(true);
           }
         } else {
           if(mounted) {
             setError(`Detail jadwal untuk ID ${currentMatchId} tidak ditemukan.`);
             resetAllMatchData(`Schedule doc ${currentMatchId} not found`);
-            setIsLoading(false); // Stop loading as schedule not found
+            setIsLoading(false);
           }
           return;
         }
@@ -190,28 +185,19 @@ export default function ScoringTandingDewanSatuPage() {
             if (data?.timer_status) {
               if(mounted) setTimerStatus(data.timer_status as TimerStatus);
             }
-            if (data?.confirmed_entry_keys_log) {
-              const firestoreKeys = new Set(data.confirmed_entry_keys_log as string[]);
-              if(mounted) {
-                setPrevSavedConfirmedKeys(firestoreKeys);
-                // Set allContributingEntryKeys here for initial load consistency,
-                // it will be refined by the calculation useEffect.
-                // This helps avoid a flash of all-struck scores if calc takes time.
-                setAllContributingEntryKeys(firestoreKeys); 
-              }
-            } else {
-              if(mounted) {
-                setPrevSavedConfirmedKeys(new Set());
-                // setAllContributingEntryKeys(new Set()); 
-              }
+            // Initialize allContributingEntryKeys and prevSavedConfirmedKeys from Firestore log
+            const firestoreKeysLog = new Set(data?.confirmed_entry_keys_log as string[] || []);
+            if (mounted) {
+                setAllContributingEntryKeys(firestoreKeysLog); // For current UI rendering based on persisted state
+                setPrevSavedConfirmedKeys(firestoreKeysLog);   // To track last known state from Firestore
             }
           } else {
             if(mounted) {
                 const initialDataForMatch = { timer_status: initialTimerStatus, confirmed_entry_keys_log: [] };
                 await setDoc(timerStatusDocRef, initialDataForMatch, { merge: true });
                 setTimerStatus(initialTimerStatus); 
+                setAllContributingEntryKeys(new Set());
                 setPrevSavedConfirmedKeys(new Set());
-                // setAllContributingEntryKeys(new Set());
             }
           }
         }, (err) => {
@@ -242,10 +228,8 @@ export default function ScoringTandingDewanSatuPage() {
         if(mounted){
             console.error("[Dewan-1] Error in loadData function:", err);
             setError("Gagal memuat data pertandingan.");
-            setIsLoading(false); // Stop loading on error
+            setIsLoading(false);
         }
-      } finally {
-        // Moved setIsLoading(false) to calculation useEffect to ensure all data is ready
       }
     };
 
@@ -258,13 +242,13 @@ export default function ScoringTandingDewanSatuPage() {
       mounted = false;
       unsubscribers.forEach(unsub => unsub());
     };
-  }, [configMatchId, activeScheduleId]); // Re-run if activeScheduleId or configMatchId changes
+  }, [configMatchId, activeScheduleId]); 
 
 
   const calculateConfirmedScoreForPesilat = useCallback((
     pesilatColor: 'merah' | 'biru',
     targetRound: 1 | 2 | 3,
-    allJuriScoresData: JuriMatchDataWithId[]
+    allJuriScoresData: (JuriMatchDataWithId | null)[] // Allow null for juri data not yet loaded
   ): { score: number, contributingEntryKeys: Set<string> } => {
     const roundKey = `round${targetRound}` as keyof JuriRoundScores;
     let allEntriesForRound: CombinedScoreEntry[] = [];
@@ -340,47 +324,56 @@ export default function ScoringTandingDewanSatuPage() {
     if (!activeScheduleId) {
         setConfirmedScoreMerah(0);
         setConfirmedScoreBiru(0);
-        setAllContributingEntryKeys(new Set());
-        if(isLoading && configMatchId !== undefined) setIsLoading(false); // If no active match, not loading
+        // allContributingEntryKeys and prevSavedConfirmedKeys are reset by loadData/resetAllMatchData
+        if(isLoading && configMatchId !== undefined && configMatchId !== null) setIsLoading(false);
         return;
     }
 
-    const allJuriDataInput = [juri1Scores, juri2Scores, juri3Scores];
-    
-    if (!matchDetailsLoaded || allJuriDataInput.some(data => data === null)) {
-        if(configMatchId && !isLoading) setIsLoading(true); // Start loading if we have a match ID but data is missing
+    // Ensure all necessary data is loaded before calculating
+    if (!matchDetailsLoaded || juri1Scores === undefined || juri2Scores === undefined || juri3Scores === undefined) {
+        // If juriXScores are undefined, it means onSnapshot hasn't fired yet even with a null for non-existent doc.
+        // Set isLoading to true if it's not already, and config allows loading.
+        if (!isLoading && configMatchId && configMatchId === activeScheduleId) {
+             setIsLoading(true);
+        }
         return;
     }
-    if(isLoading) setIsLoading(false); // All data is now loaded and ready for calculation
-
-    const allJuriData = allJuriDataInput.filter(Boolean) as JuriMatchDataWithId[];
     
-    let calculatedTotalMerah = 0;
-    let calculatedTotalBiru = 0;
-    const liveCalculatedContributingKeys = new Set<string>(); 
+    // If we were loading and now all data is available (even if some juri scores are null), stop loading.
+    if (isLoading) {
+        setIsLoading(false);
+    }
+
+    const allJuriDataInput = [juri1Scores, juri2Scores, juri3Scores]; // These can be null if a juri doc doesn't exist
+    
+    let totalMerahOverall = 0;
+    let totalBiruOverall = 0;
+    const liveCalculatedContributingKeys = new Set<string>();
 
     for (let roundNum: 1 | 2 | 3 = 1; roundNum <= TOTAL_ROUNDS; roundNum = (roundNum + 1) as (1 | 2 | 3)) {
-        const merahResult = calculateConfirmedScoreForPesilat('merah', roundNum, allJuriData);
-        calculatedTotalMerah += merahResult.score;
+        const merahResult = calculateConfirmedScoreForPesilat('merah', roundNum, allJuriDataInput);
+        totalMerahOverall += merahResult.score;
         merahResult.contributingEntryKeys.forEach(key => liveCalculatedContributingKeys.add(key));
         
-        const biruResult = calculateConfirmedScoreForPesilat('biru', roundNum, allJuriData);
-        calculatedTotalBiru += biruResult.score;
+        const biruResult = calculateConfirmedScoreForPesilat('biru', roundNum, allJuriDataInput);
+        totalBiruOverall += biruResult.score;
         biruResult.contributingEntryKeys.forEach(key => liveCalculatedContributingKeys.add(key));
 
         if (roundNum === TOTAL_ROUNDS) break; 
     }
 
-    setConfirmedScoreMerah(calculatedTotalMerah);
-    setConfirmedScoreBiru(calculatedTotalBiru);
-    setAllContributingEntryKeys(liveCalculatedContributingKeys); // For Dewan-1 UI rendering
+    setConfirmedScoreMerah(totalMerahOverall);
+    setConfirmedScoreBiru(totalBiruOverall);
+    
+    // For Dewan-1 UI, always use the freshest calculation
+    setAllContributingEntryKeys(liveCalculatedContributingKeys);
     
     if (activeScheduleId) {
         const newLogForFirestoreArray = Array.from(liveCalculatedContributingKeys);
         
         let logsAreDifferent = newLogForFirestoreArray.length !== prevSavedConfirmedKeys.size;
         if (!logsAreDifferent && newLogForFirestoreArray.length > 0) { 
-            const currentFirestoreSet = prevSavedConfirmedKeys;
+            const currentFirestoreSet = prevSavedConfirmedKeys; // prevSaved is what we think is in FS
             if (!newLogForFirestoreArray.every(key => currentFirestoreSet.has(key)) || 
                 !Array.from(currentFirestoreSet).every(key => liveCalculatedContributingKeys.has(key))) {
                 logsAreDifferent = true;
@@ -400,10 +393,11 @@ export default function ScoringTandingDewanSatuPage() {
 
   }, [
     juri1Scores, juri2Scores, juri3Scores, 
-    activeScheduleId, matchDetailsLoaded, matchDetails, // ensure matchDetails is a dependency
+    activeScheduleId, matchDetailsLoaded, // matchDetails removed as it's covered by matchDetailsLoaded
     calculateConfirmedScoreForPesilat, 
-    prevSavedConfirmedKeys,
-    configMatchId, isLoading // Add isLoading and configMatchId to help manage loading state
+    prevSavedConfirmedKeys, // Added as dependency
+    isLoading, // Added to help manage loading state transitions
+    configMatchId // To help manage loading state transitions
   ]);
 
 
@@ -437,10 +431,12 @@ export default function ScoringTandingDewanSatuPage() {
                     if(interval) clearInterval(interval);
                     return;
                 }
+                // Ensure local timerStatus.isTimerRunning is also checked before proceeding with countdown
                 if (!timerStatus.isTimerRunning) { 
                     if (interval) clearInterval(interval);
                     return;
                 }
+
 
                 const newSeconds = Math.max(0, currentDBTimerStatus.timerSeconds - 1);
                 let newMatchStatus = currentDBTimerStatus.matchStatus;
@@ -491,6 +487,7 @@ export default function ScoringTandingDewanSatuPage() {
       
       const newFullStatus = { ...currentDBTimerStatus, ...newStatusUpdates };
       await setDoc(matchDocRef, { timer_status: newFullStatus }, { merge: true });
+      // Local state `timerStatus` will update via its onSnapshot listener.
     } catch (e) {
       console.error("[Dewan-1] Error updating timer status in Firestore:", e);
       setError("Gagal memperbarui status timer di server.");
@@ -498,7 +495,7 @@ export default function ScoringTandingDewanSatuPage() {
   }, [activeScheduleId, timerStatus]); 
 
   const handleTimerControl = (action: 'start' | 'pause') => {
-    if (!activeScheduleId || !timerStatus || timerStatus.matchStatus === 'MatchFinished') return;
+    if (!activeScheduleId || !timerStatus || timerStatus.matchStatus === 'MatchFinished' || isLoading) return;
     if (action === 'start') {
       if (timerStatus.timerSeconds > 0 && !timerStatus.isTimerRunning) {
          updateTimerStatusInFirestore({ 
@@ -517,7 +514,7 @@ export default function ScoringTandingDewanSatuPage() {
   };
 
   const handleSetBabak = (round: 1 | 2 | 3) => {
-    if (!activeScheduleId || !timerStatus || timerStatus.matchStatus === 'MatchFinished') return;
+    if (!activeScheduleId || !timerStatus || timerStatus.matchStatus === 'MatchFinished' || isLoading) return;
     if (timerStatus.isTimerRunning && timerStatus.currentRound === round) {
         alert("Babak sedang berjalan. Jeda dulu untuk pindah babak atau reset.");
         return;
@@ -545,7 +542,7 @@ export default function ScoringTandingDewanSatuPage() {
   };
   
   const handleNextAction = () => {
-    if (!activeScheduleId || !timerStatus) return;
+    if (!activeScheduleId || !timerStatus || isLoading) return;
     if (timerStatus.isTimerRunning) {
         alert("Jeda dulu pertandingan sebelum melanjutkan.");
         return;
@@ -574,7 +571,13 @@ export default function ScoringTandingDewanSatuPage() {
   };
 
   const handleResetMatch = async () => {
-    if (!activeScheduleId || !confirm("Apakah Anda yakin ingin mereset seluruh pertandingan? Semua skor dan status akan dikembalikan ke awal.")) return;
+    console.log("[Dewan-1] handleResetMatch called. ActiveScheduleId:", activeScheduleId);
+    if (!activeScheduleId || isLoading) {
+        console.warn("[Dewan-1] Reset aborted: no active schedule ID or still loading.");
+        return;
+    }
+    if (!confirm("Apakah Anda yakin ingin mereset seluruh pertandingan? Semua skor dan status akan dikembalikan ke awal.")) return;
+    
     setIsLoading(true);
     try {
         const batch = writeBatch(db);
@@ -596,16 +599,19 @@ export default function ScoringTandingDewanSatuPage() {
         });
         
         await batch.commit();
+        console.log("[Dewan-1] Firestore batch commit successful for reset.");
         
+        // Reset local Dewan-1 states AFTER Firestore commit
         setTimerStatus(initialTimerStatus); 
         setConfirmedScoreMerah(0);
         setConfirmedScoreBiru(0);
         setAllContributingEntryKeys(new Set()); 
         setPrevSavedConfirmedKeys(new Set()); 
         
-        setJuri1Scores(null); setJuri2Scores(null); setJuri3Scores(null);
-        // Match details remain
-        
+        setJuri1Scores(null); 
+        setJuri2Scores(null); 
+        setJuri3Scores(null);
+                
         alert("Pertandingan telah direset.");
     } catch (e) {
       console.error("[Dewan-1] Error resetting match:", e);
@@ -735,23 +741,21 @@ export default function ScoringTandingDewanSatuPage() {
     (timerStatus.currentRound < TOTAL_ROUNDS || (timerStatus.currentRound === TOTAL_ROUNDS && timerStatus.matchStatus !== 'MatchFinished'));
 
   const isNextActionDisabledBtn: boolean = 
+    !activeScheduleId || isLoading || // Disable if no active match or loading
     timerStatus.isTimerRunning || 
     !isNextActionPossible ||
     (timerStatus.matchStatus.startsWith("OngoingRound"));
 
 
-  const isTimerStartDisabled: boolean = timerStatus.isTimerRunning || timerStatus.matchStatus === 'MatchFinished' || timerStatus.timerSeconds === 0 || timerStatus.matchStatus.startsWith('FinishedRound');
-  const isTimerPauseDisabled: boolean = !timerStatus.isTimerRunning || timerStatus.matchStatus === 'MatchFinished';
+  const isTimerStartDisabled: boolean = !activeScheduleId || isLoading || timerStatus.isTimerRunning || timerStatus.matchStatus === 'MatchFinished' || timerStatus.timerSeconds === 0 || timerStatus.matchStatus.startsWith('FinishedRound');
+  const isTimerPauseDisabled: boolean = !activeScheduleId || isLoading || !timerStatus.isTimerRunning || timerStatus.matchStatus === 'MatchFinished';
   
   const isBabakButtonDisabled = (round: number): boolean => {
-    if (timerStatus.isTimerRunning || timerStatus.matchStatus === 'MatchFinished') return true;
-    // Allow setting to a finished round to review its scores, but not to start it again if already past.
-    // if (timerStatus.matchStatus.startsWith('FinishedRound')) {
-    //     const finishedRoundNumber = parseInt(timerStatus.matchStatus.replace('FinishedRound', ''));
-    //     if (round > finishedRoundNumber && timerStatus.currentRound < round) return true; // Cannot jump past an unfinished current round to a future finished one
-    // }
-    return false; // Generally allow changing rounds if timer not running and match not finished
+    if (!activeScheduleId || isLoading || timerStatus.isTimerRunning || timerStatus.matchStatus === 'MatchFinished') return true;
+    return false; 
   };
+
+  const isResetButtonDisabled: boolean = !activeScheduleId || isLoading;
 
 
   const juriDataArray = [juri1Scores, juri2Scores, juri3Scores];
@@ -843,7 +847,12 @@ export default function ScoringTandingDewanSatuPage() {
               >
                 {nextButtonText} <ChevronRight className="ml-1 h-4 md:h-5 w-4 md:w-5" />
               </Button>
-              <Button onClick={handleResetMatch} variant="destructive" className="w-full py-2 md:py-3 text-sm md:text-base">
+              <Button 
+                onClick={handleResetMatch} 
+                disabled={isResetButtonDisabled}
+                variant="destructive" 
+                className="w-full py-2 md:py-3 text-sm md:text-base"
+              >
                 <RotateCcw className="mr-2 h-4 md:h-5 w-4 md:w-5" /> Reset Match
               </Button>
                <Button variant="outline" asChild className="w-full py-2 md:py-3 text-sm md:text-base border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700 col-span-2 sm:col-span-4">
@@ -861,7 +870,7 @@ export default function ScoringTandingDewanSatuPage() {
                 <CardTitle className="text-lg font-headline flex items-center text-gray-800 dark:text-gray-200">
                     <RadioTower className="mr-2 h-5 w-5 text-primary"/> Status Juri &amp; Skor Mentah
                 </CardTitle>
-                 <CardDescription>Skor mentah dari juri. Skor dicoret jika tidak membentuk pasangan nilai yang sama dari minimal 2 juri (untuk warna &amp; babak yang sama) dalam rentang waktu input 2 detik. Total skor di atas hanya menghitung nilai yang tidak tercoret.</CardDescription>
+                 <CardDescription>Skor mentah dari juri akan divalidasi. Nilai sah jika minimal 2 juri memberi nilai poin sama untuk warna &amp; babak yang sama dalam selang waktu 2 detik. Nilai tidak sah akan dicoret. Total skor di atas hanya menghitung nilai yang tidak tercoret.</CardDescription>
             </CardHeader>
             <CardContent className="text-xs md:text-sm grid grid-cols-1 sm:grid-cols-3 gap-3 md:gap-4">
                 {juriDataArray.map((jS, idx) => {
@@ -887,5 +896,3 @@ export default function ScoringTandingDewanSatuPage() {
     </div>
   );
 }
-
-    
