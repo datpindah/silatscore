@@ -26,13 +26,14 @@ interface PesilatInfo {
 
 interface ScoreEntry {
   points: 1 | 2;
-  timestamp: Timestamp; // Firebase Timestamp
+  timestamp: Timestamp; 
 }
 
-// Ditambahkan 'key' untuk mempermudah pelacakan unik
 interface CombinedScoreEntry extends ScoreEntry {
   juriId: string;
   key: string; 
+  round: keyof JuriRoundScores;
+  color: 'merah' | 'biru';
 }
 
 interface JuriRoundScores {
@@ -81,10 +82,8 @@ export default function ScoringTandingDewanSatuPage() {
   const [juri1Scores, setJuri1Scores] = useState<JuriMatchDataWithId | null>(null);
   const [juri2Scores, setJuri2Scores] = useState<JuriMatchDataWithId | null>(null);
   const [juri3Scores, setJuri3Scores] = useState<JuriMatchDataWithId | null>(null);
-
-  // allContributingEntryKeys: Untuk UI Dewan-1, bersifat akumulatif permanen.
+  
   const [allContributingEntryKeys, setAllContributingEntryKeys] = useState<Set<string>>(new Set());
-  // prevSavedConfirmedKeys: Snapshot dari Firestore, untuk deteksi perubahan.
   const [prevSavedConfirmedKeys, setPrevSavedConfirmedKeys] = useState<Set<string>>(new Set());
   
   const [confirmedScoreMerah, setConfirmedScoreMerah] = useState(0);
@@ -96,20 +95,21 @@ export default function ScoringTandingDewanSatuPage() {
 
 
   useEffect(() => {
+    // console.log("[Dewan-1] Config listener effect running.");
     setIsLoading(true); 
     const unsubConfig = onSnapshot(doc(db, ACTIVE_TANDING_SCHEDULE_CONFIG_PATH), (docSnap) => {
       const newDbConfigId = docSnap.exists() ? docSnap.data()?.activeScheduleId : null;
       if (newDbConfigId !== configMatchId) {
-        console.log(`[Dewan-1] Config Match ID changed from ${configMatchId} to ${newDbConfigId}`);
+        // console.log(`[Dewan-1] Config Match ID changed from ${configMatchId} to ${newDbConfigId}`);
         setConfigMatchId(newDbConfigId);
       } else if (configMatchId === undefined && newDbConfigId === null) {
+        // console.log("[Dewan-1] Initial load, no active schedule in config.");
         setConfigMatchId(null); 
       }
     }, (err) => {
       console.error("[Dewan-1] Error fetching active schedule config:", err);
       setError("Gagal memuat konfigurasi jadwal aktif.");
       setConfigMatchId(null); 
-      // setIsLoading(false); // Ditangani di effect berikutnya
     });
     return () => unsubConfig();
   }, []); 
@@ -120,7 +120,7 @@ export default function ScoringTandingDewanSatuPage() {
 
     const resetAllMatchData = (reason: string) => {
         if (!mounted) return;
-        console.log(`[Dewan-1] Resetting all match data due to: ${reason}`);
+        // console.log(`[Dewan-1] Resetting all match data due to: ${reason}`);
         setActiveScheduleId(null);
         setMatchDetails(null);
         setMatchDetailsLoaded(false);
@@ -129,7 +129,6 @@ export default function ScoringTandingDewanSatuPage() {
         setTimerStatus(initialTimerStatus);
         setJuri1Scores(null); setJuri2Scores(null); setJuri3Scores(null);
         setConfirmedScoreMerah(0); setConfirmedScoreBiru(0);
-        // Saat reset karena ganti match, allContributingEntryKeys & prevSaved juga direset
         setAllContributingEntryKeys(new Set());
         setPrevSavedConfirmedKeys(new Set());
         setError(null);
@@ -153,13 +152,12 @@ export default function ScoringTandingDewanSatuPage() {
         resetAllMatchData(`configMatchId changed from ${activeScheduleId} to ${configMatchId}`);
         setActiveScheduleId(configMatchId); 
         if (!isLoading) setIsLoading(true); 
-        return; // Biarkan effect berikutnya menangani loading setelah activeScheduleId diset
+        return; 
     }
-
 
     const loadData = async (currentMatchId: string) => {
       if (!mounted || !currentMatchId) return; 
-      console.log(`[Dewan-1] Loading data for match: ${currentMatchId}`);
+      // console.log(`[Dewan-1] Loading data for match: ${currentMatchId}`);
       
       if (!isLoading) setIsLoading(true);
 
@@ -193,30 +191,20 @@ export default function ScoringTandingDewanSatuPage() {
             if (data?.timer_status) {
               if(mounted) setTimerStatus(data.timer_status as TimerStatus);
             }
-            // Inisialisasi allContributingEntryKeys dan prevSavedConfirmedKeys dari Firestore saat pertama kali load
-            // atau jika data lokal belum ada tapi di Firestore ada.
             const firestoreKeysLog = new Set(data?.confirmed_entry_keys_log as string[] || []);
             if (mounted) {
-                // Hanya set jika ini adalah load awal untuk match ini atau jika local state kosong
-                if (allContributingEntryKeys.size === 0 && firestoreKeysLog.size > 0) {
-                    console.log(`[Dewan-1] Initializing allContributingEntryKeys from Firestore log for ${currentMatchId}`, firestoreKeysLog);
-                    setAllContributingEntryKeys(firestoreKeysLog);
-                }
-                 if (prevSavedConfirmedKeys.size === 0 && firestoreKeysLog.size > 0) {
-                    setPrevSavedConfirmedKeys(firestoreKeysLog);   
-                 } else if (firestoreKeysLog.size === 0 && prevSavedConfirmedKeys.size > 0) {
-                    // Jika Firestore kosong (misal setelah reset) tapi lokal masih ada, sinkronkan lokal.
-                    setPrevSavedConfirmedKeys(new Set());
-                    if(allContributingEntryKeys.size > 0) setAllContributingEntryKeys(new Set());
-                 }
+                // Initialize both local `allContributingEntryKeys` (for UI) and `prevSavedConfirmedKeys` (for Firestore diffing)
+                // This ensures that on page load/refresh, we start with what was persisted.
+                setAllContributingEntryKeys(firestoreKeysLog);
+                setPrevSavedConfirmedKeys(firestoreKeysLog);
+                // console.log(`[Dewan-1] Initialized allContributingEntryKeys & prevSavedConfirmedKeys from Firestore log for ${currentMatchId}`, firestoreKeysLog);
             }
           } else {
-            // Dokumen match belum ada, buat dengan initial state.
             if(mounted) {
                 const initialDataForMatch = { timer_status: initialTimerStatus, confirmed_entry_keys_log: [] };
                 await setDoc(timerStatusDocRef, initialDataForMatch, { merge: true });
                 setTimerStatus(initialTimerStatus); 
-                setAllContributingEntryKeys(new Set()); // Pastikan reset jika dokumen baru dibuat
+                setAllContributingEntryKeys(new Set()); 
                 setPrevSavedConfirmedKeys(new Set());
             }
           }
@@ -244,9 +232,6 @@ export default function ScoringTandingDewanSatuPage() {
           if(mounted) unsubscribers.push(unsubJuri);
         });
         
-        // Pindahkan setIsLoading(false) ke effect kalkulasi skor
-        // agar loading baru berhenti setelah kalkulasi awal selesai.
-        
       } catch (err) {
         if(mounted){
             console.error("[Dewan-1] Error in loadData function:", err);
@@ -267,152 +252,177 @@ export default function ScoringTandingDewanSatuPage() {
       mounted = false;
       unsubscribers.forEach(unsub => unsub());
     };
-  }, [configMatchId, activeScheduleId]); // isLoading dihapus
+  }, [configMatchId, activeScheduleId]); 
 
 
-  // Effect untuk Kalkulasi Skor dan Update Firestore
   useEffect(() => {
+    // console.log("[Dewan-1] Score calculation effect running. Dependencies changed.");
     if (!activeScheduleId || !matchDetailsLoaded || 
         juri1Scores === undefined || juri2Scores === undefined || juri3Scores === undefined) {
-        if (activeScheduleId && !isLoading && (!matchDetailsLoaded || juri1Scores === undefined)) {
-             // Jika ID aktif, tapi data belum ada, biarkan isLoading atau set true jika belum
-             if(!isLoading) setIsLoading(true);
-        } else if (!activeScheduleId && isLoading) {
-            setIsLoading(false);
+        
+        let shouldBeLoading = true;
+        if (!activeScheduleId && configMatchId === null) { // No active match, definitely not loading match data
+            shouldBeLoading = false;
+        } else if (activeScheduleId && (!matchDetailsLoaded || juri1Scores === undefined || juri2Scores === undefined || juri3Scores === undefined)) {
+            // Active match ID exists, but some data is still pending (undefined)
+            shouldBeLoading = true;
+        } else if (configMatchId === undefined) { // Initial state before config is even read
+            shouldBeLoading = true;
+        } else { // All primary data sources (juri scores) are either null (no data yet) or loaded
+             shouldBeLoading = false;
         }
-        return;
+
+        if (isLoading !== shouldBeLoading) {
+            setIsLoading(shouldBeLoading);
+        }
+        if (shouldBeLoading) return; // Don't proceed with calculation if essential data is missing
     }
-    // Jika semua data sudah siap (bukan undefined), maka kita bisa set isLoading = false
+    
+    // If we reach here, it means essential data markers (juriXScores) are no longer undefined.
+    // We can now safely set isLoading to false if it hasn't been already by the data loading part.
     if (isLoading) setIsLoading(false);
 
     const allJuriDataInput = [juri1Scores, juri2Scores, juri3Scores].filter(Boolean) as JuriMatchDataWithId[];
-
-    // Kumpulkan semua entri mentah dengan key unik
+    
+    // currentGlobalAccumulatedKeys starts with what was previously saved or the initial empty set
+    // This is the core for PERMANENT "valid" status for display.
+    const currentGlobalAccumulatedKeys = new Set<string>(prevSavedConfirmedKeys);
     const allRawEntries: CombinedScoreEntry[] = [];
+
     allJuriDataInput.forEach(juriData => {
       (['merah', 'biru'] as const).forEach(pesilatColor => {
         (['round1', 'round2', 'round3'] as const).forEach(roundKey => {
           juriData[pesilatColor]?.[roundKey]?.forEach(entry => {
-            const entryKey = `${juriData.juriId}_${entry.timestamp.toMillis()}_${entry.points}`;
-            allRawEntries.push({
-              ...entry,
-              juriId: juriData.juriId,
-              key: entryKey,
-              // Tambahkan info babak & warna untuk pemrosesan lebih mudah
-              round: roundKey,
-              color: pesilatColor
-            });
+            if (entry && entry.timestamp && typeof entry.timestamp.toMillis === 'function') {
+              const entryKey = `${juriData.juriId}_${entry.timestamp.toMillis()}_${entry.points}`;
+              allRawEntries.push({
+                ...entry,
+                juriId: juriData.juriId,
+                key: entryKey,
+                round: roundKey,
+                color: pesilatColor
+              });
+            } else {
+              console.warn(
+                `[Dewan-1] Skipping entry due to invalid or missing timestamp during raw entry processing. Entry:`, 
+                JSON.stringify(entry),
+                `Juri: ${juriData.juriId}, Color: ${pesilatColor}, Round: ${roundKey}`
+              );
+            }
           });
         });
       });
     });
     allRawEntries.sort((a, b) => a.timestamp.toMillis() - b.timestamp.toMillis());
-
-    // --- Logika Baru untuk Kalkulasi Skor dan Kunci Kontributor ---
-    // `currentAccumulatedValidKeys` akan menjadi dasar untuk `allContributingEntryKeys`
-    // dan `confirmed_entry_keys_log`. Dimulai dari `prevSavedConfirmedKeys` agar bersifat akumulatif permanen.
-    const currentAccumulatedValidKeys = new Set<string>(prevSavedConfirmedKeys);
-    let calculatedTotalMerah = 0;
-    let calculatedTotalBiru = 0;
     
-    // Set untuk melacak entri mana yang sudah menjadi bagian dari pasangan yang menyumbang poin.
-    const keysUsedForScoring = new Set<string>();
+    const newlyFoundValidKeysThisCycle = new Set<string>();
 
     for (let i = 0; i < allRawEntries.length; i++) {
         const e1 = allRawEntries[i];
-        // Jika e1 sudah valid dan berkontribusi, atau sudah digunakan untuk skor, lewati.
-        if (currentAccumulatedValidKeys.has(e1.key) || keysUsedForScoring.has(e1.key)) {
+        if (currentGlobalAccumulatedKeys.has(e1.key)) { // If e1 is already part of a finalized valid pair, skip
             continue;
         }
 
-        // Cari pasangan untuk e1 dari entri lain yang belum valid atau belum digunakan.
+        // Find partners for e1 that are NOT already part of a finalized valid pair
+        const potentialPartners = [];
         for (let j = i + 1; j < allRawEntries.length; j++) {
             const e2 = allRawEntries[j];
-            if (currentAccumulatedValidKeys.has(e2.key) || keysUsedForScoring.has(e2.key)) {
+            if (currentGlobalAccumulatedKeys.has(e2.key)) { // If e2 is already finalized, it can't be a new partner
                 continue;
             }
 
-            // Syarat pasangan: Beda juri, babak sama, warna sama, nilai sama, dalam 2 detik
             if (e1.juriId !== e2.juriId &&
                 e1.round === e2.round &&
                 e1.color === e2.color &&
                 e1.points === e2.points &&
                 Math.abs(e1.timestamp.toMillis() - e2.timestamp.toMillis()) <= 2000) {
-                
-                // Pasangan valid ditemukan!
-                currentAccumulatedValidKeys.add(e1.key);
-                currentAccumulatedValidKeys.add(e2.key);
-                keysUsedForScoring.add(e1.key);
-                keysUsedForScoring.add(e2.key);
-
-                // Tambahkan poin (hanya sekali per pasangan)
-                // e1.points sudah cukup karena e1 dan e2 poinnya sama
-                // Tidak perlu lagi mengecek apakah ada juri ketiga, karena aturan hanya "dua juri atau lebih"
-                // dan kita memproses secara berurutan.
-                // Jika ada juri ketiga yang cocok dengan e1, ia akan membentuk pasangan dengan e1 di iterasi e1.
-                // Jika juri ketiga cocok dengan e2, ia akan membentuk pasangan dengan e2.
-                // Untuk menghindari double counting, kita hanya tambahkan poin jika ini adalah pasangan baru.
-                // Dengan `keysUsedForScoring`, ini sudah ditangani.
-                
-                // Poinnya akan dihitung ulang di bawah berdasarkan `currentAccumulatedValidKeys`
-                break; // e1 sudah menemukan pasangan, lanjut ke e1 berikutnya.
+                potentialPartners.push(e2);
             }
         }
+
+        if (potentialPartners.length > 0) { // Found at least one new partner for e1
+            currentGlobalAccumulatedKeys.add(e1.key);
+            newlyFoundValidKeysThisCycle.add(e1.key);
+            potentialPartners.forEach(p => {
+                currentGlobalAccumulatedKeys.add(p.key);
+                newlyFoundValidKeysThisCycle.add(p.key);
+            });
+            // e1 and its new partners are now "globally accumulated"
+        }
     }
+    
+    // Update the UI-driving set for Dewan-1 immediately with the accumulated keys
+    setAllContributingEntryKeys(new Set(currentGlobalAccumulatedKeys));
 
-    // Hitung ulang total skor berdasarkan `currentAccumulatedValidKeys` secara keseluruhan
-    // untuk memastikan setiap "grup" kesepakatan hanya dihitung sekali.
-    const scoreContributingGroups = new Map<string, number>(); // "round_color_timestampApprox_points" -> points
-    const tempProcessedEntriesForScoreCalc = new Set<string>();
+    // Calculate total scores based on the fully accumulated valid keys
+    let calculatedTotalMerah = 0;
+    let calculatedTotalBiru = 0;
+    const keysUsedForScoringThisCalculation = new Set<string>();
 
-    allRawEntries.forEach(e1 => {
-        if (!currentAccumulatedValidKeys.has(e1.key) || tempProcessedEntriesForScoreCalc.has(e1.key)) return;
+    // Iterate based on the accumulated keys to calculate score
+    // This ensures that even if optimal pairs change, points are based on current valid groups
+    // Sort the entries by timestamp to ensure deterministic processing for scoring groups.
+    const entriesForScoreCalculation = allRawEntries
+        .filter(e => currentGlobalAccumulatedKeys.has(e.key))
+        .sort((a,b) => a.timestamp.toMillis() - b.timestamp.toMillis());
 
-        const agreeingPartners = [e1];
-        for (const e2 of allRawEntries) {
-            if (e1.key === e2.key || !currentAccumulatedValidKeys.has(e2.key) || tempProcessedEntriesForScoreCalc.has(e2.key)) continue;
-            if (e1.juriId === e2.juriId) continue;
+    for (const e1 of entriesForScoreCalculation) {
+        if (keysUsedForScoringThisCalculation.has(e1.key)) continue;
+
+        const agreeingPartnersForE1 = [e1];
+        for (const e2 of entriesForScoreCalculation) {
+            if (e1.key === e2.key || keysUsedForScoringThisCalculation.has(e2.key) || e1.juriId === e2.juriId) continue;
 
             if (e1.round === e2.round &&
                 e1.color === e2.color &&
                 e1.points === e2.points &&
                 Math.abs(e1.timestamp.toMillis() - e2.timestamp.toMillis()) <= 2000) {
-                agreeingPartners.push(e2);
+                agreeingPartnersForE1.push(e2);
             }
         }
-        
-        if (agreeingPartners.length >= 2) {
-            // Valid group
+
+        if (agreeingPartnersForE1.length >= 2) {
+            // Valid group found
             const points = e1.points;
             if (e1.color === 'merah') calculatedTotalMerah += points;
             else calculatedTotalBiru += points;
             
-            agreeingPartners.forEach(p => tempProcessedEntriesForScoreCalc.add(p.key));
-        }
-    });
-
-    setConfirmedScoreMerah(calculatedTotalMerah);
-    setConfirmedScoreBiru(calculatedTotalBiru);
-    setAllContributingEntryKeys(currentAccumulatedValidKeys);
-
-    // Update Firestore jika `currentAccumulatedValidKeys` berbeda dari `prevSavedConfirmedKeys`
-    if (activeScheduleId) {
-        const newLogArray = Array.from(currentAccumulatedValidKeys);
-        if (newLogArray.length !== prevSavedConfirmedKeys.size || 
-            !newLogArray.every(key => prevSavedConfirmedKeys.has(key))) {
-            
-            updateDoc(doc(db, MATCHES_TANDING_COLLECTION, activeScheduleId), {
-                confirmed_entry_keys_log: newLogArray
-            }).then(() => {
-                setPrevSavedConfirmedKeys(new Set(newLogArray));
-                console.log("[Dewan-1] PERMANENT LOGIC: Firestore updated with accumulated keys.");
-            }).catch(err => {
-                console.error("[Dewan-1] PERMANENT LOGIC: Error updating Firestore log:", err);
-            });
+            agreeingPartnersForE1.forEach(p => keysUsedForScoringThisCalculation.add(p.key));
         }
     }
 
-  }, [juri1Scores, juri2Scores, juri3Scores, activeScheduleId, matchDetailsLoaded, prevSavedConfirmedKeys]); // isLoading dihilangkan agar effect ini bisa set isLoading
+    setConfirmedScoreMerah(calculatedTotalMerah);
+    setConfirmedScoreBiru(calculatedTotalBiru);
+
+    // Update Firestore log if `currentGlobalAccumulatedKeys` has new additions compared to `prevSavedConfirmedKeys`
+    if (activeScheduleId) {
+        const newLogForFirestoreArray = Array.from(currentGlobalAccumulatedKeys);
+        let firestoreUpdateNeeded = newLogForFirestoreArray.length > prevSavedConfirmedKeys.size;
+        if (!firestoreUpdateNeeded && newLogForFirestoreArray.length === prevSavedConfirmedKeys.size && newLogForFirestoreArray.length > 0) {
+           for(const key of newLogForFirestoreArray){
+               if(!prevSavedConfirmedKeys.has(key)){
+                   firestoreUpdateNeeded = true;
+                   break;
+               }
+           }
+        }
+
+        if (firestoreUpdateNeeded) {
+            // console.log("[Dewan-1] Firestore update needed for confirmed_entry_keys_log.");
+            updateDoc(doc(db, MATCHES_TANDING_COLLECTION, activeScheduleId), {
+                confirmed_entry_keys_log: newLogForFirestoreArray
+            }).then(() => {
+                setPrevSavedConfirmedKeys(new Set(newLogForFirestoreArray)); // Update prevSaved to current
+                // console.log("[Dewan-1] Firestore updated with new accumulated keys:", newLogForFirestoreArray);
+            }).catch(err => {
+                console.error("[Dewan-1] Error updating Firestore log:", err);
+            });
+        } else {
+            // console.log("[Dewan-1] No Firestore update needed for confirmed_entry_keys_log. currentGlobal: ", currentGlobalAccumulatedKeys.size, "prevSaved: ", prevSavedConfirmedKeys.size);
+        }
+    }
+
+  }, [juri1Scores, juri2Scores, juri3Scores, activeScheduleId, matchDetailsLoaded, prevSavedConfirmedKeys]);
 
 
   useEffect(() => {
@@ -445,8 +455,6 @@ export default function ScoringTandingDewanSatuPage() {
                     if(interval) clearInterval(interval);
                     return;
                 }
-                // Tambahkan check jika timerStatus lokal sudah isTimerRunning: false
-                // Ini untuk menghentikan interval jika ada update dari luar (misal, pause dari UI)
                 if (!timerStatus.isTimerRunning) { 
                     if (interval) clearInterval(interval);
                     return;
@@ -473,52 +481,45 @@ export default function ScoringTandingDewanSatuPage() {
                 };
                                 
                 await setDoc(matchDocRef, { timer_status: updatedStatusForFirestore }, { merge: true });
-                // State lokal timerStatus akan diupdate oleh listener onSnapshot
             } catch (e) {
                 console.error("[Dewan-1] Error updating timer in interval: ", e);
                  if(interval) clearInterval(interval);
-                 // Revert local state if firestore update fails, or rely on onSnapshot
-                 setTimerStatus(prev => ({ ...prev, isTimerRunning: false })); // Safety pause
+                 setTimerStatus(prev => ({ ...prev, isTimerRunning: false })); 
             }
         } else {
-             if(interval) clearInterval(interval); // No active match, stop interval
+             if(interval) clearInterval(interval); 
         }
       }, 1000);
     } else if (!timerStatus.isTimerRunning || timerStatus.timerSeconds === 0) {
-        // Timer tidak berjalan atau sudah habis
         if(interval) clearInterval(interval);
     }
     return () => {
       if (interval) clearInterval(interval);
     };
-  }, [timerStatus.isTimerRunning, timerStatus.timerSeconds, activeScheduleId]); // Dependensi timerStatus.timerSeconds agar interval re-evaluasi saat detik berubah
+  }, [timerStatus.isTimerRunning, timerStatus.timerSeconds, activeScheduleId]); 
 
 
   const updateTimerStatusInFirestore = useCallback(async (newStatusUpdates: Partial<TimerStatus>) => {
     if (!activeScheduleId) return;
     try {
       const matchDocRef = doc(db, MATCHES_TANDING_COLLECTION, activeScheduleId);
-      // Ambil status terbaru dari DB sebelum update, untuk menghindari race condition
-      // Meskipun onSnapshot akan update state lokal, operasi update ini harus se-atomik mungkin.
       const docSnap = await getDoc(matchDocRef);
       const currentDBTimerStatus = docSnap.exists() && docSnap.data()?.timer_status 
                                    ? docSnap.data()?.timer_status as TimerStatus 
-                                   : timerStatus; // Fallback ke state lokal jika doc belum ada (jarang terjadi)
+                                   : timerStatus; 
       
       const newFullStatus = { ...currentDBTimerStatus, ...newStatusUpdates };
       await setDoc(matchDocRef, { timer_status: newFullStatus }, { merge: true });
-      // State timerStatus akan diupdate oleh listener onSnapshot
     } catch (e) {
       console.error("[Dewan-1] Error updating timer status in Firestore:", e);
       setError("Gagal memperbarui status timer di server.");
     }
-  }, [activeScheduleId, timerStatus]); // timerStatus ditambahkan sbg dependensi jika digunakan sbg fallback
+  }, [activeScheduleId, timerStatus]); 
 
   const handleTimerControl = (action: 'start' | 'pause') => {
     if (!activeScheduleId || !timerStatus || timerStatus.matchStatus === 'MatchFinished' || isLoading) return;
     if (action === 'start') {
       if (timerStatus.timerSeconds > 0 && !timerStatus.isTimerRunning) {
-         // Update ke Firestore, state lokal akan diupdate oleh onSnapshot
          updateTimerStatusInFirestore({ 
              isTimerRunning: true, 
              matchStatus: `OngoingRound${timerStatus.currentRound}` as TimerStatus['matchStatus'] 
@@ -536,51 +537,33 @@ export default function ScoringTandingDewanSatuPage() {
 
   const handleSetBabak = (round: 1 | 2 | 3) => {
     if (!activeScheduleId || !timerStatus || timerStatus.matchStatus === 'MatchFinished' || isLoading) return;
-    // Cek jika timer sedang berjalan untuk babak yang sama
     if (timerStatus.isTimerRunning && timerStatus.currentRound === round) {
         alert("Babak sedang berjalan. Jeda dulu untuk pindah babak atau reset.");
         return;
     }
     
-    // Tentukan matchStatus baru berdasarkan apakah babak yang dituju sudah selesai atau belum
     let newMatchStatus: TimerStatus['matchStatus'] = 'Pending';
     let newTimerSeconds = ROUND_DURATION_SECONDS;
 
-    // Cek status babak sebelumnya jika ada.
-    // Misal, jika sekarang babak 2 'Pending', dan user klik Babak 1,
-    // kita harus tahu apakah Babak 1 sudah 'FinishedRound1'
-    // Ini memerlukan pengetahuan tentang status akhir setiap babak, yang mungkin tidak disimpan secara eksplisit per babak.
-    // Untuk sederhana, kita asumsikan jika pindah ke babak X, timer reset untuk babak X.
-    // Kecuali jika kita tahu babak X sudah selesai.
-    // Logika ini bisa lebih kompleks jika ingin mempertahankan state "selesai" per babak.
-
-    // Penyederhanaan: saat set babak, selalu reset timer & status ke 'Pending' untuk babak itu.
-    // Kecuali jika kita pindah ke babak yang currentRound-nya sudah finished.
-    // Ini agak rumit. Kita akan asumsikan pindah babak selalu reset ke 'Pending' untuk babak baru,
-    // kecuali jika babak itu adalah babak yang sama dengan matchStatus 'FinishedRoundX'.
-
-    // Jika match sudah selesai, tidak bisa pindah babak.
     if (timerStatus.matchStatus === 'MatchFinished' && round <= TOTAL_ROUNDS) {
-        // Jika match selesai, dan mencoba pindah ke babak sebelumnya, tampilkan status selesai babak tsb.
         newMatchStatus = `FinishedRound${round}` as TimerStatus['matchStatus'];
-        newTimerSeconds = 0; // Timer 0 untuk babak yang sudah selesai
+        newTimerSeconds = 0; 
     } else if (timerStatus.matchStatus.startsWith('FinishedRound')) {
         const finishedRoundNumber = parseInt(timerStatus.matchStatus.replace('FinishedRound', ''));
-        if (round <= finishedRoundNumber) { // Jika pindah ke babak yang sudah selesai atau sebelumnya
+        if (round <= finishedRoundNumber) { 
              newMatchStatus = `FinishedRound${round}` as TimerStatus['matchStatus'];
              newTimerSeconds = 0;
-        } else { // Pindah ke babak setelah babak yang sudah selesai (belum dimulai)
+        } else { 
             newMatchStatus = 'Pending';
             newTimerSeconds = ROUND_DURATION_SECONDS;
         }
     }
 
-
      updateTimerStatusInFirestore({
       currentRound: round,
       timerSeconds: newTimerSeconds, 
       isTimerRunning: false, 
-      matchStatus: newMatchStatus, // Set ke pending untuk babak baru, kecuali jika sudah selesai
+      matchStatus: newMatchStatus, 
     });
   };
   
@@ -591,11 +574,9 @@ export default function ScoringTandingDewanSatuPage() {
         return;
     }
 
-    // Cek apakah babak saat ini sudah selesai (timer = 0 atau statusnya FinishedRoundX)
     const isCurrentRoundActuallyFinished = timerStatus.matchStatus === `FinishedRound${timerStatus.currentRound}` && timerStatus.timerSeconds === 0;
 
     if (timerStatus.timerSeconds > 0 && !isCurrentRoundActuallyFinished && timerStatus.currentRound <= TOTAL_ROUNDS && timerStatus.matchStatus !== 'MatchFinished') {
-        // Jika timer belum 0 dan status belum 'FinishedRoundX', minta konfirmasi
         if (!confirm(`Babak ${timerStatus.currentRound} belum selesai (timer belum 0 atau status belum 'Finished'). Yakin ingin melanjutkan? Ini akan menganggap babak saat ini selesai.`)) {
             return;
         }
@@ -607,18 +588,16 @@ export default function ScoringTandingDewanSatuPage() {
             currentRound: nextRound,
             timerSeconds: ROUND_DURATION_SECONDS,
             isTimerRunning: false,
-            matchStatus: 'Pending', // Babak baru selalu dimulai dari Pending
+            matchStatus: 'Pending', 
         });
     } 
-    // Jika ini babak terakhir dan belum selesai, atau sudah selesai tapi mau diklik lagi
     else if (timerStatus.currentRound === TOTAL_ROUNDS && timerStatus.matchStatus !== 'MatchFinished') {
         updateTimerStatusInFirestore({ matchStatus: 'MatchFinished', isTimerRunning: false, timerSeconds: 0 });
     }
-    // Jika match sudah finished, tombol ini seharusnya disabled.
   };
 
   const handleResetMatch = async () => {
-    console.log("[Dewan-1] handleResetMatch called. ActiveScheduleId:", activeScheduleId);
+    // console.log("[Dewan-1] handleResetMatch called. ActiveScheduleId:", activeScheduleId);
     if (!activeScheduleId || isLoading) {
         console.warn("[Dewan-1] Reset aborted: no active schedule ID or still loading.");
         return;
@@ -632,35 +611,27 @@ export default function ScoringTandingDewanSatuPage() {
         const matchDocRef = doc(db, MATCHES_TANDING_COLLECTION, activeScheduleId);
         batch.set(matchDocRef, { 
             timer_status: initialTimerStatus,
-            confirmed_entry_keys_log: [] // Reset log kunci yang dikonfirmasi
-        }, { merge: true }); // merge true untuk safety, tapi idealnya set akan overwrite
+            confirmed_entry_keys_log: [] 
+        }, { merge: true }); 
 
         const initialJuriDataContent: JuriMatchData = { 
             merah: { round1: [], round2: [], round3: [] },
             biru: { round1: [], round2: [], round3: [] },
-            lastUpdated: Timestamp.now(), // Bisa juga null atau hapus field
+            lastUpdated: Timestamp.now(), 
         };
         JURI_IDS.forEach(juriId => {
             const juriDocRef = doc(db, MATCHES_TANDING_COLLECTION, activeScheduleId, 'juri_scores', juriId);
-            batch.set(juriDocRef, initialJuriDataContent); // Overwrite dengan data juri awal
+            batch.set(juriDocRef, initialJuriDataContent); 
         });
         
         await batch.commit();
-        console.log("[Dewan-1] Firestore batch commit successful for reset.");
+        // console.log("[Dewan-1] Firestore batch commit successful for reset.");
         
-        // Reset state lokal Dewan-1 SETELAH Firestore commit
-        // Listener onSnapshot akan mengambil data baru dari Firestore.
-        // Namun, untuk responsivitas UI yang lebih cepat, beberapa state bisa direset manual.
         setTimerStatus(initialTimerStatus); 
         setConfirmedScoreMerah(0);
         setConfirmedScoreBiru(0);
-        
-        // Ini penting agar kalkulasi berikutnya mulai dari nol untuk kunci yang dikonfirmasi
         setAllContributingEntryKeys(new Set()); 
         setPrevSavedConfirmedKeys(new Set()); 
-        
-        // Juri scores akan di-reset oleh onSnapshot karena data di Firestore berubah.
-        // Jika ingin lebih cepat, bisa set manual ke null:
         setJuri1Scores(null); 
         setJuri2Scores(null); 
         setJuri3Scores(null);
@@ -670,9 +641,6 @@ export default function ScoringTandingDewanSatuPage() {
       console.error("[Dewan-1] Error resetting match:", e);
       setError("Gagal mereset pertandingan.");
     } finally {
-        // isLoading akan diatur oleh effect kalkulasi skor jika data sudah kembali
-        // atau oleh effect loadData jika configMatchId belum null.
-        // Untuk safety, jika masih true, set false.
          if (isLoading) setIsLoading(false);
     }
   };
@@ -698,28 +666,26 @@ export default function ScoringTandingDewanSatuPage() {
     juriData: JuriMatchDataWithId | null,
     pesilatColor: 'merah' | 'biru',
     round: 1 | 2 | 3,
-    // Menggunakan allContributingEntryKeys yang bersifat akumulatif permanen
     contributingKeysForDisplay: Set<string> 
   ): React.ReactNode => {
     if (!juriData) return '-';
-    const roundKey = `round${round}` as keyof JuriRoundScores; // e.g. "round1"
+    const roundKey = `round${round}` as keyof JuriRoundScores; 
     const scoresForRound = juriData[pesilatColor]?.[roundKey];
     if (!scoresForRound || !Array.isArray(scoresForRound) || scoresForRound.length === 0) return '0';
     
-    const now = Date.now(); // Untuk logika grace period
+    const now = Date.now(); 
     return scoresForRound.map((entry, index) => {
       let entryTimestampMillis: number;
-      try {
+      
+      if (entry.timestamp && typeof entry.timestamp.toMillis === 'function') {
         entryTimestampMillis = entry.timestamp.toMillis();
-      } catch (e) {
-        console.warn("[Dewan-1] Error converting timestamp for display:", entry.timestamp, e);
-        entryTimestampMillis = Date.now(); // Fallback
+      } else {
+        // console.warn(`[Dewan-1] Invalid timestamp in getJuriScoreForDisplay. Juri: ${juriId}, Color: ${pesilatColor}, Round: ${round}, Entry:`, JSON.stringify(entry));
+        entryTimestampMillis = now; // Fallback to current time to avoid error, though data is problematic
       }
 
       const entryKey = `${juriId}_${entryTimestampMillis}_${entry.points}`;
       const isContributing = contributingKeysForDisplay.has(entryKey);
-      
-      // Logika "Masa Tenggang 2 Detik" untuk tampilan skor baru
       const isGracePeriod = (now - entryTimestampMillis) <= 2000; 
       const shouldStrike = !isContributing && !isGracePeriod; 
 
@@ -760,7 +726,6 @@ export default function ScoringTandingDewanSatuPage() {
     );
   }
   
-  // isLoading akan diatur false oleh effect kalkulasi skor
   if (isLoading && activeScheduleId) { 
     return (
         <div className="flex flex-col min-h-screen">
@@ -809,8 +774,6 @@ export default function ScoringTandingDewanSatuPage() {
   
   const isBabakButtonDisabled = (round: number): boolean => {
     if (!activeScheduleId || isLoading || timerStatus.isTimerRunning || timerStatus.matchStatus === 'MatchFinished') return true;
-    // Tambahan: jika babak tersebut sudah selesai dan kita ingin mencegah kembali ke sana
-    // if (timerStatus.matchStatus === `FinishedRound${round as 1 | 2 | 3}`) return true; // Ini opsional
     return false; 
   };
 
@@ -927,12 +890,11 @@ export default function ScoringTandingDewanSatuPage() {
                 <CardTitle className="text-lg font-headline flex items-center text-gray-800 dark:text-gray-200">
                     <RadioTower className="mr-2 h-5 w-5 text-primary"/> Status Juri &amp; Skor Mentah
                 </CardTitle>
-                 <CardDescription>Nilai hanya sah jika dua juri atau lebih memberikan nilai yang sama (poin 1 atau 2) untuk warna dan babak yang sama dalam selang waktu 2 detik. Nilai yang SAH akan ditampilkan normal dan dihitung. Nilai yang TIDAK SAH (misal, hanya 1 juri, atau beda nilai, atau beda waktu >2 detik) akan DICORET. Nilai yang baru masuk (kurang dari 2 detik) tidak langsung dicoret, menunggu potensi pasangan.</CardDescription>
+                 <CardDescription>Nilai hanya sah jika dua juri atau lebih memberikan nilai yang sama (poin 1 atau 2) untuk warna dan babak yang sama dalam selang waktu 2 detik. Nilai yang SAH akan ditampilkan normal dan dihitung. Nilai yang TIDAK SAH (misal, hanya 1 juri, atau beda nilai, atau beda waktu &gt;2 detik) akan DICORET setelah 2 detik jika tidak ada pasangan. Nilai yang baru masuk (&lt;2 detik) tidak langsung dicoret.</CardDescription>
             </CardHeader>
             <CardContent className="text-xs md:text-sm grid grid-cols-1 sm:grid-cols-3 gap-3 md:gap-4">
                 {juriDataArray.map((jS, idx) => {
                     const juriId = JURI_IDS[idx];
-                    // `allContributingEntryKeys` yang digunakan di sini adalah state akumulatif permanen.
                     const keysForThisJuriDisplay = allContributingEntryKeys; 
                     return (
                         <div key={`juri-status-${juriId}`} className="border border-gray-200 dark:border-gray-700 p-2 md:p-3 rounded-md bg-gray-50 dark:bg-gray-700/50">
