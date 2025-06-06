@@ -9,7 +9,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/com
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { ArrowLeft, Loader2, Trash2, ShieldCheck, Trophy, Vote, Play, Pause } from 'lucide-react';
 import type { ScheduleTanding, KetuaActionLogEntry, PesilatColorIdentity, KetuaActionType } from '@/lib/types';
-import { JATUHAN_POINTS, BINAAN_POINTS_SECOND_PRESS, TEGURAN_POINTS_FIRST_PRESS, TEGURAN_POINTS_SECOND_PRESS, PERINGATAN_POINTS_FIRST_PRESS, PERINGATAN_POINTS_SECOND_PRESS } from '@/lib/types';
+import { JATUHAN_POINTS, TEGURAN_POINTS, PERINGATAN_POINTS_FIRST_PRESS, PERINGATAN_POINTS_SECOND_PRESS } from '@/lib/types';
 import { db } from '@/lib/firebase';
 import { doc, onSnapshot, getDoc, Timestamp, collection, addDoc, query, orderBy, deleteDoc, limit, getDocs } from 'firebase/firestore';
 import { cn } from '@/lib/utils';
@@ -41,10 +41,14 @@ const initialTimerStatus: TimerStatusFromDewan = {
 
 const ROUNDS = [1, 2, 3] as const;
 
+// Fungsi ini tidak lagi menghitung poin Binaan/Teguran bertingkat, logika itu pindah ke handleKetuaAction
+// Fungsi ini dipertahankan untuk Peringatan dan Jatuhan, atau jika ada logika poin lain di masa depan.
+// Namun, untuk Binaan dan Teguran, poin akan ditentukan langsung di handleKetuaAction.
+// Untuk Peringatan, kita masih bisa menggunakan countActionsInRound
 const countActionsInRound = (
   log: KetuaActionLogEntry[],
   pesilatColor: PesilatColorIdentity,
-  actionType: KetuaActionType,
+  actionType: KetuaActionType, // Menghitung actionType yang tercatat
   round: 1 | 2 | 3
 ): number => {
   return log.filter(
@@ -55,37 +59,6 @@ const countActionsInRound = (
   ).length;
 };
 
-const getPointsForAction = (
-  log: KetuaActionLogEntry[],
-  pesilatColor: PesilatColorIdentity,
-  actionType: KetuaActionType,
-  round: 1 | 2 | 3
-): number => {
-  // countInCurrentRound is the number of actions of this type *before* the current one is added.
-  const countInCurrentRound = countActionsInRound(log, pesilatColor, actionType, round);
-
-  if (actionType === 'Jatuhan') return JATUHAN_POINTS;
-  
-  if (actionType === 'Binaan') {
-    // First press (countInCurrentRound is 0) = 0 points.
-    // Second press (countInCurrentRound is 1) and subsequent = BINAAN_POINTS_SECOND_PRESS (-1).
-    return countInCurrentRound === 0 ? 0 : BINAAN_POINTS_SECOND_PRESS;
-  }
-  
-  if (actionType === 'Teguran') {
-    // First press (countInCurrentRound is 0) = TEGURAN_POINTS_FIRST_PRESS (-1).
-    // Second press (countInCurrentRound is 1) and subsequent = TEGURAN_POINTS_SECOND_PRESS (-2).
-    return countInCurrentRound === 0 ? TEGURAN_POINTS_FIRST_PRESS : TEGURAN_POINTS_SECOND_PRESS;
-  }
-  
-  if (actionType === 'Peringatan') {
-    // First press (countInCurrentRound is 0) = PERINGATAN_POINTS_FIRST_PRESS (-5).
-    // Second press (countInCurrentRound is 1) and subsequent = PERINGATAN_POINTS_SECOND_PRESS (-10).
-    return countInCurrentRound === 0 ? PERINGATAN_POINTS_FIRST_PRESS : PERINGATAN_POINTS_SECOND_PRESS;
-  }
-  
-  return 0; 
-};
 
 const calculateDisplayScoresForTable = (
   log: KetuaActionLogEntry[],
@@ -101,9 +74,10 @@ const calculateDisplayScoresForTable = (
   let jatuhan = 0;
 
   roundActions.forEach(action => {
+    // Poin sudah tercatat dengan benar di action.points
     if (action.actionType === 'Teguran' || action.actionType === 'Peringatan') {
       hukuman += action.points;
-    } else if (action.actionType === 'Binaan') {
+    } else if (action.actionType === 'Binaan') { // Binaan yang tercatat akan memiliki poin 0
       binaan += action.points;
     } else if (action.actionType === 'Jatuhan') {
       jatuhan += action.points;
@@ -224,7 +198,7 @@ export default function KetuaPertandinganPage() {
 
   useEffect(() => { if (isLoading && (matchDetailsLoaded || activeMatchId === null)) setIsLoading(false); }, [isLoading, matchDetailsLoaded, activeMatchId]);
 
-  const handleKetuaAction = async (pesilatColor: PesilatColorIdentity, actionType: KetuaActionType) => {
+  const handleKetuaAction = async (pesilatColor: PesilatColorIdentity, actionTypeButtonPressed: KetuaActionType) => {
     if (!activeMatchId || activeMatchId.trim() === "") {
       alert("Tidak bisa menambah tindakan: ID pertandingan aktif tidak valid.");
       return;
@@ -244,15 +218,53 @@ export default function KetuaPertandinganPage() {
 
     setIsSubmittingAction(true);
     try {
-      const points = getPointsForAction(ketuaActionsLog, pesilatColor, actionType, dewanTimerStatus.currentRound);
-      const actionData: Omit<KetuaActionLogEntry, 'id'> = {
-        pesilatColor,
-        actionType,
-        round: dewanTimerStatus.currentRound,
-        timestamp: Timestamp.now(),
-        points,
-      };
-      await addDoc(collection(db, MATCHES_TANDING_COLLECTION, activeMatchId, OFFICIAL_ACTIONS_SUBCOLLECTION), actionData);
+        let pointsToLog = 0;
+        let actionTypeToLog: KetuaActionType = actionTypeButtonPressed;
+        let originalActionTypeForLog: KetuaActionType | undefined = undefined;
+
+        if (actionTypeButtonPressed === 'Teguran') {
+            pointsToLog = TEGURAN_POINTS; // Selalu -1
+        } else if (actionTypeButtonPressed === 'Binaan') {
+            originalActionTypeForLog = 'Binaan'; // Tandai bahwa tombol Binaan yang ditekan
+            
+            // Hitung berapa kali tombol Binaan (yang menghasilkan Binaan atau Teguran) telah ditekan SEBELUMNYA
+            const binaanEventsInRound = ketuaActionsLog.filter(
+                logEntry =>
+                    logEntry.pesilatColor === pesilatColor &&
+                    logEntry.round === dewanTimerStatus.currentRound &&
+                    (logEntry.actionType === 'Binaan' || logEntry.originalActionType === 'Binaan')
+            ).length;
+
+            // Jika ini adalah tekanan tombol Binaan ke-2, ke-4, dst. (genap)
+            if ((binaanEventsInRound + 1) % 2 === 0) {
+                actionTypeToLog = 'Teguran'; // Catat sebagai Teguran
+                pointsToLog = TEGURAN_POINTS; // Poinnya -1
+            } else {
+                actionTypeToLog = 'Binaan'; // Catat sebagai Binaan
+                pointsToLog = 0; // Poinnya 0
+            }
+        } else if (actionTypeButtonPressed === 'Peringatan') {
+            // Hitung berapa banyak Peringatan yang sudah tercatat untuk pesilat ini di babak ini
+            const peringatanCount = countActionsInRound(ketuaActionsLog, pesilatColor, 'Peringatan', dewanTimerStatus.currentRound);
+            pointsToLog = peringatanCount === 0 ? PERINGATAN_POINTS_FIRST_PRESS : PERINGATAN_POINTS_SECOND_PRESS;
+        } else if (actionTypeButtonPressed === 'Jatuhan') {
+            pointsToLog = JATUHAN_POINTS;
+        }
+
+        const actionData: Omit<KetuaActionLogEntry, 'id'> = {
+            pesilatColor,
+            actionType: actionTypeToLog,
+            round: dewanTimerStatus.currentRound,
+            timestamp: Timestamp.now(),
+            points: pointsToLog,
+        };
+
+        if (originalActionTypeForLog) {
+            // TypeScript needs assertion here if originalActionType is not part of Omit<>
+            (actionData as Partial<KetuaActionLogEntry>).originalActionType = originalActionTypeForLog;
+        }
+
+        await addDoc(collection(db, MATCHES_TANDING_COLLECTION, activeMatchId, OFFICIAL_ACTIONS_SUBCOLLECTION), actionData);
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : String(err);
       console.error(`Error adding official action for match ${activeMatchId}:`, errorMessage, err);
@@ -283,34 +295,24 @@ export default function KetuaPertandinganPage() {
 
     setIsSubmittingAction(true);
     try {
-      // Query for actions of the specified pesilat in the current round, ordered by time descending
       const q = query(
         collection(db, MATCHES_TANDING_COLLECTION, activeMatchId, OFFICIAL_ACTIONS_SUBCOLLECTION),
         orderBy("timestamp", "desc") 
-        // We will filter pesilatColor and round in the client-side from the results of the last overall action
-        // because Firestore doesn't allow multiple inequality filters on different fields efficiently for this kind of "last specific" query.
-        // A more robust solution would be to denormalize or use a different data structure if this becomes complex.
-        // For now, get the globally last action and check if it matches.
       );
       
       const querySnapshot = await getDocs(q);
       let docToDeleteId: string | null = null;
-      let lastActionFound: KetuaActionLogEntry | null = null;
 
-      // Iterate through all actions (sorted newest first globally) to find the last one
-      // that matches the pesilatColor and currentRound.
       for (const doc of querySnapshot.docs) {
           const action = { id: doc.id, ...doc.data() } as KetuaActionLogEntry;
           if (action.pesilatColor === pesilatColor && action.round === dewanTimerStatus.currentRound) {
               docToDeleteId = doc.id;
-              lastActionFound = action;
-              break; // Found the most recent matching action
+              break; 
           }
       }
 
-      if (docToDeleteId && lastActionFound) {
+      if (docToDeleteId) {
         await deleteDoc(doc(db, MATCHES_TANDING_COLLECTION, activeMatchId, OFFICIAL_ACTIONS_SUBCOLLECTION, docToDeleteId));
-        // console.log(`Deleted action: ${lastActionFound.actionType} for ${pesilatColor} in round ${dewanTimerStatus.currentRound}`);
       } else {
         alert(`Tidak ada tindakan terakhir yang bisa dihapus untuk pesilat ${pesilatColor} di babak ${dewanTimerStatus.currentRound}.`);
       }
@@ -358,7 +360,9 @@ export default function KetuaPertandinganPage() {
       <main className="flex-1 container mx-auto px-2 py-4 md:p-6">
         <div className="text-center mb-4">
           <h1 className="text-2xl md:text-3xl font-bold text-gray-800 dark:text-gray-100">Ketua Pertandingan</h1>
-          <div className="text-sm text-gray-600 dark:text-gray-400">{matchDetails?.place || (isLoading ? <Skeleton className="h-4 w-24 inline-block" /> : `Gelanggang ${matchDetails?.matchNumber || 'A'}`)}</div>
+          <div className="text-sm text-gray-600 dark:text-gray-400">
+             {isLoading && !matchDetailsLoaded ? <Skeleton className="h-4 w-32 inline-block" /> : (matchDetails?.place || `Gelanggang ${matchDetails?.matchNumber || 'A'}`)}
+          </div>
         </div>
 
         {/* Pesilat Info Row */}
@@ -446,6 +450,13 @@ export default function KetuaPertandinganPage() {
           </div>
         </div>
         {error && <div className="text-red-500 text-center mt-4 p-2 bg-red-100 border border-red-500 rounded-md">Error: {error}</div>}
+         {/* Display Ketua Actions Log for debugging */}
+        {/* <Card className="mt-6">
+            <CardHeader><CardTitle>Log Tindakan Ketua (Debug)</CardTitle></CardHeader>
+            <CardContent>
+                <pre className="text-xs whitespace-pre-wrap">{JSON.stringify(ketuaActionsLog, null, 2)}</pre>
+            </CardContent>
+        </Card> */}
       </main>
     </div>
   );

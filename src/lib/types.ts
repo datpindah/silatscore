@@ -90,16 +90,17 @@ export type KetuaActionType = 'Jatuhan' | 'Binaan' | 'Teguran' | 'Peringatan';
 export interface KetuaActionLogEntry {
   id: string; // Firestore document ID
   pesilatColor: PesilatColorIdentity;
-  actionType: KetuaActionType;
+  actionType: KetuaActionType; // Tindakan yang dicatat (bisa Teguran meskipun dipicu oleh Binaan)
+  originalActionType?: KetuaActionType; // Tombol aktual yang ditekan, e.g., 'Binaan' jika dikonversi
   round: 1 | 2 | 3;
   timestamp: any; // Firestore Timestamp
-  points: number; // Actual points for THIS action instance (-1, -2, -5, -10, 0, or 3)
+  points: number; // Poin aktual untuk tindakan INI (-1, -5, -10, 0, atau 3)
 }
 
 export const JATUHAN_POINTS = 3;
-export const BINAAN_POINTS_SECOND_PRESS = -1; // First press is 0
-export const TEGURAN_POINTS_FIRST_PRESS = -1;
-export const TEGURAN_POINTS_SECOND_PRESS = -2;
+export const TEGURAN_POINTS = -1; // Teguran selalu -1
+// Binaan yang dicatat sebagai Binaan memiliki 0 poin.
+// Binaan yang dikonversi menjadi Teguran akan menggunakan TEGURAN_POINTS.
 export const PERINGATAN_POINTS_FIRST_PRESS = -5;
 export const PERINGATAN_POINTS_SECOND_PRESS = -10;
 
@@ -120,3 +121,4 @@ export const foulIcons: Record<string, string> = {
   'Peringatan Ketua': 'Megaphone',
   // New types for Ketua specific display if needed, but table aggregates points.
 };
+
