@@ -61,18 +61,17 @@ const getPointsForAction = (
   actionType: KetuaActionType,
   round: 1 | 2 | 3
 ): number => {
-  if (actionType === 'Jatuhan') return JATUHAN_POINTS;
-
   const count = countActionsInRound(log, pesilatColor, actionType, round);
 
+  if (actionType === 'Jatuhan') return JATUHAN_POINTS;
   if (actionType === 'Binaan') {
     return count === 0 ? 0 : BINAAN_POINTS_SECOND_PRESS; 
   }
   if (actionType === 'Teguran') {
-    return count === 0 ? TEGURAN_POINTS_FIRST_PRESS : TEGURAN_POINTS_SECOND_PRESS; 
+    return count === 1 ? TEGURAN_POINTS_FIRST_PRESS : TEGURAN_POINTS_SECOND_PRESS; 
   }
   if (actionType === 'Peringatan') {
-    return count === 0 ? PERINGATAN_POINTS_FIRST_PRESS : PERINGATAN_POINTS_SECOND_PRESS; 
+    return count === 1 ? PERINGATAN_POINTS_FIRST_PRESS : PERINGATAN_POINTS_SECOND_PRESS; 
   }
   return 0; 
 };
@@ -86,15 +85,19 @@ const calculateDisplayScoresForTable = (
     (action) => action.pesilatColor === pesilatColor && action.round === round
   );
 
-  const hukuman = roundActions
-    .filter((a) => a.actionType === 'Teguran' || a.actionType === 'Peringatan')
-    .reduce((sum, a) => sum + a.points, 0);
-  const binaan = roundActions
-    .filter((a) => a.actionType === 'Binaan')
-    .reduce((sum, a) => sum + a.points, 0);
-  const jatuhan = roundActions
-    .filter((a) => a.actionType === 'Jatuhan')
-    .reduce((sum, a) => sum + a.points, 0);
+  let hukuman = 0;
+  let binaan = 0;
+  let jatuhan = 0;
+
+  roundActions.forEach(action => {
+    if (action.actionType === 'Teguran' || action.actionType === 'Peringatan') {
+      hukuman += action.points;
+    } else if (action.actionType === 'Binaan') {
+      binaan += action.points;
+    } else if (action.actionType === 'Jatuhan') {
+      jatuhan += action.points;
+    }
+  });
 
   return { hukuman, binaan, jatuhan };
 };
@@ -211,10 +214,23 @@ export default function KetuaPertandinganPage() {
   useEffect(() => { if (isLoading && (matchDetailsLoaded || activeMatchId === null)) setIsLoading(false); }, [isLoading, matchDetailsLoaded, activeMatchId]);
 
   const handleKetuaAction = async (pesilatColor: PesilatColorIdentity, actionType: KetuaActionType) => {
-    if (!activeMatchId || isSubmittingAction || dewanTimerStatus.matchStatus === 'MatchFinished' || dewanTimerStatus.currentRound === undefined) {
-      alert("Tidak bisa menambah tindakan: match belum aktif, sedang proses, match selesai, atau babak tidak valid.");
+    if (!activeMatchId || activeMatchId.trim() === "") {
+      alert("Tidak bisa menambah tindakan: ID pertandingan aktif tidak valid.");
       return;
     }
+    if (isSubmittingAction) {
+      alert("Sedang memproses tindakan sebelumnya, harap tunggu.");
+      return;
+    }
+    if (dewanTimerStatus.matchStatus === 'MatchFinished') {
+      alert("Tidak bisa menambah tindakan: Pertandingan telah selesai.");
+      return;
+    }
+    if (!dewanTimerStatus.currentRound || ![1, 2, 3].includes(dewanTimerStatus.currentRound)) {
+      alert(`Tidak bisa menambah tindakan: Babak tidak valid (${dewanTimerStatus.currentRound}). Harap tunggu Dewan memulai babak.`);
+      return;
+    }
+
     setIsSubmittingAction(true);
     try {
       const points = getPointsForAction(ketuaActionsLog, pesilatColor, actionType, dewanTimerStatus.currentRound);
@@ -227,7 +243,8 @@ export default function KetuaPertandinganPage() {
       };
       await addDoc(collection(db, MATCHES_TANDING_COLLECTION, activeMatchId, OFFICIAL_ACTIONS_SUBCOLLECTION), actionData);
     } catch (err) {
-      console.error("Error adding official action:", err);
+      console.error(`Error adding official action for match ${activeMatchId}:`, err);
+      setError(`Gagal menyimpan tindakan: ${err instanceof Error ? err.message : String(err)}`);
       alert(`Gagal menyimpan tindakan: ${err instanceof Error ? err.message : String(err)}`);
     } finally {
       setIsSubmittingAction(false);
@@ -235,10 +252,23 @@ export default function KetuaPertandinganPage() {
   };
 
   const handleDeleteLastAction = async (pesilatColor: PesilatColorIdentity) => {
-    if (!activeMatchId || isSubmittingAction || dewanTimerStatus.matchStatus === 'MatchFinished' || dewanTimerStatus.currentRound === undefined) {
-      alert("Tidak bisa menghapus tindakan: match belum aktif, sedang proses, match selesai, atau babak tidak valid.");
+    if (!activeMatchId || activeMatchId.trim() === "") {
+      alert("Tidak bisa menghapus tindakan: ID pertandingan aktif tidak valid.");
       return;
     }
+    if (isSubmittingAction) {
+        alert("Sedang memproses tindakan sebelumnya, harap tunggu.");
+        return;
+    }
+    if (dewanTimerStatus.matchStatus === 'MatchFinished') {
+      alert("Tidak bisa menghapus tindakan: Pertandingan telah selesai.");
+      return;
+    }
+    if (!dewanTimerStatus.currentRound || ![1, 2, 3].includes(dewanTimerStatus.currentRound)) {
+      alert("Tidak bisa menghapus tindakan: Babak tidak valid. Harap tunggu Dewan memulai babak.");
+      return;
+    }
+
     setIsSubmittingAction(true);
     try {
       const q = query(
@@ -258,10 +288,11 @@ export default function KetuaPertandinganPage() {
       if (docToDeleteId) {
         await deleteDoc(doc(db, MATCHES_TANDING_COLLECTION, activeMatchId, OFFICIAL_ACTIONS_SUBCOLLECTION, docToDeleteId));
       } else {
-        alert("Tidak ada tindakan terakhir yang bisa dihapus untuk pesilat ini di babak ini.");
+        alert("Tidak ada tindakan terakhir yang bisa dihapus untuk pesilat ini di babak saat ini.");
       }
     } catch (err) {
-      console.error("Error deleting last action:", err);
+      console.error(`Error deleting last action for match ${activeMatchId}:`, err);
+      setError(`Gagal menghapus tindakan: ${err instanceof Error ? err.message : String(err)}`);
       alert(`Gagal menghapus tindakan: ${err instanceof Error ? err.message : String(err)}`);
     } finally {
       setIsSubmittingAction(false);
@@ -289,7 +320,7 @@ export default function KetuaPertandinganPage() {
       <div className="flex flex-col min-h-screen"><Header />
         <main className="flex-1 container mx-auto px-4 py-8 text-center">
            <h1 className="text-2xl font-bold text-primary mb-2">Ketua Pertandingan</h1>
-           <p className="text-muted-foreground mb-4">Tidak ada pertandingan yang aktif.</p>
+           <div className="text-muted-foreground mb-4">{error || "Tidak ada pertandingan yang aktif."}</div>
            <Button variant="outline" asChild><Link href="/admin/schedule-tanding"><ArrowLeft className="mr-2 h-4 w-4" /> Kembali ke Admin</Link></Button>
         </main>
       </div>
@@ -370,7 +401,7 @@ export default function KetuaPertandinganPage() {
           <div className="flex flex-col items-center justify-center space-y-3 md:pt-8 order-first md:order-none">
              <div className={cn("text-center p-2 rounded-md", dewanTimerStatus.isTimerRunning ? "bg-green-100 dark:bg-green-900" : "bg-gray-100 dark:bg-gray-700")}>
                 <div className="text-2xl font-mono font-bold text-gray-800 dark:text-gray-100">{dewanTimerStatus.isTimerRunning ? formatTime(dewanTimerStatus.timerSeconds) : "JEDA"}</div>
-                <div className="text-xs text-gray-500 dark:text-gray-400">Babak {dewanTimerStatus.currentRound} - {dewanTimerStatus.matchStatus}</div>
+                <div className="text-xs text-gray-500 dark:text-gray-400">Babak {dewanTimerStatus.currentRound || '?'} - {dewanTimerStatus.matchStatus || 'Menunggu'}</div>
             </div>
             <Button onClick={handleVerifikasiJuri} className="w-full md:w-auto bg-yellow-500 hover:bg-yellow-600 text-black py-3 text-sm sm:text-base" disabled={isLoading}><Vote className="mr-2 h-4 w-4"/>Verifikasi Juri</Button>
             <Button onClick={handleTentukanPemenang} className="w-full md:w-auto bg-green-600 hover:bg-green-700 text-white py-3 text-sm sm:text-base" disabled={isLoading || dewanTimerStatus.matchStatus !== 'MatchFinished'}><Trophy className="mr-2 h-4 w-4"/>Tentukan Pemenang</Button>
@@ -389,8 +420,9 @@ export default function KetuaPertandinganPage() {
             </Button>
           </div>
         </div>
-        {error && <p className="text-red-500 text-center mt-4">Error: {error}</p>}
+        {error && <div className="text-red-500 text-center mt-4 p-2 bg-red-100 border border-red-500 rounded-md">Error: {error}</div>}
       </main>
     </div>
   );
 }
+
