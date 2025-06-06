@@ -7,19 +7,20 @@ import { Header } from '@/components/layout/Header';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { ArrowLeft, Play, Pause, RotateCcw, ChevronRight, CheckCircle2, RadioTower, Loader2 } from 'lucide-react';
-import type { ScheduleTanding } from '@/lib/types';
+import type { ScheduleTanding, KetuaActionLogEntry } from '@/lib/types';
 import { db } from '@/lib/firebase';
-import { doc, onSnapshot, setDoc, getDoc, Timestamp, updateDoc, writeBatch } from 'firebase/firestore';
+import { doc, onSnapshot, setDoc, getDoc, Timestamp, updateDoc, writeBatch, collection, query, orderBy, getDocs, deleteDoc } from 'firebase/firestore';
 import { cn } from '@/lib/utils';
 
 const ACTIVE_TANDING_SCHEDULE_CONFIG_PATH = 'app_settings/active_match_tanding';
 const SCHEDULE_TANDING_COLLECTION = 'schedules_tanding';
 const MATCHES_TANDING_COLLECTION = 'matches_tanding';
+const OFFICIAL_ACTIONS_SUBCOLLECTION = 'official_actions'; // Subcollection for Ketua's actions
 const ROUND_DURATION_SECONDS = 120; // 2 minutes
 const TOTAL_ROUNDS = 3;
 const JURI_IDS = ['juri-1', 'juri-2', 'juri-3'];
-const GRACE_PERIOD_FOR_STRIKE_DECISION = 5000; // 5 seconds before a solo score is marked permanently struck (Increased from 3000)
-const JURI_INPUT_VALIDITY_WINDOW_MS = 2000; // Max time difference between juri inputs for a valid score
+const GRACE_PERIOD_FOR_STRIKE_DECISION = 5000; 
+const JURI_INPUT_VALIDITY_WINDOW_MS = 2000; 
 
 interface PesilatInfo {
   name: string;
@@ -83,12 +84,13 @@ export default function ScoringTandingDewanSatuPage() {
   const [juri1Scores, setJuri1Scores] = useState<JuriMatchDataWithId | null>(null);
   const [juri2Scores, setJuri2Scores] = useState<JuriMatchDataWithId | null>(null);
   const [juri3Scores, setJuri3Scores] = useState<JuriMatchDataWithId | null>(null);
+  
+  const [ketuaActionsLog, setKetuaActionsLog] = useState<KetuaActionLogEntry[]>([]);
 
-  // UI driving states
-  const [allContributingEntryKeys, setAllContributingEntryKeys] = useState<Set<string>>(new Set()); // Unstruck keys
-  const [permanentlyStruckEntryKeys, setPermanentlyStruckEntryKeys] = useState<Set<string>>(new Set()); // Struck keys
 
-  // Firestore tracking states
+  const [allContributingEntryKeys, setAllContributingEntryKeys] = useState<Set<string>>(new Set()); 
+  const [permanentlyStruckEntryKeys, setPermanentlyStruckEntryKeys] = useState<Set<string>>(new Set()); 
+
   const [prevSavedUnstruckKeys, setPrevSavedUnstruckKeys] = useState<Set<string>>(new Set());
   const [prevSavedStruckKeys, setPrevSavedStruckKeys] = useState<Set<string>>(new Set());
 
@@ -114,7 +116,7 @@ export default function ScoringTandingDewanSatuPage() {
       setConfigMatchId(null);
     });
     return () => unsubConfig();
-  }, []);
+  }, []); // Removed configMatchId from dependency array
 
   useEffect(() => {
     let unsubscribers: (() => void)[] = [];
@@ -129,6 +131,7 @@ export default function ScoringTandingDewanSatuPage() {
       setPesilatBiruInfo(null);
       setTimerStatus(initialTimerStatus);
       setJuri1Scores(null); setJuri2Scores(null); setJuri3Scores(null);
+      setKetuaActionsLog([]); // Reset Ketua's actions log
       setConfirmedScoreMerah(0); setConfirmedScoreBiru(0);
       setAllContributingEntryKeys(new Set());
       setPermanentlyStruckEntryKeys(new Set());
@@ -196,9 +199,9 @@ export default function ScoringTandingDewanSatuPage() {
             const firestoreStruckKeys = new Set(data?.confirmed_struck_keys_log as string[] || []);
             if (mounted) {
               setPrevSavedUnstruckKeys(firestoreUnstruckKeys);
-              setAllContributingEntryKeys(firestoreUnstruckKeys); // Initialize UI with Firestore state
+              setAllContributingEntryKeys(firestoreUnstruckKeys);
               setPrevSavedStruckKeys(firestoreStruckKeys);
-              setPermanentlyStruckEntryKeys(firestoreStruckKeys); // Initialize UI with Firestore state
+              setPermanentlyStruckEntryKeys(firestoreStruckKeys);
             }
           } else {
             if (mounted) {
@@ -244,6 +247,24 @@ export default function ScoringTandingDewanSatuPage() {
           if (mounted) unsubscribers.push(unsubJuri);
         });
 
+        // Listener for Ketua Pertandingan actions
+        const ketuaActionsQuery = query(collection(db, MATCHES_TANDING_COLLECTION, currentMatchId, OFFICIAL_ACTIONS_SUBCOLLECTION), orderBy("timestamp", "asc"));
+        const unsubKetuaActions = onSnapshot(ketuaActionsQuery, (querySnapshot) => {
+            if (!mounted) return;
+            const actions: KetuaActionLogEntry[] = [];
+            querySnapshot.forEach((doc) => {
+                actions.push({ id: doc.id, ...doc.data() } as KetuaActionLogEntry);
+            });
+            setKetuaActionsLog(actions);
+        }, (err) => {
+            if (mounted) {
+                 console.error(`[Dewan-1] Error fetching official actions from path '${MATCHES_TANDING_COLLECTION}/${currentMatchId}/${OFFICIAL_ACTIONS_SUBCOLLECTION}':`, err);
+                 setKetuaActionsLog([]);
+            }
+        });
+        if (mounted) unsubscribers.push(unsubKetuaActions);
+
+
       } catch (err) {
         if (mounted) {
           console.error("[Dewan-1] Error in loadData function:", err);
@@ -263,7 +284,7 @@ export default function ScoringTandingDewanSatuPage() {
       mounted = false;
       unsubscribers.forEach(unsub => unsub());
     };
-  }, [configMatchId, activeScheduleId]);
+  }, [configMatchId, activeScheduleId]); // isLoading removed from dep array
 
 
   useEffect(() => {
@@ -280,10 +301,9 @@ export default function ScoringTandingDewanSatuPage() {
     if (isLoading) setIsLoading(false);
 
     const allJuriDataInput = [juri1Scores, juri2Scores, juri3Scores].filter(Boolean) as JuriMatchDataWithId[];
-    if (allJuriDataInput.length === 0 && prevSavedUnstruckKeys.size === 0 && prevSavedStruckKeys.size === 0) {
+    if (allJuriDataInput.length === 0 && prevSavedUnstruckKeys.size === 0 && prevSavedStruckKeys.size === 0 && ketuaActionsLog.length === 0) {
         setConfirmedScoreBiru(0);
         setConfirmedScoreMerah(0);
-        // No need to update firestore if everything is empty and was empty
         return;
     }
     
@@ -313,9 +333,8 @@ export default function ScoringTandingDewanSatuPage() {
     });
     allRawEntries.sort((a, b) => a.timestamp.toMillis() - b.timestamp.toMillis());
 
-    const newlyProcessedInThisCycle = new Set<string>(); // To avoid re-processing within the same cycle if a key becomes part of a new pair
+    const newlyProcessedInThisCycle = new Set<string>(); 
 
-    // Phase 1: Identify new valid pairs and add them to currentUnstruckKeys
     for (let i = 0; i < allRawEntries.length; i++) {
       const e1 = allRawEntries[i];
       if (currentUnstruckKeys.has(e1.key) || currentStruckKeys.has(e1.key) || newlyProcessedInThisCycle.has(e1.key)) {
@@ -334,47 +353,42 @@ export default function ScoringTandingDewanSatuPage() {
             e1.points === e2.points &&
             Math.abs(e1.timestamp.toMillis() - e2.timestamp.toMillis()) <= JURI_INPUT_VALIDITY_WINDOW_MS) {
           
-          // Found a valid pair
           currentUnstruckKeys.add(e1.key);
           currentUnstruckKeys.add(e2.key);
           newlyProcessedInThisCycle.add(e1.key);
           newlyProcessedInThisCycle.add(e2.key);
-          // If there's a 3rd Juri agreeing, add them too if they are also "pending"
           for (let k = j + 1; k < allRawEntries.length; k++) {
               const e3 = allRawEntries[k];
               if (currentUnstruckKeys.has(e3.key) || currentStruckKeys.has(e3.key) || newlyProcessedInThisCycle.has(e3.key)) continue;
               if (e3.juriId !== e1.juriId && e3.juriId !== e2.juriId &&
                   e3.round === e1.round && e3.color === e1.color && e3.points === e1.points &&
-                  Math.abs(e3.timestamp.toMillis() - e1.timestamp.toMillis()) <= JURI_INPUT_VALIDITY_WINDOW_MS && // Check against e1 or e2
+                  Math.abs(e3.timestamp.toMillis() - e1.timestamp.toMillis()) <= JURI_INPUT_VALIDITY_WINDOW_MS && 
                   Math.abs(e3.timestamp.toMillis() - e2.timestamp.toMillis()) <= JURI_INPUT_VALIDITY_WINDOW_MS) {
                   currentUnstruckKeys.add(e3.key);
                   newlyProcessedInThisCycle.add(e3.key);
-                  break; // Max 3 juris needed for a confirmed point group
+                  break; 
               }
           }
-          break; // e1 has found its group
+          break; 
         }
       }
     }
 
-    // Phase 2: Identify scores that are now permanently struck
     const now = Date.now();
     allRawEntries.forEach(entry => {
-      if (!currentUnstruckKeys.has(entry.key) && !currentStruckKeys.has(entry.key)) { // If not unstruck and not already struck
+      if (!currentUnstruckKeys.has(entry.key) && !currentStruckKeys.has(entry.key)) { 
         if (now - entry.timestamp.toMillis() > GRACE_PERIOD_FOR_STRIKE_DECISION) {
           currentStruckKeys.add(entry.key);
         }
       }
     });
     
-    // Update UI-driving states
     setAllContributingEntryKeys(new Set(currentUnstruckKeys));
     setPermanentlyStruckEntryKeys(new Set(currentStruckKeys));
 
-    // Calculate total scores based on currentUnstruckKeys
     let calculatedTotalMerah = 0;
     let calculatedTotalBiru = 0;
-    const scoredPairKeys = new Set<string>(); // Ensures each pair contributes points only once
+    const scoredPairKeys = new Set<string>(); 
 
     const unstruckEntries = allRawEntries.filter(e => currentUnstruckKeys.has(e.key));
 
@@ -396,7 +410,7 @@ export default function ScoringTandingDewanSatuPage() {
             }
         }
         
-        if (agreeingPartners.length >= 2) { // At least e1 and one partner
+        if (agreeingPartners.length >= 2) { 
             const points = e1.points;
             if (e1.color === 'merah') calculatedTotalMerah += points;
             else calculatedTotalBiru += points;
@@ -404,10 +418,20 @@ export default function ScoringTandingDewanSatuPage() {
             agreeingPartners.forEach(p => scoredPairKeys.add(p.key));
         }
     }
-    setConfirmedScoreMerah(calculatedTotalMerah);
-    setConfirmedScoreBiru(calculatedTotalBiru);
+    
+    // Integrate scores from Ketua Pertandingan
+    ketuaActionsLog.forEach(action => {
+        if (action.pesilatColor === 'merah') {
+            calculatedTotalMerah += action.points;
+        } else if (action.pesilatColor === 'biru') {
+            calculatedTotalBiru += action.points;
+        }
+    });
 
-    // Update Firestore if necessary
+    setConfirmedScoreMerah(Math.max(0, calculatedTotalMerah)); // Ensure score doesn't go below zero
+    setConfirmedScoreBiru(Math.max(0, calculatedTotalBiru));   // Ensure score doesn't go below zero
+
+
     if (activeScheduleId) {
       const newUnstruckLogArray = Array.from(currentUnstruckKeys);
       let unstruckChanged = newUnstruckLogArray.length !== prevSavedUnstruckKeys.size || !newUnstruckLogArray.every(k => prevSavedUnstruckKeys.has(k));
@@ -432,7 +456,7 @@ export default function ScoringTandingDewanSatuPage() {
           }).catch(err => console.error(`[Dewan-1] Error updating Firestore logs at path '${matchDocPath}':`, err));
       }
     }
-  }, [juri1Scores, juri2Scores, juri3Scores, activeScheduleId, matchDetailsLoaded, prevSavedUnstruckKeys, prevSavedStruckKeys]);
+  }, [juri1Scores, juri2Scores, juri3Scores, activeScheduleId, matchDetailsLoaded, prevSavedUnstruckKeys, prevSavedStruckKeys, ketuaActionsLog]);
 
 
   useEffect(() => {
@@ -466,7 +490,7 @@ export default function ScoringTandingDewanSatuPage() {
                     if(interval) clearInterval(interval);
                     return;
                 }
-                 if (!timerStatus.isTimerRunning) { // Local state might have been paused by another effect
+                 if (!timerStatus.isTimerRunning) { 
                     if (interval) clearInterval(interval);
                     return;
                 }
@@ -609,7 +633,6 @@ export default function ScoringTandingDewanSatuPage() {
   };
 
   const handleResetMatch = async () => {
-    console.log("[Dewan-1] handleResetMatch called. ActiveScheduleId:", activeScheduleId, "IsLoading:", isLoading);
     if (!activeScheduleId || isLoading) {
         console.warn("[Dewan-1] Reset aborted: no active schedule ID or still loading.");
         return;
@@ -638,9 +661,15 @@ export default function ScoringTandingDewanSatuPage() {
             batch.set(juriDocRef, initialJuriDataContent);
         });
 
+        // Delete all documents in official_actions subcollection
+        const ketuaActionsCollectionRef = collection(db, MATCHES_TANDING_COLLECTION, activeScheduleId, OFFICIAL_ACTIONS_SUBCOLLECTION);
+        const ketuaActionsSnapshot = await getDocs(ketuaActionsCollectionRef);
+        ketuaActionsSnapshot.forEach((doc) => {
+            batch.delete(doc.ref);
+        });
+        
         await batch.commit();
 
-        // Reset local state explicitly
         setTimerStatus(initialTimerStatus);
         setConfirmedScoreMerah(0);
         setConfirmedScoreBiru(0);
@@ -651,13 +680,14 @@ export default function ScoringTandingDewanSatuPage() {
         setJuri1Scores(null);
         setJuri2Scores(null);
         setJuri3Scores(null);
+        setKetuaActionsLog([]); // Reset local log
 
         alert("Pertandingan telah direset.");
     } catch (e) {
       console.error(`[Dewan-1] Error resetting match at path '${matchDocPath}' and its subcollections:`, e);
       setError("Gagal mereset pertandingan.");
     } finally {
-         if (isLoading) setIsLoading(false); // Ensure isLoading is set to false
+         if (isLoading) setIsLoading(false);
     }
   };
 
@@ -678,7 +708,7 @@ export default function ScoringTandingDewanSatuPage() {
   };
 
   const getJuriScoreForDisplay = (
-    juriId: string, // Not used in current logic but good for debugging
+    juriId: string, 
     juriData: JuriMatchDataWithId | null,
     pesilatColor: 'merah' | 'biru',
     round: 1 | 2 | 3,
@@ -702,7 +732,7 @@ export default function ScoringTandingDewanSatuPage() {
       const entryKey = `${juriData.juriId}_${entryTimestampMillis}_${entry.points}`;
       const isUnstruck = unstruckKeys.has(entryKey);
       const isPermanentlyStruck = struckKeys.has(entryKey);
-      const isGracePeriodForDisplay = (Date.now() - entryTimestampMillis) <= 2000; // Short visual grace for new entries
+      const isGracePeriodForDisplay = (Date.now() - entryTimestampMillis) <= 2000; 
 
       const shouldDisplayAsStruck = isPermanentlyStruck || (!isUnstruck && !isGracePeriodForDisplay);
 
@@ -937,3 +967,4 @@ export default function ScoringTandingDewanSatuPage() {
     </div>
   );
 }
+

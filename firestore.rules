@@ -48,7 +48,11 @@ service cloud.firestore {
       
       // For development, allow general write. Secure this with auth.
       allow write: if true; // TEMPORARY FOR DEVELOPMENT WITHOUT AUTH
-
+ 		
+    match /official_actions/{actionId} {
+    allow read: if true;
+    allow write: if true;
+    }
 
       // Juri Scores for Tanding:
       // - Juri can only write to their own document {juriId}
