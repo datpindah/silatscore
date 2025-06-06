@@ -116,7 +116,7 @@ export default function ScoringTandingDewanSatuPage() {
       setConfigMatchId(null);
     });
     return () => unsubConfig();
-  }, []); // Removed configMatchId from dependency array
+  }, []);
 
   useEffect(() => {
     let unsubscribers: (() => void)[] = [];
@@ -131,7 +131,7 @@ export default function ScoringTandingDewanSatuPage() {
       setPesilatBiruInfo(null);
       setTimerStatus(initialTimerStatus);
       setJuri1Scores(null); setJuri2Scores(null); setJuri3Scores(null);
-      setKetuaActionsLog([]); // Reset Ketua's actions log
+      setKetuaActionsLog([]); 
       setConfirmedScoreMerah(0); setConfirmedScoreBiru(0);
       setAllContributingEntryKeys(new Set());
       setPermanentlyStruckEntryKeys(new Set());
@@ -247,7 +247,6 @@ export default function ScoringTandingDewanSatuPage() {
           if (mounted) unsubscribers.push(unsubJuri);
         });
 
-        // Listener for Ketua Pertandingan actions
         const ketuaActionsQuery = query(collection(db, MATCHES_TANDING_COLLECTION, currentMatchId, OFFICIAL_ACTIONS_SUBCOLLECTION), orderBy("timestamp", "asc"));
         const unsubKetuaActions = onSnapshot(ketuaActionsQuery, (querySnapshot) => {
             if (!mounted) return;
@@ -255,7 +254,7 @@ export default function ScoringTandingDewanSatuPage() {
             querySnapshot.forEach((doc) => {
                 actions.push({ id: doc.id, ...doc.data() } as KetuaActionLogEntry);
             });
-            setKetuaActionsLog(actions);
+            if (mounted) setKetuaActionsLog(actions);
         }, (err) => {
             if (mounted) {
                  console.error(`[Dewan-1] Error fetching official actions from path '${MATCHES_TANDING_COLLECTION}/${currentMatchId}/${OFFICIAL_ACTIONS_SUBCOLLECTION}':`, err);
@@ -284,7 +283,7 @@ export default function ScoringTandingDewanSatuPage() {
       mounted = false;
       unsubscribers.forEach(unsub => unsub());
     };
-  }, [configMatchId, activeScheduleId]); // isLoading removed from dep array
+  }, [configMatchId, activeScheduleId]);
 
 
   useEffect(() => {
@@ -419,7 +418,6 @@ export default function ScoringTandingDewanSatuPage() {
         }
     }
     
-    // Integrate scores from Ketua Pertandingan
     ketuaActionsLog.forEach(action => {
         if (action.pesilatColor === 'merah') {
             calculatedTotalMerah += action.points;
@@ -428,8 +426,8 @@ export default function ScoringTandingDewanSatuPage() {
         }
     });
 
-    setConfirmedScoreMerah(Math.max(0, calculatedTotalMerah)); // Ensure score doesn't go below zero
-    setConfirmedScoreBiru(Math.max(0, calculatedTotalBiru));   // Ensure score doesn't go below zero
+    setConfirmedScoreMerah(calculatedTotalMerah);
+    setConfirmedScoreBiru(calculatedTotalBiru);
 
 
     if (activeScheduleId) {
@@ -661,7 +659,6 @@ export default function ScoringTandingDewanSatuPage() {
             batch.set(juriDocRef, initialJuriDataContent);
         });
 
-        // Delete all documents in official_actions subcollection
         const ketuaActionsCollectionRef = collection(db, MATCHES_TANDING_COLLECTION, activeScheduleId, OFFICIAL_ACTIONS_SUBCOLLECTION);
         const ketuaActionsSnapshot = await getDocs(ketuaActionsCollectionRef);
         ketuaActionsSnapshot.forEach((doc) => {
@@ -680,7 +677,7 @@ export default function ScoringTandingDewanSatuPage() {
         setJuri1Scores(null);
         setJuri2Scores(null);
         setJuri3Scores(null);
-        setKetuaActionsLog([]); // Reset local log
+        setKetuaActionsLog([]);
 
         alert("Pertandingan telah direset.");
     } catch (e) {
