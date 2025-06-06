@@ -83,45 +83,40 @@ export type AgeCategory = 'Pra-Usia Dini' | 'Usia Dini' | 'Pra-Remaja' | 'Remaja
 export const ageCategories: AgeCategory[] = ['Pra-Usia Dini', 'Usia Dini', 'Pra-Remaja', 'Remaja', 'Dewasa', 'Master'];
 
 
-// --- NEW TYPES FOR KETUA PERTANDINGAN ACTIONS ---
-export type OfficialFoulType = 'Teguran' | 'Peringatan I' | 'Peringatan II' | 'Diskualifikasi';
-export type OfficialWarningType = 'Binaan' | 'Peringatan Ketua'; // 'Peringatan Ketua' to distinguish from automated system warnings if any
+// --- TYPES FOR KETUA PERTANDINGAN ACTIONS (NEW UI) ---
+export type PesilatColorIdentity = 'merah' | 'biru';
+export type KetuaActionType = 'Jatuhan' | 'Binaan' | 'Teguran' | 'Peringatan';
 
-export const FOUL_TYPES: OfficialFoulType[] = ['Teguran', 'Peringatan I', 'Peringatan II', 'Diskualifikasi'];
-export const WARNING_TYPES: OfficialWarningType[] = ['Binaan', 'Peringatan Ketua'];
-
-export const FOUL_POINT_DEDUCTIONS: Record<OfficialFoulType, number> = {
-  'Teguran': -1,
-  'Peringatan I': -5,
-  'Peringatan II': -10,
-  'Diskualifikasi': 0, // Points are not deducted, match ends. Special handling.
-};
-
-export const WARNING_POINT_DEDUCTIONS: Record<OfficialWarningType, number> = {
-  'Binaan': 0,
-  'Peringatan Ketua': 0,
-};
-
-export interface OfficialActionRecord {
+export interface KetuaActionLogEntry {
   id: string; // Firestore document ID
-  actionCategory: 'pelanggaran' | 'binaan_peringatan';
-  pesilatColor: 'merah' | 'biru'; // Lowercase for consistency
-  type: OfficialFoulType | OfficialWarningType;
-  pointDeduction: number;
+  pesilatColor: PesilatColorIdentity;
+  actionType: KetuaActionType;
   round: 1 | 2 | 3;
-  timestamp: any; // Firestore Timestamp will be used here
-  notes?: string;
+  timestamp: any; // Firestore Timestamp
+  points: number; // Actual points for THIS action instance (-1, -2, -5, -10, 0, or 3)
 }
+
+export const JATUHAN_POINTS = 3;
+export const BINAAN_POINTS_SECOND_PRESS = -1; // First press is 0
+export const TEGURAN_POINTS_FIRST_PRESS = -1;
+export const TEGURAN_POINTS_SECOND_PRESS = -2;
+export const PERINGATAN_POINTS_FIRST_PRESS = -5;
+export const PERINGATAN_POINTS_SECOND_PRESS = -10;
+
+// The old OfficialActionRecord, OfficialFoulType, etc., are being replaced by the above for Ketua Pertandingan page.
+// If other parts of the app use them, they might need to be kept or refactored.
+// For now, assuming Ketua Pertandingan new logic is self-contained with KetuaActionLogEntry.
+
 // --- END NEW TYPES ---
 
-
 // Icons for fouls - could be actual SVGs or Lucide names
-// Using the OfficialFoulType now
-export const foulIcons: Record<OfficialFoulType | OfficialWarningType, string> = {
+// This might need to be updated if the old system is still used elsewhere
+export const foulIcons: Record<string, string> = {
   'Teguran': 'MinusCircle',
   'Peringatan I': 'AlertTriangle',
   'Peringatan II': 'ShieldAlert',
   'Diskualifikasi': 'Ban',
   'Binaan': 'Info',
   'Peringatan Ketua': 'Megaphone',
+  // New types for Ketua specific display if needed, but table aggregates points.
 };
