@@ -109,7 +109,7 @@ export default function ScoringTandingDewanSatuPage() {
         setConfigMatchId(null);
       }
     }, (err) => {
-      console.error("[Dewan-1] Error fetching active schedule config:", err);
+      console.error(`[Dewan-1] Error fetching active schedule config from path '${ACTIVE_TANDING_SCHEDULE_CONFIG_PATH}':`, err);
       setError("Gagal memuat konfigurasi jadwal aktif.");
       setConfigMatchId(null);
     });
@@ -177,7 +177,7 @@ export default function ScoringTandingDewanSatuPage() {
           }
         } else {
           if (mounted) {
-            setError(`Detail jadwal untuk ID ${currentMatchId} tidak ditemukan.`);
+            setError(`Detail jadwal untuk ID ${currentMatchId} dari path '${SCHEDULE_TANDING_COLLECTION}/${currentMatchId}' tidak ditemukan.`);
             resetAllMatchData(`Schedule doc ${currentMatchId} not found`);
             if (isLoading) setIsLoading(false);
           }
@@ -207,21 +207,26 @@ export default function ScoringTandingDewanSatuPage() {
                 confirmed_unstruck_keys_log: [],
                 confirmed_struck_keys_log: [] 
               };
-              await setDoc(matchDocRef, initialDataForMatch, { merge: true });
-              setTimerStatus(initialTimerStatus);
-              setPrevSavedUnstruckKeys(new Set());
-              setAllContributingEntryKeys(new Set());
-              setPrevSavedStruckKeys(new Set());
-              setPermanentlyStruckEntryKeys(new Set());
+              try {
+                await setDoc(matchDocRef, initialDataForMatch, { merge: true });
+                setTimerStatus(initialTimerStatus);
+                setPrevSavedUnstruckKeys(new Set());
+                setAllContributingEntryKeys(new Set());
+                setPrevSavedStruckKeys(new Set());
+                setPermanentlyStruckEntryKeys(new Set());
+              } catch (setErr) {
+                console.error(`[Dewan-1] Error setting initial match data at path '${MATCHES_TANDING_COLLECTION}/${currentMatchId}':`, setErr);
+              }
             }
           }
         }, (err) => {
-          if (mounted) console.error("[Dewan-1] Error fetching match data (timer/logs):", err);
+          if (mounted) console.error(`[Dewan-1] Error fetching match data (timer/logs) from path '${MATCHES_TANDING_COLLECTION}/${currentMatchId}':`, err);
         });
         if (mounted) unsubscribers.push(unsubMatchData);
 
         const juriSetters = [setJuri1Scores, setJuri2Scores, setJuri3Scores];
         JURI_IDS.forEach((juriId, index) => {
+          const juriDocPath = `${MATCHES_TANDING_COLLECTION}/${currentMatchId}/juri_scores/${juriId}`;
           const juriDocRef = doc(db, MATCHES_TANDING_COLLECTION, currentMatchId, 'juri_scores', juriId);
           const unsubJuri = onSnapshot(juriDocRef, (docSnap) => {
             if (!mounted) return;
@@ -232,7 +237,7 @@ export default function ScoringTandingDewanSatuPage() {
             }
           }, (err) => {
             if (mounted) {
-              console.error(`[Dewan-1] Error fetching scores for ${juriId}:`, err);
+              console.error(`[Dewan-1] Error fetching scores for ${juriId} from path '${juriDocPath}':`, err);
               juriSetters[index](null);
             }
           });
@@ -419,11 +424,12 @@ export default function ScoringTandingDewanSatuPage() {
       }
 
       if (Object.keys(updates).length > 0) {
+        const matchDocPath = `${MATCHES_TANDING_COLLECTION}/${activeScheduleId}`;
         updateDoc(doc(db, MATCHES_TANDING_COLLECTION, activeScheduleId), updates)
           .then(() => {
             if (unstruckChanged) setPrevSavedUnstruckKeys(new Set(currentUnstruckKeys));
             if (struckChanged) setPrevSavedStruckKeys(new Set(currentStruckKeys));
-          }).catch(err => console.error("[Dewan-1] Error updating Firestore logs:", err));
+          }).catch(err => console.error(`[Dewan-1] Error updating Firestore logs at path '${matchDocPath}':`, err));
       }
     }
   }, [juri1Scores, juri2Scores, juri3Scores, activeScheduleId, matchDetailsLoaded, prevSavedUnstruckKeys, prevSavedStruckKeys]);
@@ -435,6 +441,7 @@ export default function ScoringTandingDewanSatuPage() {
       interval = setInterval(async () => {
         if (activeScheduleId) {
             try {
+                const matchDocPath = `${MATCHES_TANDING_COLLECTION}/${activeScheduleId}`;
                 const matchDocRef = doc(db, MATCHES_TANDING_COLLECTION, activeScheduleId);
                 const currentDBDoc = await getDoc(matchDocRef);
 
@@ -486,7 +493,7 @@ export default function ScoringTandingDewanSatuPage() {
 
                 await setDoc(matchDocRef, { timer_status: updatedStatusForFirestore }, { merge: true });
             } catch (e) {
-                console.error("[Dewan-1] Error updating timer in interval: ", e);
+                console.error(`[Dewan-1] Error updating timer in interval for path '${MATCHES_TANDING_COLLECTION}/${activeScheduleId}': `, e);
                  if(interval) clearInterval(interval);
                  setTimerStatus(prev => ({ ...prev, isTimerRunning: false }));
             }
@@ -505,6 +512,7 @@ export default function ScoringTandingDewanSatuPage() {
 
   const updateTimerStatusInFirestore = useCallback(async (newStatusUpdates: Partial<TimerStatus>) => {
     if (!activeScheduleId) return;
+    const matchDocPath = `${MATCHES_TANDING_COLLECTION}/${activeScheduleId}`;
     try {
       const matchDocRef = doc(db, MATCHES_TANDING_COLLECTION, activeScheduleId);
       const docSnap = await getDoc(matchDocRef);
@@ -515,7 +523,7 @@ export default function ScoringTandingDewanSatuPage() {
       const newFullStatus = { ...currentDBTimerStatus, ...newStatusUpdates };
       await setDoc(matchDocRef, { timer_status: newFullStatus }, { merge: true });
     } catch (e) {
-      console.error("[Dewan-1] Error updating timer status in Firestore:", e);
+      console.error(`[Dewan-1] Error updating timer status in Firestore at path '${matchDocPath}':`, e);
       setError("Gagal memperbarui status timer di server.");
     }
   }, [activeScheduleId, timerStatus]);
@@ -609,6 +617,7 @@ export default function ScoringTandingDewanSatuPage() {
     if (!confirm("Apakah Anda yakin ingin mereset seluruh pertandingan? Semua skor dan status akan dikembalikan ke awal.")) return;
 
     if (!isLoading) setIsLoading(true);
+    const matchDocPath = `${MATCHES_TANDING_COLLECTION}/${activeScheduleId}`;
     try {
         const batch = writeBatch(db);
 
@@ -645,7 +654,7 @@ export default function ScoringTandingDewanSatuPage() {
 
         alert("Pertandingan telah direset.");
     } catch (e) {
-      console.error("[Dewan-1] Error resetting match:", e);
+      console.error(`[Dewan-1] Error resetting match at path '${matchDocPath}' and its subcollections:`, e);
       setError("Gagal mereset pertandingan.");
     } finally {
          if (isLoading) setIsLoading(false); // Ensure isLoading is set to false
