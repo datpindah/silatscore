@@ -12,9 +12,9 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Label } from "@/components/ui/label";
 import type { ScheduleTanding, KetuaActionLogEntry, PesilatColorIdentity, KetuaActionType, VerificationType } from '@/lib/types';
-import { JATUHAN_POINTS, TEGURAN_POINTS, PERINGATAN_POINTS_FIRST_PRESS, PERINGATAN_POINTS_SECOND_PRESS } from '@/lib/types';
+import { JATUHAN_POINTS, PERINGATAN_POINTS_FIRST_PRESS, PERINGATAN_POINTS_SECOND_PRESS, TEGURAN_POINTS } from '@/lib/types';
 import { db } from '@/lib/firebase';
-import { doc, onSnapshot, getDoc, Timestamp, collection, addDoc, query, orderBy, deleteDoc, limit, getDocs, serverTimestamp, writeBatch } from 'firebase/firestore';
+import { doc, onSnapshot, getDoc, Timestamp, collection, addDoc, query, orderBy, deleteDoc, limit, getDocs, serverTimestamp, writeBatch, where } from 'firebase/firestore';
 import { cn } from '@/lib/utils';
 import { Skeleton } from '@/components/ui/skeleton';
 
@@ -22,7 +22,7 @@ const ACTIVE_TANDING_SCHEDULE_CONFIG_PATH = 'app_settings/active_match_tanding';
 const SCHEDULE_TANDING_COLLECTION = 'schedules_tanding';
 const MATCHES_TANDING_COLLECTION = 'matches_tanding';
 const OFFICIAL_ACTIONS_SUBCOLLECTION = 'official_actions';
-const VERIFICATIONS_SUBCOLLECTION = 'verifications'; // New subcollection for verifications
+const VERIFICATIONS_SUBCOLLECTION = 'verifications'; 
 
 interface PesilatDisplayInfo {
   name: string;
@@ -69,16 +69,16 @@ const calculateDisplayScoresForTable = (
   );
 
   let hukuman = 0;
-  let binaan = 0;
+  let binaan = 0; // Represents count of Binaan actions for display
   let jatuhan = 0;
 
   roundActions.forEach(action => {
     if (action.actionType === 'Teguran' || action.actionType === 'Peringatan') {
-      hukuman += action.points;
+      hukuman += action.points; // Negative points
     } else if (action.actionType === 'Binaan') {
-       binaan += (action.points === 0 ? 1 : 0); 
+       binaan += 1; // Count Binaan occurrences
     } else if (action.actionType === 'Jatuhan') {
-      jatuhan += action.points;
+      jatuhan += action.points; // Positive points
     }
   });
 
@@ -214,21 +214,22 @@ export default function KetuaPertandinganPage() {
 
       if (actionTypeButtonPressed === 'Teguran') {
         actionTypeToLog = 'Teguran';
-        pointsToLog = TEGURAN_POINTS;
+        pointsToLog = TEGURAN_POINTS; // Should be -1
       } else if (actionTypeButtonPressed === 'Binaan') {
         originalActionTypeForLog = 'Binaan';
+        // Count Binaan murni (actionType 'Binaan') untuk pesilat ini di babak ini
         const binaanMurniCount = ketuaActionsLog.filter(
           log => log.pesilatColor === pesilatColor &&
                  log.round === dewanTimerStatus.currentRound &&
-                 log.actionType === 'Binaan' // Hanya Binaan murni
+                 log.actionType === 'Binaan'
         ).length;
 
-        if (binaanMurniCount === 0) {
+        if (binaanMurniCount === 0) { // Ini adalah Binaan murni pertama
           actionTypeToLog = 'Binaan';
           pointsToLog = 0;
-        } else {
+        } else { // Binaan murni sudah pernah diberikan, jadi ini menjadi Teguran
           actionTypeToLog = 'Teguran';
-          pointsToLog = TEGURAN_POINTS;
+          pointsToLog = TEGURAN_POINTS; // Should be -1
         }
       } else if (actionTypeButtonPressed === 'Peringatan') {
         const peringatanCount = countActionsInRound(ketuaActionsLog, pesilatColor, 'Peringatan', dewanTimerStatus.currentRound);
@@ -319,7 +320,7 @@ export default function KetuaPertandinganPage() {
         type: selectedVerificationType,
         status: 'pending',
         round: dewanTimerStatus.currentRound,
-        timestamp: serverTimestamp(), // Menggunakan serverTimestamp untuk konsistensi
+        timestamp: serverTimestamp(), 
         votes: {
           'juri-1': null,
           'juri-2': null,
@@ -327,14 +328,14 @@ export default function KetuaPertandinganPage() {
         },
         requestingOfficial: 'ketua',
       };
-      // Hapus semua verifikasi 'pending' sebelumnya untuk match ini sebelum membuat yang baru
+      
       const verificationsRef = collection(db, MATCHES_TANDING_COLLECTION, activeMatchId, VERIFICATIONS_SUBCOLLECTION);
       const qPending = query(verificationsRef, where("status", "==", "pending"));
       const pendingSnapshot = await getDocs(qPending);
       
       const batch = writeBatch(db);
       pendingSnapshot.forEach(doc => {
-        batch.update(doc.ref, { status: 'cancelled' }); // Atau batch.delete(doc.ref);
+        batch.update(doc.ref, { status: 'cancelled' }); 
       });
       await batch.commit();
 
@@ -516,3 +517,5 @@ export default function KetuaPertandinganPage() {
     </div>
   );
 }
+
+    
