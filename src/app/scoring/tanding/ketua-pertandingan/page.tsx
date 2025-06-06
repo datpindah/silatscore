@@ -7,7 +7,7 @@ import { Header } from '@/components/layout/Header';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { ArrowLeft, Loader2, Trash2, ShieldCheck, Trophy, Vote } from 'lucide-react';
+import { ArrowLeft, Loader2, Trash2, ShieldCheck, Trophy, Vote, Play, Pause } from 'lucide-react';
 import type { ScheduleTanding, KetuaActionLogEntry, PesilatColorIdentity, KetuaActionType } from '@/lib/types';
 import { JATUHAN_POINTS, BINAAN_POINTS_SECOND_PRESS, TEGURAN_POINTS_FIRST_PRESS, TEGURAN_POINTS_SECOND_PRESS, PERINGATAN_POINTS_FIRST_PRESS, PERINGATAN_POINTS_SECOND_PRESS } from '@/lib/types';
 import { db } from '@/lib/firebase';
@@ -18,7 +18,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 const ACTIVE_TANDING_SCHEDULE_CONFIG_PATH = 'app_settings/active_match_tanding';
 const SCHEDULE_TANDING_COLLECTION = 'schedules_tanding';
 const MATCHES_TANDING_COLLECTION = 'matches_tanding';
-const OFFICIAL_ACTIONS_SUBCOLLECTION = 'official_actions'; // This will store KetuaActionLogEntry
+const OFFICIAL_ACTIONS_SUBCOLLECTION = 'official_actions'; 
 
 interface PesilatDisplayInfo {
   name: string;
@@ -29,7 +29,7 @@ interface TimerStatusFromDewan {
   currentRound: 1 | 2 | 3;
   timerSeconds: number;
   isTimerRunning: boolean;
-  matchStatus: string; // e.g., 'Pending', 'OngoingRound1', 'FinishedRound1', 'MatchFinished'
+  matchStatus: string; 
 }
 
 const initialTimerStatus: TimerStatusFromDewan = {
@@ -41,7 +41,6 @@ const initialTimerStatus: TimerStatusFromDewan = {
 
 const ROUNDS = [1, 2, 3] as const;
 
-// Helper function to count actions of a specific type for a pesilat in a specific round
 const countActionsInRound = (
   log: KetuaActionLogEntry[],
   pesilatColor: PesilatColorIdentity,
@@ -56,7 +55,6 @@ const countActionsInRound = (
   ).length;
 };
 
-// Helper function to get points for the next action based on previous counts
 const getPointsForAction = (
   log: KetuaActionLogEntry[],
   pesilatColor: PesilatColorIdentity,
@@ -68,18 +66,17 @@ const getPointsForAction = (
   const count = countActionsInRound(log, pesilatColor, actionType, round);
 
   if (actionType === 'Binaan') {
-    return count === 0 ? 0 : BINAAN_POINTS_SECOND_PRESS; // 1st press = 0 points, 2nd+ press = -1 point
+    return count === 0 ? 0 : BINAAN_POINTS_SECOND_PRESS; 
   }
   if (actionType === 'Teguran') {
-    return count === 0 ? TEGURAN_POINTS_FIRST_PRESS : TEGURAN_POINTS_SECOND_PRESS; // 1st = -1, 2nd+ = -2
+    return count === 0 ? TEGURAN_POINTS_FIRST_PRESS : TEGURAN_POINTS_SECOND_PRESS; 
   }
   if (actionType === 'Peringatan') {
-    return count === 0 ? PERINGATAN_POINTS_FIRST_PRESS : PERINGATAN_POINTS_SECOND_PRESS; // 1st = -5, 2nd+ = -10
+    return count === 0 ? PERINGATAN_POINTS_FIRST_PRESS : PERINGATAN_POINTS_SECOND_PRESS; 
   }
-  return 0; // Should not happen for defined types
+  return 0; 
 };
 
-// Helper to calculate display scores for the table
 const calculateDisplayScoresForTable = (
   log: KetuaActionLogEntry[],
   pesilatColor: PesilatColorIdentity,
@@ -100,6 +97,12 @@ const calculateDisplayScoresForTable = (
     .reduce((sum, a) => sum + a.points, 0);
 
   return { hukuman, binaan, jatuhan };
+};
+
+const formatTime = (seconds: number): string => {
+    const minutes = Math.floor(seconds / 60);
+    const remainingSeconds = seconds % 60;
+    return `${minutes.toString().padStart(2, '0')}:${remainingSeconds.toString().padStart(2, '0')}`;
 };
 
 
@@ -299,7 +302,7 @@ export default function KetuaPertandinganPage() {
       <main className="flex-1 container mx-auto px-2 py-4 md:p-6">
         <div className="text-center mb-4">
           <h1 className="text-2xl md:text-3xl font-bold text-gray-800 dark:text-gray-100">Ketua Pertandingan</h1>
-          <p className="text-sm text-gray-600 dark:text-gray-400">{matchDetails?.place || (isLoading ? <Skeleton className="h-4 w-24 inline-block" /> : 'Gelanggang A')}</p>
+          <div className="text-sm text-gray-600 dark:text-gray-400">{matchDetails?.place || (isLoading ? <Skeleton className="h-4 w-24 inline-block" /> : 'Gelanggang A')}</div>
         </div>
 
         {/* Pesilat Info Row */}
