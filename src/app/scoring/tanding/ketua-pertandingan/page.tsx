@@ -61,18 +61,29 @@ const getPointsForAction = (
   actionType: KetuaActionType,
   round: 1 | 2 | 3
 ): number => {
-  const count = countActionsInRound(log, pesilatColor, actionType, round);
+  // countInCurrentRound is the number of actions of this type *before* the current one is added.
+  const countInCurrentRound = countActionsInRound(log, pesilatColor, actionType, round);
 
   if (actionType === 'Jatuhan') return JATUHAN_POINTS;
+  
   if (actionType === 'Binaan') {
-    return count === 0 ? 0 : BINAAN_POINTS_SECOND_PRESS; 
+    // First press (countInCurrentRound is 0) = 0 points.
+    // Second press (countInCurrentRound is 1) and subsequent = BINAAN_POINTS_SECOND_PRESS (-1).
+    return countInCurrentRound === 0 ? 0 : BINAAN_POINTS_SECOND_PRESS;
   }
+  
   if (actionType === 'Teguran') {
-    return count === 1 ? TEGURAN_POINTS_FIRST_PRESS : TEGURAN_POINTS_SECOND_PRESS; 
+    // First press (countInCurrentRound is 0) = TEGURAN_POINTS_FIRST_PRESS (-1).
+    // Second press (countInCurrentRound is 1) and subsequent = TEGURAN_POINTS_SECOND_PRESS (-2).
+    return countInCurrentRound === 0 ? TEGURAN_POINTS_FIRST_PRESS : TEGURAN_POINTS_SECOND_PRESS;
   }
+  
   if (actionType === 'Peringatan') {
-    return count === 1 ? PERINGATAN_POINTS_FIRST_PRESS : PERINGATAN_POINTS_SECOND_PRESS; 
+    // First press (countInCurrentRound is 0) = PERINGATAN_POINTS_FIRST_PRESS (-5).
+    // Second press (countInCurrentRound is 1) and subsequent = PERINGATAN_POINTS_SECOND_PRESS (-10).
+    return countInCurrentRound === 0 ? PERINGATAN_POINTS_FIRST_PRESS : PERINGATAN_POINTS_SECOND_PRESS;
   }
+  
   return 0; 
 };
 
@@ -227,7 +238,7 @@ export default function KetuaPertandinganPage() {
       return;
     }
     if (!dewanTimerStatus.currentRound || ![1, 2, 3].includes(dewanTimerStatus.currentRound)) {
-      alert(`Tidak bisa menambah tindakan: Babak tidak valid (${dewanTimerStatus.currentRound}). Harap tunggu Dewan memulai babak.`);
+      alert(`Tidak bisa menambah tindakan: Babak tidak valid (${dewanTimerStatus.currentRound || 'tidak diketahui'}). Harap tunggu Dewan memulai babak.`);
       return;
     }
 
@@ -243,9 +254,10 @@ export default function KetuaPertandinganPage() {
       };
       await addDoc(collection(db, MATCHES_TANDING_COLLECTION, activeMatchId, OFFICIAL_ACTIONS_SUBCOLLECTION), actionData);
     } catch (err) {
-      console.error(`Error adding official action for match ${activeMatchId}:`, err);
-      setError(`Gagal menyimpan tindakan: ${err instanceof Error ? err.message : String(err)}`);
-      alert(`Gagal menyimpan tindakan: ${err instanceof Error ? err.message : String(err)}`);
+      const errorMessage = err instanceof Error ? err.message : String(err);
+      console.error(`Error adding official action for match ${activeMatchId}:`, errorMessage, err);
+      setError(`Gagal menyimpan tindakan: ${errorMessage}`);
+      alert(`Gagal menyimpan tindakan: ${errorMessage}`);
     } finally {
       setIsSubmittingAction(false);
     }
@@ -271,29 +283,42 @@ export default function KetuaPertandinganPage() {
 
     setIsSubmittingAction(true);
     try {
+      // Query for actions of the specified pesilat in the current round, ordered by time descending
       const q = query(
         collection(db, MATCHES_TANDING_COLLECTION, activeMatchId, OFFICIAL_ACTIONS_SUBCOLLECTION),
-        orderBy("timestamp", "desc"),
-        limit(1)
+        orderBy("timestamp", "desc") 
+        // We will filter pesilatColor and round in the client-side from the results of the last overall action
+        // because Firestore doesn't allow multiple inequality filters on different fields efficiently for this kind of "last specific" query.
+        // A more robust solution would be to denormalize or use a different data structure if this becomes complex.
+        // For now, get the globally last action and check if it matches.
       );
+      
       const querySnapshot = await getDocs(q);
       let docToDeleteId: string | null = null;
-      querySnapshot.forEach((doc) => {
-        const action = doc.data() as Omit<KetuaActionLogEntry, 'id'>;
-        if (action.pesilatColor === pesilatColor && action.round === dewanTimerStatus.currentRound) {
-          docToDeleteId = doc.id;
-        }
-      });
+      let lastActionFound: KetuaActionLogEntry | null = null;
 
-      if (docToDeleteId) {
+      // Iterate through all actions (sorted newest first globally) to find the last one
+      // that matches the pesilatColor and currentRound.
+      for (const doc of querySnapshot.docs) {
+          const action = { id: doc.id, ...doc.data() } as KetuaActionLogEntry;
+          if (action.pesilatColor === pesilatColor && action.round === dewanTimerStatus.currentRound) {
+              docToDeleteId = doc.id;
+              lastActionFound = action;
+              break; // Found the most recent matching action
+          }
+      }
+
+      if (docToDeleteId && lastActionFound) {
         await deleteDoc(doc(db, MATCHES_TANDING_COLLECTION, activeMatchId, OFFICIAL_ACTIONS_SUBCOLLECTION, docToDeleteId));
+        // console.log(`Deleted action: ${lastActionFound.actionType} for ${pesilatColor} in round ${dewanTimerStatus.currentRound}`);
       } else {
-        alert("Tidak ada tindakan terakhir yang bisa dihapus untuk pesilat ini di babak saat ini.");
+        alert(`Tidak ada tindakan terakhir yang bisa dihapus untuk pesilat ${pesilatColor} di babak ${dewanTimerStatus.currentRound}.`);
       }
     } catch (err) {
-      console.error(`Error deleting last action for match ${activeMatchId}:`, err);
-      setError(`Gagal menghapus tindakan: ${err instanceof Error ? err.message : String(err)}`);
-      alert(`Gagal menghapus tindakan: ${err instanceof Error ? err.message : String(err)}`);
+      const errorMessage = err instanceof Error ? err.message : String(err);
+      console.error(`Error deleting last action for match ${activeMatchId}:`, errorMessage, err);
+      setError(`Gagal menghapus tindakan: ${errorMessage}`);
+      alert(`Gagal menghapus tindakan: ${errorMessage}`);
     } finally {
       setIsSubmittingAction(false);
     }
@@ -333,18 +358,18 @@ export default function KetuaPertandinganPage() {
       <main className="flex-1 container mx-auto px-2 py-4 md:p-6">
         <div className="text-center mb-4">
           <h1 className="text-2xl md:text-3xl font-bold text-gray-800 dark:text-gray-100">Ketua Pertandingan</h1>
-          <div className="text-sm text-gray-600 dark:text-gray-400">{matchDetails?.place || (isLoading ? <Skeleton className="h-4 w-24 inline-block" /> : 'Gelanggang A')}</div>
+          <div className="text-sm text-gray-600 dark:text-gray-400">{matchDetails?.place || (isLoading ? <Skeleton className="h-4 w-24 inline-block" /> : `Gelanggang ${matchDetails?.matchNumber || 'A'}`)}</div>
         </div>
 
         {/* Pesilat Info Row */}
         <div className="flex justify-between items-center mb-4 px-1">
           <div className="text-left">
-            <div className="text-sm font-semibold text-red-600">KONTINGEN {pesilatMerahInfo?.contingent || <Skeleton className="h-4 w-16 inline-block" />}</div>
-            <div className="text-lg font-bold text-red-600">{pesilatMerahInfo?.name || <Skeleton className="h-6 w-32" />}</div>
+            <div className="text-sm font-semibold text-red-600">KONTINGEN {pesilatMerahInfo?.contingent || (isLoading && activeMatchId ? <Skeleton className="h-4 w-16 inline-block" /> : '-')}</div>
+            <div className="text-lg font-bold text-red-600">{pesilatMerahInfo?.name || (isLoading && activeMatchId ? <Skeleton className="h-6 w-32" /> : 'PESILAT MERAH')}</div>
           </div>
           <div className="text-right">
-            <div className="text-sm font-semibold text-blue-600">KONTINGEN {pesilatBiruInfo?.contingent || <Skeleton className="h-4 w-16 inline-block" />}</div>
-            <div className="text-lg font-bold text-blue-600">{pesilatBiruInfo?.name || <Skeleton className="h-6 w-32" />}</div>
+            <div className="text-sm font-semibold text-blue-600">KONTINGEN {pesilatBiruInfo?.contingent || (isLoading && activeMatchId ? <Skeleton className="h-4 w-16 inline-block" /> : '-')}</div>
+            <div className="text-lg font-bold text-blue-600">{pesilatBiruInfo?.name || (isLoading && activeMatchId ? <Skeleton className="h-6 w-32" /> : 'PESILAT BIRU')}</div>
           </div>
         </div>
 
@@ -368,13 +393,13 @@ export default function KetuaPertandinganPage() {
                 const scoresBiru = calculateDisplayScoresForTable(ketuaActionsLog, 'biru', round);
                 return (
                   <TableRow key={`round-display-${round}`} className={dewanTimerStatus.currentRound === round ? 'bg-yellow-100 dark:bg-yellow-900/30' : 'bg-white dark:bg-gray-800/50'}>
-                    <TableCell className="border border-gray-300 dark:border-gray-700 text-center font-medium py-2 px-1">{isLoading ? <Skeleton className="h-5 w-8 mx-auto"/> : scoresMerah.hukuman}</TableCell>
-                    <TableCell className="border border-gray-300 dark:border-gray-700 text-center font-medium py-2 px-1">{isLoading ? <Skeleton className="h-5 w-8 mx-auto"/> : scoresMerah.binaan}</TableCell>
-                    <TableCell className="border border-gray-300 dark:border-gray-700 text-center font-medium py-2 px-1">{isLoading ? <Skeleton className="h-5 w-8 mx-auto"/> : scoresMerah.jatuhan}</TableCell>
+                    <TableCell className="border border-gray-300 dark:border-gray-700 text-center font-medium py-2 px-1">{isLoading && !matchDetailsLoaded ? <Skeleton className="h-5 w-8 mx-auto"/> : scoresMerah.hukuman}</TableCell>
+                    <TableCell className="border border-gray-300 dark:border-gray-700 text-center font-medium py-2 px-1">{isLoading && !matchDetailsLoaded ? <Skeleton className="h-5 w-8 mx-auto"/> : scoresMerah.binaan}</TableCell>
+                    <TableCell className="border border-gray-300 dark:border-gray-700 text-center font-medium py-2 px-1">{isLoading && !matchDetailsLoaded ? <Skeleton className="h-5 w-8 mx-auto"/> : scoresMerah.jatuhan}</TableCell>
                     <TableCell className="border border-gray-300 dark:border-gray-700 text-center font-bold py-2 px-1">{round === 1 ? 'I' : round === 2 ? 'II' : 'III'}</TableCell>
-                    <TableCell className="border border-gray-300 dark:border-gray-700 text-center font-medium py-2 px-1">{isLoading ? <Skeleton className="h-5 w-8 mx-auto"/> : scoresBiru.jatuhan}</TableCell>
-                    <TableCell className="border border-gray-300 dark:border-gray-700 text-center font-medium py-2 px-1">{isLoading ? <Skeleton className="h-5 w-8 mx-auto"/> : scoresBiru.binaan}</TableCell>
-                    <TableCell className="border border-gray-300 dark:border-gray-700 text-center font-medium py-2 px-1">{isLoading ? <Skeleton className="h-5 w-8 mx-auto"/> : scoresBiru.hukuman}</TableCell>
+                    <TableCell className="border border-gray-300 dark:border-gray-700 text-center font-medium py-2 px-1">{isLoading && !matchDetailsLoaded ? <Skeleton className="h-5 w-8 mx-auto"/> : scoresBiru.jatuhan}</TableCell>
+                    <TableCell className="border border-gray-300 dark:border-gray-700 text-center font-medium py-2 px-1">{isLoading && !matchDetailsLoaded ? <Skeleton className="h-5 w-8 mx-auto"/> : scoresBiru.binaan}</TableCell>
+                    <TableCell className="border border-gray-300 dark:border-gray-700 text-center font-medium py-2 px-1">{isLoading && !matchDetailsLoaded ? <Skeleton className="h-5 w-8 mx-auto"/> : scoresBiru.hukuman}</TableCell>
                   </TableRow>
                 );
               })}
