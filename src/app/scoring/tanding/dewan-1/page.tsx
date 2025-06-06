@@ -18,7 +18,7 @@ const MATCHES_TANDING_COLLECTION = 'matches_tanding';
 const ROUND_DURATION_SECONDS = 120; // 2 minutes
 const TOTAL_ROUNDS = 3;
 const JURI_IDS = ['juri-1', 'juri-2', 'juri-3'];
-const GRACE_PERIOD_FOR_STRIKE_DECISION = 3000; // 3 seconds before a solo score is marked permanently struck
+const GRACE_PERIOD_FOR_STRIKE_DECISION = 5000; // 5 seconds before a solo score is marked permanently struck (Increased from 3000)
 const JURI_INPUT_VALIDITY_WINDOW_MS = 2000; // Max time difference between juri inputs for a valid score
 
 interface PesilatInfo {
