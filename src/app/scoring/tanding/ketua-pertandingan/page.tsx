@@ -11,17 +11,18 @@ import { ArrowLeft, Loader2, Trash2, ShieldCheck, Trophy, Vote, Play, Pause } fr
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger, DialogClose } from "@/components/ui/dialog";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Label } from "@/components/ui/label";
-import type { ScheduleTanding, KetuaActionLogEntry, PesilatColorIdentity, KetuaActionType } from '@/lib/types';
+import type { ScheduleTanding, KetuaActionLogEntry, PesilatColorIdentity, KetuaActionType, VerificationType } from '@/lib/types';
 import { JATUHAN_POINTS, TEGURAN_POINTS, PERINGATAN_POINTS_FIRST_PRESS, PERINGATAN_POINTS_SECOND_PRESS } from '@/lib/types';
 import { db } from '@/lib/firebase';
-import { doc, onSnapshot, getDoc, Timestamp, collection, addDoc, query, orderBy, deleteDoc, limit, getDocs } from 'firebase/firestore';
+import { doc, onSnapshot, getDoc, Timestamp, collection, addDoc, query, orderBy, deleteDoc, limit, getDocs, serverTimestamp, writeBatch } from 'firebase/firestore';
 import { cn } from '@/lib/utils';
 import { Skeleton } from '@/components/ui/skeleton';
 
 const ACTIVE_TANDING_SCHEDULE_CONFIG_PATH = 'app_settings/active_match_tanding';
 const SCHEDULE_TANDING_COLLECTION = 'schedules_tanding';
 const MATCHES_TANDING_COLLECTION = 'matches_tanding';
-const OFFICIAL_ACTIONS_SUBCOLLECTION = 'official_actions'; 
+const OFFICIAL_ACTIONS_SUBCOLLECTION = 'official_actions';
+const VERIFICATIONS_SUBCOLLECTION = 'verifications'; // New subcollection for verifications
 
 interface PesilatDisplayInfo {
   name: string;
@@ -32,7 +33,7 @@ interface TimerStatusFromDewan {
   currentRound: 1 | 2 | 3;
   timerSeconds: number;
   isTimerRunning: boolean;
-  matchStatus: string; 
+  matchStatus: string;
 }
 
 const initialTimerStatus: TimerStatusFromDewan = {
@@ -58,7 +59,6 @@ const countActionsInRound = (
   ).length;
 };
 
-
 const calculateDisplayScoresForTable = (
   log: KetuaActionLogEntry[],
   pesilatColor: PesilatColorIdentity,
@@ -69,18 +69,16 @@ const calculateDisplayScoresForTable = (
   );
 
   let hukuman = 0;
-  let binaan = 0; 
+  let binaan = 0;
   let jatuhan = 0;
 
   roundActions.forEach(action => {
     if (action.actionType === 'Teguran' || action.actionType === 'Peringatan') {
-      hukuman += action.points; 
-    } else if (action.actionType === 'Binaan') { 
-      // Binaan murni (0 poin) tidak menambah skor hukuman atau binaan di tabel ini,
-      // karena tabel ini menampilkan poin yang mengurangi/menambah.
-       binaan += (action.points === 0 ? 1 : 0); // Menghitung jumlah kejadian binaan 0 poin
+      hukuman += action.points;
+    } else if (action.actionType === 'Binaan') {
+       binaan += (action.points === 0 ? 1 : 0); 
     } else if (action.actionType === 'Jatuhan') {
-      jatuhan += action.points; 
+      jatuhan += action.points;
     }
   });
 
@@ -93,7 +91,6 @@ const formatTime = (seconds: number): string => {
     return `${minutes.toString().padStart(2, '0')}:${remainingSeconds.toString().padStart(2, '0')}`;
 };
 
-
 export default function KetuaPertandinganPage() {
   const [configMatchId, setConfigMatchId] = useState<string | null | undefined>(undefined);
   const [activeMatchId, setActiveMatchId] = useState<string | null>(null);
@@ -105,13 +102,14 @@ export default function KetuaPertandinganPage() {
 
   const [dewanTimerStatus, setDewanTimerStatus] = useState<TimerStatusFromDewan>(initialTimerStatus);
   const [ketuaActionsLog, setKetuaActionsLog] = useState<KetuaActionLogEntry[]>([]);
-  
+
   const [isSubmittingAction, setIsSubmittingAction] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   const [isVerificationDialogOpen, setIsVerificationDialogOpen] = useState(false);
-  const [selectedVerificationType, setSelectedVerificationType] = useState<'jatuhan' | 'pelanggaran' | ''>('');
+  const [selectedVerificationType, setSelectedVerificationType] = useState<VerificationType | ''>('');
+  const [isCreatingVerification, setIsCreatingVerification] = useState(false);
 
 
   const resetAllMatchData = useCallback(() => {
@@ -194,7 +192,7 @@ export default function KetuaPertandinganPage() {
       setKetuaActionsLog(actions);
     }, (err) => { if (!mounted) return; console.error("Error fetching official actions:", err); setError("Gagal memuat log tindakan."); });
     unsubscribers.push(unsubActions);
-    
+
     if (matchDetailsLoaded && isLoading) setIsLoading(false);
 
     return () => { mounted = false; unsubscribers.forEach(unsub => unsub()); };
@@ -203,70 +201,54 @@ export default function KetuaPertandinganPage() {
   useEffect(() => { if (isLoading && (matchDetailsLoaded || activeMatchId === null)) setIsLoading(false); }, [isLoading, matchDetailsLoaded, activeMatchId]);
 
   const handleKetuaAction = async (pesilatColor: PesilatColorIdentity, actionTypeButtonPressed: KetuaActionType) => {
-    if (!activeMatchId || activeMatchId.trim() === "") {
-      alert("Tidak bisa menambah tindakan: ID pertandingan aktif tidak valid.");
-      return;
-    }
-    if (isSubmittingAction) {
-      alert("Sedang memproses tindakan sebelumnya, harap tunggu.");
-      return;
-    }
-    if (dewanTimerStatus.matchStatus === 'MatchFinished') {
-      alert("Tidak bisa menambah tindakan: Pertandingan telah selesai.");
-      return;
-    }
-     if (!dewanTimerStatus.currentRound || ![1, 2, 3].includes(dewanTimerStatus.currentRound)) {
-      alert(`Tidak bisa menambah tindakan: Babak tidak valid (${dewanTimerStatus.currentRound || 'tidak diketahui'}). Harap tunggu Dewan memulai babak.`);
-      return;
-    }
+    if (!activeMatchId || activeMatchId.trim() === "") { alert("Tidak bisa menambah tindakan: ID pertandingan aktif tidak valid."); return; }
+    if (isSubmittingAction) { alert("Sedang memproses tindakan sebelumnya, harap tunggu."); return; }
+    if (dewanTimerStatus.matchStatus === 'MatchFinished') { alert("Tidak bisa menambah tindakan: Pertandingan telah selesai."); return; }
+    if (!dewanTimerStatus.currentRound || ![1, 2, 3].includes(dewanTimerStatus.currentRound)) { alert(`Tidak bisa menambah tindakan: Babak tidak valid (${dewanTimerStatus.currentRound || 'tidak diketahui'}). Harap tunggu Dewan memulai babak.`); return; }
 
     setIsSubmittingAction(true);
     try {
-        let pointsToLog = 0;
-        let actionTypeToLog: KetuaActionType = actionTypeButtonPressed;
-        let originalActionTypeForLog: KetuaActionType | undefined = undefined;
+      let pointsToLog = 0;
+      let actionTypeToLog: KetuaActionType = actionTypeButtonPressed;
+      let originalActionTypeForLog: KetuaActionType | undefined = undefined;
 
-        if (actionTypeButtonPressed === 'Teguran') {
-            actionTypeToLog = 'Teguran';
-            pointsToLog = TEGURAN_POINTS; // Selalu -1
-        } else if (actionTypeButtonPressed === 'Binaan') {
-            originalActionTypeForLog = 'Binaan';
-            // Hitung Binaan murni (yang actionType-nya Binaan) yang sudah tercatat
-            const pureBinaanCountInRound = ketuaActionsLog.filter(
-                logEntry =>
-                    logEntry.pesilatColor === pesilatColor &&
-                    logEntry.round === dewanTimerStatus.currentRound &&
-                    logEntry.actionType === 'Binaan'
-            ).length;
+      if (actionTypeButtonPressed === 'Teguran') {
+        actionTypeToLog = 'Teguran';
+        pointsToLog = TEGURAN_POINTS;
+      } else if (actionTypeButtonPressed === 'Binaan') {
+        originalActionTypeForLog = 'Binaan';
+        const binaanMurniCount = ketuaActionsLog.filter(
+          log => log.pesilatColor === pesilatColor &&
+                 log.round === dewanTimerStatus.currentRound &&
+                 log.actionType === 'Binaan' // Hanya Binaan murni
+        ).length;
 
-            if (pureBinaanCountInRound === 0) { 
-                // Ini adalah Binaan murni pertama
-                actionTypeToLog = 'Binaan';
-                pointsToLog = 0;
-            } else { 
-                // Binaan murni sudah pernah diberikan, ini jadi Teguran
-                actionTypeToLog = 'Teguran';
-                pointsToLog = TEGURAN_POINTS; // -1
-            }
-        } else if (actionTypeButtonPressed === 'Peringatan') {
-            const peringatanCount = countActionsInRound(ketuaActionsLog, pesilatColor, 'Peringatan', dewanTimerStatus.currentRound);
-            pointsToLog = peringatanCount === 0 ? PERINGATAN_POINTS_FIRST_PRESS : PERINGATAN_POINTS_SECOND_PRESS;
-            actionTypeToLog = 'Peringatan';
-        } else if (actionTypeButtonPressed === 'Jatuhan') {
-            pointsToLog = JATUHAN_POINTS;
-            actionTypeToLog = 'Jatuhan';
+        if (binaanMurniCount === 0) {
+          actionTypeToLog = 'Binaan';
+          pointsToLog = 0;
+        } else {
+          actionTypeToLog = 'Teguran';
+          pointsToLog = TEGURAN_POINTS;
         }
+      } else if (actionTypeButtonPressed === 'Peringatan') {
+        const peringatanCount = countActionsInRound(ketuaActionsLog, pesilatColor, 'Peringatan', dewanTimerStatus.currentRound);
+        pointsToLog = peringatanCount === 0 ? PERINGATAN_POINTS_FIRST_PRESS : PERINGATAN_POINTS_SECOND_PRESS;
+        actionTypeToLog = 'Peringatan';
+      } else if (actionTypeButtonPressed === 'Jatuhan') {
+        pointsToLog = JATUHAN_POINTS;
+        actionTypeToLog = 'Jatuhan';
+      }
 
-        const actionData: Omit<KetuaActionLogEntry, 'id'> = {
-            pesilatColor,
-            actionType: actionTypeToLog,
-            round: dewanTimerStatus.currentRound,
-            timestamp: Timestamp.now(),
-            points: pointsToLog,
-            ...(originalActionTypeForLog && { originalActionType: originalActionTypeForLog }),
-        };
-        
-        await addDoc(collection(db, MATCHES_TANDING_COLLECTION, activeMatchId, OFFICIAL_ACTIONS_SUBCOLLECTION), actionData);
+      const actionData: Omit<KetuaActionLogEntry, 'id'> = {
+        pesilatColor,
+        actionType: actionTypeToLog,
+        round: dewanTimerStatus.currentRound,
+        timestamp: Timestamp.now(),
+        points: pointsToLog,
+        ...(originalActionTypeForLog && { originalActionType: originalActionTypeForLog }),
+      };
+
+      await addDoc(collection(db, MATCHES_TANDING_COLLECTION, activeMatchId, OFFICIAL_ACTIONS_SUBCOLLECTION), actionData);
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : String(err);
       console.error(`Error adding official action for match ${activeMatchId}:`, errorMessage, err);
@@ -278,39 +260,27 @@ export default function KetuaPertandinganPage() {
   };
 
   const handleDeleteLastAction = async (pesilatColor: PesilatColorIdentity) => {
-    if (!activeMatchId || activeMatchId.trim() === "") {
-      alert("Tidak bisa menghapus tindakan: ID pertandingan aktif tidak valid.");
-      return;
-    }
-    if (isSubmittingAction) {
-        alert("Sedang memproses tindakan sebelumnya, harap tunggu.");
-        return;
-    }
-    if (dewanTimerStatus.matchStatus === 'MatchFinished') {
-      alert("Tidak bisa menghapus tindakan: Pertandingan telah selesai.");
-      return;
-    }
-    if (!dewanTimerStatus.currentRound || ![1, 2, 3].includes(dewanTimerStatus.currentRound)) {
-      alert("Tidak bisa menghapus tindakan: Babak tidak valid. Harap tunggu Dewan memulai babak.");
-      return;
-    }
+    if (!activeMatchId || activeMatchId.trim() === "") { alert("Tidak bisa menghapus tindakan: ID pertandingan aktif tidak valid."); return; }
+    if (isSubmittingAction) { alert("Sedang memproses tindakan sebelumnya, harap tunggu."); return; }
+    if (dewanTimerStatus.matchStatus === 'MatchFinished') { alert("Tidak bisa menghapus tindakan: Pertandingan telah selesai."); return; }
+    if (!dewanTimerStatus.currentRound || ![1, 2, 3].includes(dewanTimerStatus.currentRound)) { alert("Tidak bisa menghapus tindakan: Babak tidak valid. Harap tunggu Dewan memulai babak."); return; }
 
     setIsSubmittingAction(true);
     try {
       const q = query(
         collection(db, MATCHES_TANDING_COLLECTION, activeMatchId, OFFICIAL_ACTIONS_SUBCOLLECTION),
-        orderBy("timestamp", "desc") 
+        orderBy("timestamp", "desc")
       );
-      
+
       const querySnapshot = await getDocs(q);
       let docToDeleteId: string | null = null;
 
       for (const doc of querySnapshot.docs) {
-          const action = { id: doc.id, ...doc.data() } as KetuaActionLogEntry;
-          if (action.pesilatColor === pesilatColor && action.round === dewanTimerStatus.currentRound) {
-              docToDeleteId = doc.id;
-              break; 
-          }
+        const action = { id: doc.id, ...doc.data() } as KetuaActionLogEntry;
+        if (action.pesilatColor === pesilatColor && action.round === dewanTimerStatus.currentRound) {
+          docToDeleteId = doc.id;
+          break;
+        }
       }
 
       if (docToDeleteId) {
@@ -327,17 +297,59 @@ export default function KetuaPertandinganPage() {
       setIsSubmittingAction(false);
     }
   };
-  
-  const handleCreateVerification = () => {
+
+  const handleCreateVerification = async () => {
     if (!selectedVerificationType) {
       alert("Silakan pilih jenis verifikasi terlebih dahulu.");
       return;
     }
-    console.log("Membuat Verifikasi untuk Tipe:", selectedVerificationType);
-    // Logika lebih lanjut untuk verifikasi bisa ditambahkan di sini
-    // Misalnya, mengirim data ke Firestore atau memicu state lain.
-    setIsVerificationDialogOpen(false); // Tutup dialog setelah aksi
-    setSelectedVerificationType(''); // Reset pilihan
+    if (!activeMatchId) {
+      alert("Tidak ada pertandingan aktif untuk memulai verifikasi.");
+      return;
+    }
+    if (!dewanTimerStatus.currentRound || ![1,2,3].includes(dewanTimerStatus.currentRound) ) {
+        alert("Babak saat ini tidak valid untuk memulai verifikasi.");
+        return;
+    }
+
+    setIsCreatingVerification(true);
+    try {
+      const verificationData = {
+        matchId: activeMatchId,
+        type: selectedVerificationType,
+        status: 'pending',
+        round: dewanTimerStatus.currentRound,
+        timestamp: serverTimestamp(), // Menggunakan serverTimestamp untuk konsistensi
+        votes: {
+          'juri-1': null,
+          'juri-2': null,
+          'juri-3': null,
+        },
+        requestingOfficial: 'ketua',
+      };
+      // Hapus semua verifikasi 'pending' sebelumnya untuk match ini sebelum membuat yang baru
+      const verificationsRef = collection(db, MATCHES_TANDING_COLLECTION, activeMatchId, VERIFICATIONS_SUBCOLLECTION);
+      const qPending = query(verificationsRef, where("status", "==", "pending"));
+      const pendingSnapshot = await getDocs(qPending);
+      
+      const batch = writeBatch(db);
+      pendingSnapshot.forEach(doc => {
+        batch.update(doc.ref, { status: 'cancelled' }); // Atau batch.delete(doc.ref);
+      });
+      await batch.commit();
+
+
+      await addDoc(verificationsRef, verificationData);
+      alert(`Verifikasi untuk ${selectedVerificationType === 'jatuhan' ? 'Jatuhan' : 'Pelanggaran'} telah dimulai.`);
+      setIsVerificationDialogOpen(false);
+      setSelectedVerificationType('');
+    } catch (err) {
+      console.error("Error creating verification:", err);
+      setError(err instanceof Error ? `Gagal memulai verifikasi: ${err.message}` : "Gagal memulai verifikasi.");
+      alert(err instanceof Error ? `Gagal memulai verifikasi: ${err.message}` : "Gagal memulai verifikasi.");
+    } finally {
+      setIsCreatingVerification(false);
+    }
   };
   const handleTentukanPemenang = () => alert("Fungsi Tentukan Pemenang belum diimplementasikan.");
 
@@ -420,7 +432,7 @@ export default function KetuaPertandinganPage() {
             </TableBody>
           </Table>
         </div>
-        
+
         <div className="grid grid-cols-1 md:grid-cols-[1fr_auto_1fr] gap-4 md:gap-8 items-start">
           <div className="space-y-2">
             <div className="grid grid-cols-2 gap-2">
@@ -439,26 +451,27 @@ export default function KetuaPertandinganPage() {
                 <div className="text-2xl font-mono font-bold text-gray-800 dark:text-gray-100">{dewanTimerStatus.isTimerRunning ? formatTime(dewanTimerStatus.timerSeconds) : "JEDA"}</div>
                 <div className="text-xs text-gray-500 dark:text-gray-400">Babak {dewanTimerStatus.currentRound || '?'} - {dewanTimerStatus.matchStatus || 'Menunggu'}</div>
             </div>
-            
+
             <Dialog open={isVerificationDialogOpen} onOpenChange={setIsVerificationDialogOpen}>
               <DialogTrigger asChild>
-                <Button 
-                  className="w-full md:w-auto bg-yellow-500 hover:bg-yellow-600 text-black py-3 text-sm sm:text-base" 
-                  disabled={isLoading || dewanTimerStatus.matchStatus === 'MatchFinished'}
-                  onClick={() => setSelectedVerificationType('')} // Reset pilihan saat dialog dibuka
+                <Button
+                  className="w-full md:w-auto bg-yellow-500 hover:bg-yellow-600 text-black py-3 text-sm sm:text-base"
+                  disabled={isLoading || dewanTimerStatus.matchStatus === 'MatchFinished' || isCreatingVerification}
+                  onClick={() => setSelectedVerificationType('')}
                 >
-                  <Vote className="mr-2 h-4 w-4"/>Verifikasi Juri
+                  {isCreatingVerification ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Vote className="mr-2 h-4 w-4"/>}
+                  Verifikasi Juri
                 </Button>
               </DialogTrigger>
               <DialogContent className="sm:max-w-[425px]">
                 <DialogHeader>
                   <DialogTitle>Verifikasi Juri</DialogTitle>
                   <DialogDescription>
-                    Pilih jenis verifikasi yang ingin Anda ajukan kepada para juri.
+                    Pilih jenis verifikasi yang ingin Anda ajukan kepada para juri. Verifikasi sebelumnya yang masih 'pending' akan dibatalkan.
                   </DialogDescription>
                 </DialogHeader>
                 <div className="py-4">
-                  <RadioGroup value={selectedVerificationType} onValueChange={(value) => setSelectedVerificationType(value as 'jatuhan' | 'pelanggaran')}>
+                  <RadioGroup value={selectedVerificationType} onValueChange={(value) => setSelectedVerificationType(value as VerificationType)}>
                     <div className="flex items-center space-x-2">
                       <RadioGroupItem value="jatuhan" id="v-jatuhan" />
                       <Label htmlFor="v-jatuhan">Verifikasi Jatuhan</Label>
@@ -471,11 +484,12 @@ export default function KetuaPertandinganPage() {
                 </div>
                 <DialogFooter>
                   <DialogClose asChild>
-                    <Button type="button" variant="outline">
+                    <Button type="button" variant="outline" disabled={isCreatingVerification}>
                       Tutup
                     </Button>
                   </DialogClose>
-                  <Button type="button" onClick={handleCreateVerification} className="bg-primary hover:bg-primary/90 text-primary-foreground">
+                  <Button type="button" onClick={handleCreateVerification} className="bg-primary hover:bg-primary/90 text-primary-foreground" disabled={isCreatingVerification || !selectedVerificationType}>
+                    {isCreatingVerification ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
                     Buat Verifikasi
                   </Button>
                 </DialogFooter>
@@ -484,7 +498,7 @@ export default function KetuaPertandinganPage() {
 
             <Button onClick={handleTentukanPemenang} className="w-full md:w-auto bg-green-600 hover:bg-green-700 text-white py-3 text-sm sm:text-base" disabled={isLoading || dewanTimerStatus.matchStatus !== 'MatchFinished'}><Trophy className="mr-2 h-4 w-4"/>Tentukan Pemenang</Button>
           </div>
-          
+
           <div className="space-y-2">
             <div className="grid grid-cols-2 gap-2">
               <Button onClick={() => handleKetuaAction('biru', 'Jatuhan')} className="w-full py-3 text-xs sm:text-sm bg-blue-600 hover:bg-blue-700 text-white" disabled={isActionButtonDisabled}>Jatuhan</Button>
@@ -502,4 +516,3 @@ export default function KetuaPertandinganPage() {
     </div>
   );
 }
-

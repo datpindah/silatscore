@@ -1,15 +1,13 @@
 
-export type PesilatColor = 'Merah' | 'Biru'; // Tetap, tapi mungkin lebih baik 'merah' | 'biru' (lowercase) untuk konsistensi di kode
+export type PesilatColor = 'Merah' | 'Biru';
 
 export interface Pesilat {
   id: string;
   name: string;
   contingent: string;
-  color: PesilatColor; // Atau 'merah' | 'biru'
+  color: PesilatColor;
 }
 
-// Foul and Warning types below are more for data structure within a match summary
-// We will define more specific types for Official Actions input by Ketua
 export interface Foul {
   id: string;
   type: 'Teguran' | 'Peringatan I' | 'Peringatan II' | 'Diskualifikasi';
@@ -38,7 +36,7 @@ export interface PesilatMatchData {
   warnings: Warning[];
 }
 
-export interface Match { // This is a good overall structure for a completed match
+export interface Match {
   id: string;
   matchNumber: number;
   round: number;
@@ -82,36 +80,50 @@ export interface ScheduleTGR {
 export type AgeCategory = 'Pra-Usia Dini' | 'Usia Dini' | 'Pra-Remaja' | 'Remaja' | 'Dewasa' | 'Master';
 export const ageCategories: AgeCategory[] = ['Pra-Usia Dini', 'Usia Dini', 'Pra-Remaja', 'Remaja', 'Dewasa', 'Master'];
 
-
-// --- TYPES FOR KETUA PERTANDINGAN ACTIONS (NEW UI) ---
 export type PesilatColorIdentity = 'merah' | 'biru';
 export type KetuaActionType = 'Jatuhan' | 'Binaan' | 'Teguran' | 'Peringatan';
 
 export interface KetuaActionLogEntry {
-  id: string; // Firestore document ID
+  id: string;
   pesilatColor: PesilatColorIdentity;
-  actionType: KetuaActionType; // Tindakan yang dicatat (bisa Teguran meskipun dipicu oleh Binaan)
-  originalActionType?: KetuaActionType; // Tombol aktual yang ditekan, e.g., 'Binaan' jika dikonversi
+  actionType: KetuaActionType;
+  originalActionType?: KetuaActionType;
   round: 1 | 2 | 3;
-  timestamp: any; // Firestore Timestamp
-  points: number; // Poin aktual untuk tindakan INI (-1, -5, -10, 0, atau 3)
+  timestamp: any; 
+  points: number;
 }
 
 export const JATUHAN_POINTS = 3;
-export const TEGURAN_POINTS = -1; // Teguran selalu -1
-// Binaan yang dicatat sebagai Binaan memiliki 0 poin.
-// Binaan yang dikonversi menjadi Teguran akan menggunakan TEGURAN_POINTS.
+export const TEGURAN_POINTS = -1;
 export const PERINGATAN_POINTS_FIRST_PRESS = -5;
 export const PERINGATAN_POINTS_SECOND_PRESS = -10;
 
-// The old OfficialActionRecord, OfficialFoulType, etc., are being replaced by the above for Ketua Pertandingan page.
-// If other parts of the app use them, they might need to be kept or refactored.
-// For now, assuming Ketua Pertandingan new logic is self-contained with KetuaActionLogEntry.
 
-// --- END NEW TYPES ---
+// --- VERIFICATION TYPES ---
+export type VerificationType = 'jatuhan' | 'pelanggaran';
+export type VerificationStatus = 'pending' | 'completed' | 'cancelled';
+export type JuriVoteValue = 'merah' | 'biru' | 'invalid' | null;
 
-// Icons for fouls - could be actual SVGs or Lucide names
-// This might need to be updated if the old system is still used elsewhere
+export interface JuriVotes {
+  'juri-1': JuriVoteValue;
+  'juri-2': JuriVoteValue;
+  'juri-3': JuriVoteValue;
+}
+
+export interface VerificationRequest {
+  id: string; // Firestore document ID
+  matchId: string;
+  type: VerificationType;
+  status: VerificationStatus;
+  round: 1 | 2 | 3;
+  timestamp: any; // Firestore Timestamp
+  votes: JuriVotes;
+  result?: JuriVoteValue | 'tie'; // Final result of the verification
+  requestingOfficial: 'ketua'; // Initially only Ketua can request
+}
+// --- END VERIFICATION TYPES ---
+
+
 export const foulIcons: Record<string, string> = {
   'Teguran': 'MinusCircle',
   'Peringatan I': 'AlertTriangle',
@@ -119,6 +131,4 @@ export const foulIcons: Record<string, string> = {
   'Diskualifikasi': 'Ban',
   'Binaan': 'Info',
   'Peringatan Ketua': 'Megaphone',
-  // New types for Ketua specific display if needed, but table aggregates points.
 };
-
