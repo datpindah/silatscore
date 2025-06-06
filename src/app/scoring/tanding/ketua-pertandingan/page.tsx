@@ -41,14 +41,10 @@ const initialTimerStatus: TimerStatusFromDewan = {
 
 const ROUNDS = [1, 2, 3] as const;
 
-// Fungsi ini tidak lagi menghitung poin Binaan/Teguran bertingkat, logika itu pindah ke handleKetuaAction
-// Fungsi ini dipertahankan untuk Peringatan dan Jatuhan, atau jika ada logika poin lain di masa depan.
-// Namun, untuk Binaan dan Teguran, poin akan ditentukan langsung di handleKetuaAction.
-// Untuk Peringatan, kita masih bisa menggunakan countActionsInRound
 const countActionsInRound = (
   log: KetuaActionLogEntry[],
   pesilatColor: PesilatColorIdentity,
-  actionType: KetuaActionType, // Menghitung actionType yang tercatat
+  actionType: KetuaActionType,
   round: 1 | 2 | 3
 ): number => {
   return log.filter(
@@ -70,17 +66,19 @@ const calculateDisplayScoresForTable = (
   );
 
   let hukuman = 0;
-  let binaan = 0;
+  let binaan = 0; // Ini akan selalu 0 jika Binaan (0 poin) dicatat sebagai actionType Binaan
   let jatuhan = 0;
 
   roundActions.forEach(action => {
-    // Poin sudah tercatat dengan benar di action.points
     if (action.actionType === 'Teguran' || action.actionType === 'Peringatan') {
-      hukuman += action.points;
-    } else if (action.actionType === 'Binaan') { // Binaan yang tercatat akan memiliki poin 0
-      binaan += action.points;
+      hukuman += action.points; // Seharusnya poin negatif
+    } else if (action.actionType === 'Binaan') { 
+      // Binaan murni (0 poin) tidak menambah skor hukuman atau binaan di tabel ini,
+      // karena tabel ini menampilkan poin yang mengurangi/menambah.
+      // Jika diperlukan, kita bisa menampilkan jumlah binaan murni.
+      // Untuk saat ini, kita fokus pada poin.
     } else if (action.actionType === 'Jatuhan') {
-      jatuhan += action.points;
+      jatuhan += action.points; // Seharusnya poin positif
     }
   });
 
@@ -223,32 +221,34 @@ export default function KetuaPertandinganPage() {
         let originalActionTypeForLog: KetuaActionType | undefined = undefined;
 
         if (actionTypeButtonPressed === 'Teguran') {
+            actionTypeToLog = 'Teguran';
             pointsToLog = TEGURAN_POINTS; // Selalu -1
         } else if (actionTypeButtonPressed === 'Binaan') {
-            originalActionTypeForLog = 'Binaan'; // Tandai bahwa tombol Binaan yang ditekan
-            
-            // Hitung berapa kali tombol Binaan (yang menghasilkan Binaan atau Teguran) telah ditekan SEBELUMNYA
-            const binaanEventsInRound = ketuaActionsLog.filter(
+            // Hitung Binaan murni (yang actionType-nya Binaan) yang sudah tercatat untuk pesilat ini di babak ini
+            const pureBinaanCountInRound = ketuaActionsLog.filter(
                 logEntry =>
                     logEntry.pesilatColor === pesilatColor &&
                     logEntry.round === dewanTimerStatus.currentRound &&
-                    (logEntry.actionType === 'Binaan' || logEntry.originalActionType === 'Binaan')
+                    logEntry.actionType === 'Binaan' // Hanya yang actionType-nya Binaan, bukan yang hasil konversi
             ).length;
 
-            // Jika ini adalah tekanan tombol Binaan ke-2, ke-4, dst. (genap)
-            if ((binaanEventsInRound + 1) % 2 === 0) {
-                actionTypeToLog = 'Teguran'; // Catat sebagai Teguran
-                pointsToLog = TEGURAN_POINTS; // Poinnya -1
-            } else {
-                actionTypeToLog = 'Binaan'; // Catat sebagai Binaan
-                pointsToLog = 0; // Poinnya 0
+            if (pureBinaanCountInRound === 0) { 
+                // Ini adalah tekanan tombol Binaan pertama yang akan menghasilkan Binaan (0 poin)
+                actionTypeToLog = 'Binaan';
+                pointsToLog = 0;
+            } else { 
+                // Ini adalah tekanan tombol Binaan kedua atau lebih, akan menjadi Teguran (-1 poin)
+                actionTypeToLog = 'Teguran';
+                pointsToLog = TEGURAN_POINTS; // -1
+                originalActionTypeForLog = 'Binaan'; // Tandai bahwa ini berasal dari tombol Binaan
             }
         } else if (actionTypeButtonPressed === 'Peringatan') {
-            // Hitung berapa banyak Peringatan yang sudah tercatat untuk pesilat ini di babak ini
             const peringatanCount = countActionsInRound(ketuaActionsLog, pesilatColor, 'Peringatan', dewanTimerStatus.currentRound);
             pointsToLog = peringatanCount === 0 ? PERINGATAN_POINTS_FIRST_PRESS : PERINGATAN_POINTS_SECOND_PRESS;
+            actionTypeToLog = 'Peringatan';
         } else if (actionTypeButtonPressed === 'Jatuhan') {
             pointsToLog = JATUHAN_POINTS;
+            actionTypeToLog = 'Jatuhan';
         }
 
         const actionData: Omit<KetuaActionLogEntry, 'id'> = {
@@ -257,13 +257,9 @@ export default function KetuaPertandinganPage() {
             round: dewanTimerStatus.currentRound,
             timestamp: Timestamp.now(),
             points: pointsToLog,
+            ...(originalActionTypeForLog && { originalActionType: originalActionTypeForLog }),
         };
-
-        if (originalActionTypeForLog) {
-            // TypeScript needs assertion here if originalActionType is not part of Omit<>
-            (actionData as Partial<KetuaActionLogEntry>).originalActionType = originalActionTypeForLog;
-        }
-
+        
         await addDoc(collection(db, MATCHES_TANDING_COLLECTION, activeMatchId, OFFICIAL_ACTIONS_SUBCOLLECTION), actionData);
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : String(err);
@@ -303,8 +299,11 @@ export default function KetuaPertandinganPage() {
       const querySnapshot = await getDocs(q);
       let docToDeleteId: string | null = null;
 
+      // Cari log terakhir untuk pesilat dan babak yang sesuai
       for (const doc of querySnapshot.docs) {
           const action = { id: doc.id, ...doc.data() } as KetuaActionLogEntry;
+          // Logika baru: Hapus tindakan terakhir untuk pesilat tersebut di babak saat ini,
+          // tidak peduli actionType-nya. Ini menyederhanakan penghapusan.
           if (action.pesilatColor === pesilatColor && action.round === dewanTimerStatus.currentRound) {
               docToDeleteId = doc.id;
               break; 
@@ -450,13 +449,6 @@ export default function KetuaPertandinganPage() {
           </div>
         </div>
         {error && <div className="text-red-500 text-center mt-4 p-2 bg-red-100 border border-red-500 rounded-md">Error: {error}</div>}
-         {/* Display Ketua Actions Log for debugging */}
-        {/* <Card className="mt-6">
-            <CardHeader><CardTitle>Log Tindakan Ketua (Debug)</CardTitle></CardHeader>
-            <CardContent>
-                <pre className="text-xs whitespace-pre-wrap">{JSON.stringify(ketuaActionsLog, null, 2)}</pre>
-            </CardContent>
-        </Card> */}
       </main>
     </div>
   );
