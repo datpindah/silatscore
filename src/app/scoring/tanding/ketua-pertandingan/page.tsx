@@ -8,6 +8,9 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { ArrowLeft, Loader2, Trash2, ShieldCheck, Trophy, Vote, Play, Pause } from 'lucide-react';
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger, DialogClose } from "@/components/ui/dialog";
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
+import { Label } from "@/components/ui/label";
 import type { ScheduleTanding, KetuaActionLogEntry, PesilatColorIdentity, KetuaActionType } from '@/lib/types';
 import { JATUHAN_POINTS, TEGURAN_POINTS, PERINGATAN_POINTS_FIRST_PRESS, PERINGATAN_POINTS_SECOND_PRESS } from '@/lib/types';
 import { db } from '@/lib/firebase';
@@ -66,19 +69,18 @@ const calculateDisplayScoresForTable = (
   );
 
   let hukuman = 0;
-  let binaan = 0; // Ini akan selalu 0 jika Binaan (0 poin) dicatat sebagai actionType Binaan
+  let binaan = 0; 
   let jatuhan = 0;
 
   roundActions.forEach(action => {
     if (action.actionType === 'Teguran' || action.actionType === 'Peringatan') {
-      hukuman += action.points; // Seharusnya poin negatif
+      hukuman += action.points; 
     } else if (action.actionType === 'Binaan') { 
       // Binaan murni (0 poin) tidak menambah skor hukuman atau binaan di tabel ini,
       // karena tabel ini menampilkan poin yang mengurangi/menambah.
-      // Jika diperlukan, kita bisa menampilkan jumlah binaan murni.
-      // Untuk saat ini, kita fokus pada poin.
+       binaan += (action.points === 0 ? 1 : 0); // Menghitung jumlah kejadian binaan 0 poin
     } else if (action.actionType === 'Jatuhan') {
-      jatuhan += action.points; // Seharusnya poin positif
+      jatuhan += action.points; 
     }
   });
 
@@ -107,6 +109,10 @@ export default function KetuaPertandinganPage() {
   const [isSubmittingAction, setIsSubmittingAction] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+
+  const [isVerificationDialogOpen, setIsVerificationDialogOpen] = useState(false);
+  const [selectedVerificationType, setSelectedVerificationType] = useState<'jatuhan' | 'pelanggaran' | ''>('');
+
 
   const resetAllMatchData = useCallback(() => {
     setMatchDetails(null);
@@ -209,7 +215,7 @@ export default function KetuaPertandinganPage() {
       alert("Tidak bisa menambah tindakan: Pertandingan telah selesai.");
       return;
     }
-    if (!dewanTimerStatus.currentRound || ![1, 2, 3].includes(dewanTimerStatus.currentRound)) {
+     if (!dewanTimerStatus.currentRound || ![1, 2, 3].includes(dewanTimerStatus.currentRound)) {
       alert(`Tidak bisa menambah tindakan: Babak tidak valid (${dewanTimerStatus.currentRound || 'tidak diketahui'}). Harap tunggu Dewan memulai babak.`);
       return;
     }
@@ -224,23 +230,23 @@ export default function KetuaPertandinganPage() {
             actionTypeToLog = 'Teguran';
             pointsToLog = TEGURAN_POINTS; // Selalu -1
         } else if (actionTypeButtonPressed === 'Binaan') {
-            // Hitung Binaan murni (yang actionType-nya Binaan) yang sudah tercatat untuk pesilat ini di babak ini
+            originalActionTypeForLog = 'Binaan';
+            // Hitung Binaan murni (yang actionType-nya Binaan) yang sudah tercatat
             const pureBinaanCountInRound = ketuaActionsLog.filter(
                 logEntry =>
                     logEntry.pesilatColor === pesilatColor &&
                     logEntry.round === dewanTimerStatus.currentRound &&
-                    logEntry.actionType === 'Binaan' // Hanya yang actionType-nya Binaan, bukan yang hasil konversi
+                    logEntry.actionType === 'Binaan'
             ).length;
 
             if (pureBinaanCountInRound === 0) { 
-                // Ini adalah tekanan tombol Binaan pertama yang akan menghasilkan Binaan (0 poin)
+                // Ini adalah Binaan murni pertama
                 actionTypeToLog = 'Binaan';
                 pointsToLog = 0;
             } else { 
-                // Ini adalah tekanan tombol Binaan kedua atau lebih, akan menjadi Teguran (-1 poin)
+                // Binaan murni sudah pernah diberikan, ini jadi Teguran
                 actionTypeToLog = 'Teguran';
                 pointsToLog = TEGURAN_POINTS; // -1
-                originalActionTypeForLog = 'Binaan'; // Tandai bahwa ini berasal dari tombol Binaan
             }
         } else if (actionTypeButtonPressed === 'Peringatan') {
             const peringatanCount = countActionsInRound(ketuaActionsLog, pesilatColor, 'Peringatan', dewanTimerStatus.currentRound);
@@ -299,11 +305,8 @@ export default function KetuaPertandinganPage() {
       const querySnapshot = await getDocs(q);
       let docToDeleteId: string | null = null;
 
-      // Cari log terakhir untuk pesilat dan babak yang sesuai
       for (const doc of querySnapshot.docs) {
           const action = { id: doc.id, ...doc.data() } as KetuaActionLogEntry;
-          // Logika baru: Hapus tindakan terakhir untuk pesilat tersebut di babak saat ini,
-          // tidak peduli actionType-nya. Ini menyederhanakan penghapusan.
           if (action.pesilatColor === pesilatColor && action.round === dewanTimerStatus.currentRound) {
               docToDeleteId = doc.id;
               break; 
@@ -325,7 +328,17 @@ export default function KetuaPertandinganPage() {
     }
   };
   
-  const handleVerifikasiJuri = () => alert("Fungsi Verifikasi Juri belum diimplementasikan.");
+  const handleCreateVerification = () => {
+    if (!selectedVerificationType) {
+      alert("Silakan pilih jenis verifikasi terlebih dahulu.");
+      return;
+    }
+    console.log("Membuat Verifikasi untuk Tipe:", selectedVerificationType);
+    // Logika lebih lanjut untuk verifikasi bisa ditambahkan di sini
+    // Misalnya, mengirim data ke Firestore atau memicu state lain.
+    setIsVerificationDialogOpen(false); // Tutup dialog setelah aksi
+    setSelectedVerificationType(''); // Reset pilihan
+  };
   const handleTentukanPemenang = () => alert("Fungsi Tentukan Pemenang belum diimplementasikan.");
 
   const isActionButtonDisabled = isSubmittingAction || dewanTimerStatus.matchStatus === 'MatchFinished' || isLoading || !dewanTimerStatus.isTimerRunning;
@@ -364,7 +377,6 @@ export default function KetuaPertandinganPage() {
           </div>
         </div>
 
-        {/* Pesilat Info Row */}
         <div className="flex justify-between items-center mb-4 px-1">
           <div className="text-left">
             <div className="text-sm font-semibold text-red-600">KONTINGEN {pesilatMerahInfo?.contingent || (isLoading && activeMatchId ? <Skeleton className="h-4 w-16 inline-block" /> : '-')}</div>
@@ -376,7 +388,6 @@ export default function KetuaPertandinganPage() {
           </div>
         </div>
 
-        {/* Score Table */}
         <div className="mb-6 overflow-x-auto">
           <Table className="min-w-full border-collapse border border-gray-300 dark:border-gray-700">
             <TableHeader>
@@ -410,9 +421,7 @@ export default function KetuaPertandinganPage() {
           </Table>
         </div>
         
-        {/* Action Buttons Grid */}
         <div className="grid grid-cols-1 md:grid-cols-[1fr_auto_1fr] gap-4 md:gap-8 items-start">
-          {/* Pesilat Merah Actions */}
           <div className="space-y-2">
             <div className="grid grid-cols-2 gap-2">
               <Button onClick={() => handleKetuaAction('merah', 'Jatuhan')} className="w-full py-3 text-xs sm:text-sm bg-red-600 hover:bg-red-700 text-white" disabled={isActionButtonDisabled}>Jatuhan</Button>
@@ -425,17 +434,57 @@ export default function KetuaPertandinganPage() {
             </Button>
           </div>
 
-          {/* Central Timer Status and Buttons */}
           <div className="flex flex-col items-center justify-center space-y-3 md:pt-8 order-first md:order-none">
              <div className={cn("text-center p-2 rounded-md", dewanTimerStatus.isTimerRunning ? "bg-green-100 dark:bg-green-900" : "bg-gray-100 dark:bg-gray-700")}>
                 <div className="text-2xl font-mono font-bold text-gray-800 dark:text-gray-100">{dewanTimerStatus.isTimerRunning ? formatTime(dewanTimerStatus.timerSeconds) : "JEDA"}</div>
                 <div className="text-xs text-gray-500 dark:text-gray-400">Babak {dewanTimerStatus.currentRound || '?'} - {dewanTimerStatus.matchStatus || 'Menunggu'}</div>
             </div>
-            <Button onClick={handleVerifikasiJuri} className="w-full md:w-auto bg-yellow-500 hover:bg-yellow-600 text-black py-3 text-sm sm:text-base" disabled={isLoading}><Vote className="mr-2 h-4 w-4"/>Verifikasi Juri</Button>
+            
+            <Dialog open={isVerificationDialogOpen} onOpenChange={setIsVerificationDialogOpen}>
+              <DialogTrigger asChild>
+                <Button 
+                  className="w-full md:w-auto bg-yellow-500 hover:bg-yellow-600 text-black py-3 text-sm sm:text-base" 
+                  disabled={isLoading || dewanTimerStatus.matchStatus === 'MatchFinished'}
+                  onClick={() => setSelectedVerificationType('')} // Reset pilihan saat dialog dibuka
+                >
+                  <Vote className="mr-2 h-4 w-4"/>Verifikasi Juri
+                </Button>
+              </DialogTrigger>
+              <DialogContent className="sm:max-w-[425px]">
+                <DialogHeader>
+                  <DialogTitle>Verifikasi Juri</DialogTitle>
+                  <DialogDescription>
+                    Pilih jenis verifikasi yang ingin Anda ajukan kepada para juri.
+                  </DialogDescription>
+                </DialogHeader>
+                <div className="py-4">
+                  <RadioGroup value={selectedVerificationType} onValueChange={(value) => setSelectedVerificationType(value as 'jatuhan' | 'pelanggaran')}>
+                    <div className="flex items-center space-x-2">
+                      <RadioGroupItem value="jatuhan" id="v-jatuhan" />
+                      <Label htmlFor="v-jatuhan">Verifikasi Jatuhan</Label>
+                    </div>
+                    <div className="flex items-center space-x-2">
+                      <RadioGroupItem value="pelanggaran" id="v-pelanggaran" />
+                      <Label htmlFor="v-pelanggaran">Verifikasi Pelanggaran</Label>
+                    </div>
+                  </RadioGroup>
+                </div>
+                <DialogFooter>
+                  <DialogClose asChild>
+                    <Button type="button" variant="outline">
+                      Tutup
+                    </Button>
+                  </DialogClose>
+                  <Button type="button" onClick={handleCreateVerification} className="bg-primary hover:bg-primary/90 text-primary-foreground">
+                    Buat Verifikasi
+                  </Button>
+                </DialogFooter>
+              </DialogContent>
+            </Dialog>
+
             <Button onClick={handleTentukanPemenang} className="w-full md:w-auto bg-green-600 hover:bg-green-700 text-white py-3 text-sm sm:text-base" disabled={isLoading || dewanTimerStatus.matchStatus !== 'MatchFinished'}><Trophy className="mr-2 h-4 w-4"/>Tentukan Pemenang</Button>
           </div>
           
-          {/* Pesilat Biru Actions */}
           <div className="space-y-2">
             <div className="grid grid-cols-2 gap-2">
               <Button onClick={() => handleKetuaAction('biru', 'Jatuhan')} className="w-full py-3 text-xs sm:text-sm bg-blue-600 hover:bg-blue-700 text-white" disabled={isActionButtonDisabled}>Jatuhan</Button>
