@@ -7,7 +7,8 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow, TableCaption } from "@/components/ui/table";
-import { Download, Filter } from 'lucide-react';
+import { Download } from 'lucide-react';
+import * as XLSX from 'xlsx';
 
 const ageCategoriesRecap = ['Usia Dini', 'Pra-Remaja', 'Remaja', 'Dewasa'] as const;
 type AgeCategoryRecap = typeof ageCategoriesRecap[number];
@@ -23,27 +24,65 @@ export default function DataRecapPage() {
   const [selectedTgrCategory, setSelectedTgrCategory] = useState<string>(ALL_FILTER_VALUE);
 
   const handleDownloadTandingTemplate = () => {
-    const category = selectedTandingAge === ALL_FILTER_VALUE ? 'Semua Usia' : selectedTandingAge;
-    alert(`Mengunduh template XLSX data peserta Tanding untuk kategori: ${category}.`);
-    // Implement actual XLSX download logic here
+    const category = selectedTandingAge === ALL_FILTER_VALUE ? 'Semua Kategori Usia' : selectedTandingAge;
+    const fileName = `Template_Jadwal_Tanding_${category.replace(/\s+/g, '_')}.xlsx`;
+
+    const headers = [
+      "Nomor Pertandingan",
+      "Tanggal (YYYY-MM-DD)",
+      "Tempat Pertandingan",
+      "Nama Pesilat Merah",
+      "Kontingen Pesilat Merah",
+      "Nama Pesilat Biru",
+      "Kontingen Pesilat Biru",
+      "Babak",
+      "Kelas Tanding"
+    ];
+
+    const ws = XLSX.utils.aoa_to_sheet([headers]);
+    // Set column widths (optional, for better readability)
+    const colWidths = headers.map(header => ({ wch: header.length + 5 })); // Add some padding
+    ws['!cols'] = colWidths;
+
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "Jadwal Tanding");
+    XLSX.writeFile(wb, fileName);
+
+    alert(`Mengunduh template XLSX jadwal Tanding untuk kategori: ${category}.`);
   };
 
   const handleDownloadTGRTemplate = () => {
-    const ageCat = selectedTgrAge === ALL_FILTER_VALUE ? 'Semua Usia' : selectedTgrAge;
-    const tgrCat = selectedTgrCategory === ALL_FILTER_VALUE ? 'Semua Kategori TGR' : selectedTgrCategory;
-    alert(`Mengunduh template XLSX data peserta TGR untuk kategori usia: ${ageCat}, kategori TGR: ${tgrCat}.`);
-    // Implement actual XLSX download logic here
+    const ageCat = selectedTgrAge === ALL_FILTER_VALUE ? 'Semua_Kategori_Usia' : selectedTgrAge.replace(/\s+/g, '_');
+    const tgrCat = selectedTgrCategory === ALL_FILTER_VALUE ? 'Semua_Kategori_TGR' : selectedTgrCategory.replace(/\s+/g, '_');
+    const fileName = `Template_Jadwal_TGR_${ageCat}_${tgrCat}.xlsx`;
+
+    const headers = [
+      "Nomor Undian",
+      "Pool/Grup",
+      "Kategori (Tunggal/Ganda/Regu)",
+      "Nama Peserta (Pisahkan dengan koma)",
+      "Kontingen"
+    ];
+    
+    const ws = XLSX.utils.aoa_to_sheet([headers]);
+     const colWidths = headers.map(header => ({ wch: header.length + 5 }));
+    ws['!cols'] = colWidths;
+
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "Jadwal TGR");
+    XLSX.writeFile(wb, fileName);
+
+    alert(`Mengunduh template XLSX jadwal TGR untuk kategori usia: ${selectedTgrAge === ALL_FILTER_VALUE ? 'Semua Usia' : selectedTgrAge}, kategori TGR: ${selectedTgrCategory === ALL_FILTER_VALUE ? 'Semua Kategori TGR' : selectedTgrCategory}.`);
   };
 
   return (
     <>
-      <PageTitle title="Rekapitulasi & Template Data Peserta" description="Kelola dan unduh template untuk data peserta pertandingan Tanding dan TGR." />
+      <PageTitle title="Rekapitulasi & Template Data Jadwal" description="Unduh template untuk data jadwal pertandingan Tanding dan TGR." />
 
-      {/* Card untuk Rekap Data Tanding */}
       <Card className="mb-8 shadow-lg">
         <CardHeader>
-          <CardTitle className="text-2xl font-headline text-primary">Data Peserta Tanding</CardTitle>
-          <CardDescription>Filter berdasarkan kategori usia dan unduh template untuk diisi.</CardDescription>
+          <CardTitle className="text-2xl font-headline text-primary">Template Jadwal Tanding</CardTitle>
+          <CardDescription>Filter berdasarkan kategori usia dan unduh template jadwal Tanding untuk diisi.</CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="flex flex-col sm:flex-row gap-4 items-end">
@@ -63,28 +102,30 @@ export default function DataRecapPage() {
             </div>
             <Button onClick={handleDownloadTandingTemplate} className="w-full sm:w-auto bg-accent hover:bg-accent/90 text-accent-foreground">
               <Download className="mr-2 h-4 w-4" />
-              Download Template Tanding (.xlsx)
+              Download Template Jadwal Tanding (.xlsx)
             </Button>
           </div>
           <p className="text-xs text-muted-foreground">
-            Template ini digunakan untuk mengimpor data peserta ke halaman Jadwal Tanding.
+            Template ini digunakan untuk mengimpor data jadwal pertandingan ke halaman Jadwal Tanding.
           </p>
           <div className="mt-6">
             <Table>
-              <TableCaption>Contoh Struktur Data Peserta Tanding (Template)</TableCaption>
+              <TableCaption>Contoh Struktur Template Jadwal Tanding</TableCaption>
               <TableHeader>
                 <TableRow>
-                  <TableHead>No.</TableHead>
-                  <TableHead>Nama Peserta</TableHead>
-                  <TableHead>Kontingen</TableHead>
-                  <TableHead>Kelas Tanding</TableHead>
-                  <TableHead>Kategori Usia</TableHead>
+                  <TableHead>Nomor Pertandingan</TableHead>
+                  <TableHead>Tanggal</TableHead>
+                  <TableHead>Tempat</TableHead>
+                  <TableHead>Pesilat Merah</TableHead>
+                  <TableHead>Pesilat Biru</TableHead>
+                  <TableHead>Babak</TableHead>
+                  <TableHead>Kelas</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 <TableRow>
-                  <TableCell colSpan={5} className="text-center text-muted-foreground py-4">
-                    Data peserta akan ditampilkan di sini setelah diunggah, atau ini adalah format template.
+                  <TableCell colSpan={7} className="text-center text-muted-foreground py-4">
+                    Template akan berisi header: Nomor Pertandingan, Tanggal, Tempat, Nama Pesilat Merah, Kontingen Merah, Nama Pesilat Biru, Kontingen Biru, Babak, Kelas Tanding.
                   </TableCell>
                 </TableRow>
               </TableBody>
@@ -93,11 +134,10 @@ export default function DataRecapPage() {
         </CardContent>
       </Card>
 
-      {/* Card untuk Rekap Data TGR */}
       <Card className="shadow-lg">
         <CardHeader>
-          <CardTitle className="text-2xl font-headline text-primary">Data Peserta TGR</CardTitle>
-          <CardDescription>Filter berdasarkan kategori usia dan TGR, lalu unduh template.</CardDescription>
+          <CardTitle className="text-2xl font-headline text-primary">Template Jadwal TGR</CardTitle>
+          <CardDescription>Filter berdasarkan kategori usia dan TGR, lalu unduh template jadwal TGR.</CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="flex flex-col sm:flex-row gap-4 items-end flex-wrap">
@@ -131,28 +171,28 @@ export default function DataRecapPage() {
             </div>
             <Button onClick={handleDownloadTGRTemplate} className="w-full sm:w-auto bg-accent hover:bg-accent/90 text-accent-foreground">
               <Download className="mr-2 h-4 w-4" />
-              Download Template TGR (.xlsx)
+              Download Template Jadwal TGR (.xlsx)
             </Button>
           </div>
            <p className="text-xs text-muted-foreground">
-            Template ini digunakan untuk mengimpor data peserta ke halaman Jadwal TGR.
+            Template ini digunakan untuk mengimpor data jadwal pertandingan ke halaman Jadwal TGR.
           </p>
           <div className="mt-6">
             <Table>
-              <TableCaption>Contoh Struktur Data Peserta TGR (Template)</TableCaption>
+              <TableCaption>Contoh Struktur Template Jadwal TGR</TableCaption>
               <TableHeader>
                 <TableRow>
-                  <TableHead>No.</TableHead>
+                  <TableHead>No. Undian</TableHead>
+                  <TableHead>Pool/Grup</TableHead>
+                  <TableHead>Kategori</TableHead>
                   <TableHead>Nama Peserta/Tim</TableHead>
                   <TableHead>Kontingen</TableHead>
-                  <TableHead>Kategori TGR</TableHead>
-                  <TableHead>Kategori Usia</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 <TableRow>
                   <TableCell colSpan={5} className="text-center text-muted-foreground py-4">
-                    Data peserta akan ditampilkan di sini setelah diunggah, atau ini adalah format template.
+                    Template akan berisi header: Nomor Undian, Pool/Grup, Kategori, Nama Peserta, Kontingen.
                   </TableCell>
                 </TableRow>
               </TableBody>
