@@ -12,6 +12,8 @@ import { db } from '@/lib/firebase';
 import { doc, onSnapshot, getDoc, collection, query, orderBy, limit, Timestamp } from 'firebase/firestore';
 import { cn } from '@/lib/utils';
 import { Skeleton } from '@/components/ui/skeleton';
+import { DialogTitle } from '@/components/ui/dialog';
+
 
 const ACTIVE_TANDING_SCHEDULE_CONFIG_PATH = 'app_settings/active_match_tanding';
 const SCHEDULE_TANDING_COLLECTION = 'schedules_tanding';
@@ -194,7 +196,7 @@ export default function MonitoringSkorPage() {
             if (latestVerification.status === 'pending') {
               setActiveDisplayVerificationRequest(latestVerification);
               setIsDisplayVerificationModalOpen(true);
-            } else { // If not pending (e.g., completed, cancelled), close modal
+            } else { 
               setActiveDisplayVerificationRequest(null);
               setIsDisplayVerificationModalOpen(false);
             }
@@ -222,7 +224,7 @@ export default function MonitoringSkorPage() {
 
     loadData(activeScheduleId);
     return () => { mounted = false; unsubscribers.forEach(unsub => unsub()); };
-  }, [activeScheduleId, matchDetailsLoaded]); // Removed resetMatchDisplayData from deps as it's stable
+  }, [activeScheduleId, matchDetailsLoaded]); 
 
   useEffect(() => {
     if (isLoading && (matchDetailsLoaded || activeScheduleId === null)) {
@@ -502,7 +504,7 @@ export default function MonitoringSkorPage() {
             </div>
           </div>
 
-          <div className="flex flex-col gap-0.5 md:gap-1 w-full">
+          <div className="flex flex-col gap-0.5 md:gap-1 w-full mt-4"> {/* Added mt-4 here */}
             <div className="flex gap-0.5 md:gap-1">
               {JURI_IDS.map(id => <JuriInputIndicator key={`biru-pukulan-${id}`} juri={id} type="pukulan" pesilatColor="biru" />)}
             </div>
@@ -573,7 +575,7 @@ export default function MonitoringSkorPage() {
             </div>
           </div>
 
-          <div className="flex flex-col gap-0.5 md:gap-1 w-full">
+          <div className="flex flex-col gap-0.5 md:gap-1 w-full mt-4"> {/* Added mt-4 here */}
             <div className="flex gap-0.5 md:gap-1">
               {JURI_IDS.map(id => <JuriInputIndicator key={`merah-pukulan-${id}`} juri={id} type="pukulan" pesilatColor="merah" />)}
             </div>
@@ -593,7 +595,7 @@ export default function MonitoringSkorPage() {
             onPointerDownOutside={(e) => {if (activeDisplayVerificationRequest?.status === 'pending') e.preventDefault();}}
             onEscapeKeyDown={(e) => {if (activeDisplayVerificationRequest?.status === 'pending') e.preventDefault();}}
           >
-            <RadixDialogTitle className="sr-only">Konfirmasi Verifikasi Juri</RadixDialogTitle>
+            <DialogTitle className="sr-only">Konfirmasi Verifikasi Juri</DialogTitle>
             <DialogHeader className="text-center">
               <RadixDialogTitle className="text-2xl md:text-3xl font-bold font-headline text-[var(--monitor-dialog-title-text)]">
                 Verifikasi Juri
@@ -646,4 +648,3 @@ export default function MonitoringSkorPage() {
     </div>
   );
 }
-
