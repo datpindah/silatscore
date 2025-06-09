@@ -1,7 +1,7 @@
 
 "use client";
 
-import { useState, type FormEvent, type ChangeEvent, useEffect, useCallback } from 'react';
+import { useState, type FormEvent, type ChangeEvent, useEffect, useCallback, useRef } from 'react';
 import { PageTitle } from '@/components/shared/PageTitle';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardFooter } from '@/components/ui/card';
@@ -36,7 +36,7 @@ export default function ScheduleTandingPage() {
   const [isEditing, setIsEditing] = useState<string | null>(null);
   const [activeScheduleId, setActiveScheduleId] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
-  const fileInputRef = React.useRef<HTMLInputElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Fetch active schedule ID
   useEffect(() => {
@@ -389,3 +389,4 @@ export default function ScheduleTandingPage() {
     </>
   );
 }
+
