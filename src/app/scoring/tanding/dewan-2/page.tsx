@@ -308,11 +308,11 @@ export default function DewanDuaPage() {
           <table className="w-full border-collapse border border-black bg-white dark:bg-gray-800">
             <thead>
               <tr>
-                <th className="bg-red-600 text-white text-center p-1 md:p-2 border border-black text-xs md:text-sm">TOTAL</th>
-                <th className="bg-red-600 text-white text-center p-1 md:p-2 border border-black text-xs md:text-sm" colSpan={2}>MERAH - DETAIL POIN</th>
+                <th className="bg-red-600 text-white text-center p-1 md:p-2 border border-black text-xs md:text-sm align-top">TOTAL</th>
+                <th className="bg-red-600 text-white text-center p-1 md:p-2 border border-black text-xs md:text-sm align-top" colSpan={2}>MERAH - DETAIL POIN</th>
                 <th className="bg-gray-700 text-white text-center p-1 md:p-2 border border-black align-middle text-xs md:text-sm row-span-2">BABAK</th>
-                <th className="bg-blue-600 text-white text-center p-1 md:p-2 border border-black text-xs md:text-sm" colSpan={2}>BIRU - DETAIL POIN</th>
-                <th className="bg-blue-600 text-white text-center p-1 md:p-2 border border-black text-xs md:text-sm">TOTAL</th>
+                <th className="bg-blue-600 text-white text-center p-1 md:p-2 border border-black text-xs md:text-sm align-top" colSpan={2}>BIRU - DETAIL POIN</th>
+                <th className="bg-blue-600 text-white text-center p-1 md:p-2 border border-black text-xs md:text-sm align-top">TOTAL</th>
               </tr>
               <tr>
                 <th className="bg-red-400 text-white text-center p-1 md:p-2 border border-black text-xs md:text-sm">Skor Babak Ini</th>
@@ -386,7 +386,3 @@ export default function DewanDuaPage() {
     </div>
   );
 }
-
-    
-
-    
