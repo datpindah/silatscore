@@ -185,13 +185,10 @@ export default function MonitoringSkorPage() {
               setActiveDisplayVerificationRequest(latestVerification);
               setIsDisplayVerificationModalOpen(true);
             } else {
-              // If the latest verification is NOT pending (completed, cancelled),
-              // then NO verification modal should be open.
               setActiveDisplayVerificationRequest(null);
               setIsDisplayVerificationModalOpen(false);
             }
           } else {
-            // No verifications found
             setActiveDisplayVerificationRequest(null);
             setIsDisplayVerificationModalOpen(false);
           }
@@ -271,25 +268,41 @@ export default function MonitoringSkorPage() {
 
   const getFoulStatus = (pesilatColor: PesilatColorIdentity, type: KetuaActionType, count: number): boolean => {
     if (!timerStatus || !timerStatus.currentRound) return false;
+    
+    if (type === "Binaan") {
+      const pureBinaanActions = ketuaActionsLog.filter(
+        log => log.pesilatColor === pesilatColor &&
+               log.round === timerStatus.currentRound &&
+               log.actionType === 'Binaan' &&
+               !log.originalActionType
+      );
+      const convertedBinaanToTeguranActions = ketuaActionsLog.filter(
+        log => log.pesilatColor === pesilatColor &&
+               log.round === timerStatus.currentRound &&
+               log.actionType === 'Teguran' &&
+               log.originalActionType === 'Binaan'
+      );
+
+      if (count === 1) { // For B1 indicator
+        return pureBinaanActions.length >= 1;
+      }
+      if (count === 2) { // For B2 indicator
+        return pureBinaanActions.length >= 1 && convertedBinaanToTeguranActions.length >= 1;
+      }
+      return false;
+    }
+
     const actionsInRound = ketuaActionsLog.filter(
       action => action.pesilatColor === pesilatColor &&
                 action.round === timerStatus.currentRound &&
                 action.actionType === type
     );
-    if (type === "Binaan") {
-       const binaanAsliCount = ketuaActionsLog.filter(
-        log => log.pesilatColor === pesilatColor &&
-               log.round === timerStatus.currentRound &&
-               log.actionType === 'Binaan' &&
-               !log.originalActionType
-      ).length;
-      return binaanAsliCount >= count;
-    }
-    if (type === "Teguran") {
+    
+    if (type === "Teguran") { // This will count Teguran that were originally Binaan, and direct Teguran
         const teguranCount = ketuaActionsLog.filter(
             log => log.pesilatColor === pesilatColor &&
                    log.round === timerStatus.currentRound &&
-                   (log.actionType === 'Teguran' || (log.actionType === 'Teguran' && log.originalActionType === 'Binaan'))
+                   log.actionType === 'Teguran' 
         ).length;
         return teguranCount >= count;
     }
