@@ -366,7 +366,7 @@ export default function MonitoringSkorPage() {
         log => log.pesilatColor === pesilatColor &&
                log.round === timerStatus.currentRound &&
                log.actionType === 'Binaan' &&
-               typeof log.originalActionType === 'undefined' 
+               typeof log.originalActionType === 'undefined'
       );
       const convertedBinaanToTeguranActions = ketuaActionsLog.filter(
         log => log.pesilatColor === pesilatColor &&
@@ -516,7 +516,7 @@ export default function MonitoringSkorPage() {
                 <div
                   key={`babak-indicator-${b}`}
                   className={cn(
-                    "w-full py-1 md:py-1.5 border-2 flex items-center justify-center text-xs md:text-sm font-semibold rounded-md",
+                    "w-full py-1.5 md:py-2 border-2 flex items-center justify-center text-xs md:text-sm font-semibold rounded-md",
                     timerStatus.currentRound === b
                       ? "bg-[var(--monitor-babak-indicator-active-bg)] text-[var(--monitor-babak-indicator-active-text)] border-[var(--monitor-babak-indicator-active-border)]"
                       : "bg-[var(--monitor-babak-indicator-inactive-bg)] text-[var(--monitor-babak-indicator-inactive-text)] border-[var(--monitor-babak-indicator-inactive-border)]"
