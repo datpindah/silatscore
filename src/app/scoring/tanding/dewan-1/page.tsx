@@ -110,7 +110,7 @@ export default function ScoringTandingDewanSatuPage() {
       setConfigMatchId(null);
     });
     return () => unsubConfig();
-  }, []); // configMatchId removed as per previous successful modification
+  }, []); 
 
   useEffect(() => {
     let unsubscribers: (() => void)[] = [];
@@ -118,7 +118,7 @@ export default function ScoringTandingDewanSatuPage() {
 
     const resetAllMatchData = (reason: string) => {
       if (!mounted) return;
-      setActiveScheduleId(null);
+      // setActiveScheduleId(null); // This is set by the main effect logic
       setMatchDetails(null);
       setMatchDetailsLoaded(false);
       setPesilatMerahInfo(null);
@@ -135,15 +135,16 @@ export default function ScoringTandingDewanSatuPage() {
     };
 
     if (configMatchId === undefined) {
-      if (!isLoading) setIsLoading(true);
+      setIsLoading(true);
       return;
     }
 
     if (configMatchId === null) {
       if (activeScheduleId !== null) {
         resetAllMatchData("configMatchId became null");
+        setActiveScheduleId(null);
       }
-      if (isLoading) setIsLoading(false);
+      setIsLoading(false);
       setError("Tidak ada jadwal pertandingan yang aktif.");
       return;
     }
@@ -151,13 +152,16 @@ export default function ScoringTandingDewanSatuPage() {
     if (configMatchId !== activeScheduleId) {
       resetAllMatchData(`configMatchId changed from ${activeScheduleId} to ${configMatchId}`);
       setActiveScheduleId(configMatchId);
-      if (!isLoading) setIsLoading(true);
+      setIsLoading(true); // Set loading for the new match ID; actual data load in next effect run
       return;
     }
 
+    // At this point, configMatchId is a valid string AND configMatchId === activeScheduleId
+    // This is where we ensure loading is true and then call loadData for the activeScheduleId
+    setIsLoading(true);
+
     const loadData = async (currentMatchId: string) => {
       if (!mounted || !currentMatchId) return;
-      if (!isLoading) setIsLoading(true);
 
       try {
         const scheduleDocRef = doc(db, SCHEDULE_TANDING_COLLECTION, currentMatchId);
@@ -176,7 +180,8 @@ export default function ScoringTandingDewanSatuPage() {
           if (mounted) {
             setError(`Detail jadwal untuk ID ${currentMatchId} dari path '${SCHEDULE_TANDING_COLLECTION}/${currentMatchId}' tidak ditemukan.`);
             resetAllMatchData(`Schedule doc ${currentMatchId} not found`);
-            if (isLoading) setIsLoading(false);
+            // setIsLoading(false); // This will be handled by the score calculation useEffect
+            setMatchDetailsLoaded(false); // Ensure this is reset
           }
           return;
         }
@@ -257,41 +262,53 @@ export default function ScoringTandingDewanSatuPage() {
         });
         if (mounted) unsubscribers.push(unsubKetuaActions);
 
-
       } catch (err) {
         if (mounted) {
           console.error("[Dewan-1] Error in loadData function:", err);
           setError("Gagal memuat data pertandingan.");
-          if (isLoading) setIsLoading(false);
+          // setIsLoading(false); // Handled by score calculation useEffect
         }
       }
     };
 
     if (activeScheduleId) {
       loadData(activeScheduleId);
-    } else if (isLoading && configMatchId === null) {
-      setIsLoading(false);
     }
+    // setIsLoading(false) is handled by the score calculation useEffect
+    // else if (isLoading && configMatchId === null) { // This was already handled at the top
+    //   setIsLoading(false);
+    // }
 
     return () => {
       mounted = false;
       unsubscribers.forEach(unsub => unsub());
     };
-  }, [configMatchId, activeScheduleId, isLoading]);
+  }, [configMatchId, activeScheduleId]); // isLoading REMOVED from dependencies
 
 
   useEffect(() => {
-    if (!activeScheduleId || !matchDetailsLoaded || juri1Scores === undefined || juri2Scores === undefined || juri3Scores === undefined) {
-        let shouldBeLoading = true;
-        if (!activeScheduleId && configMatchId === null) shouldBeLoading = false;
-        else if (activeScheduleId && (!matchDetailsLoaded || juri1Scores === undefined || juri2Scores === undefined || juri3Scores === undefined)) shouldBeLoading = true;
-        else if (configMatchId === undefined) shouldBeLoading = true;
-        else shouldBeLoading = false;
-
-        if (isLoading !== shouldBeLoading) setIsLoading(shouldBeLoading);
-        if (shouldBeLoading) return;
+    // This effect determines when all necessary data is loaded to stop the main loading indicator
+    // and then calculates scores.
+    let shouldBeLoading = false;
+    if (!activeScheduleId && configMatchId === null) { // No match, so not loading
+        shouldBeLoading = false;
+    } else if (activeScheduleId && (!matchDetailsLoaded || juri1Scores === undefined || juri2Scores === undefined || juri3Scores === undefined)) {
+        // Active match, but details or initial juri states not ready
+        shouldBeLoading = true;
+    } else if (configMatchId === undefined) { // Config still being fetched
+        shouldBeLoading = true;
+    } else if (!activeScheduleId && configMatchId !== null) { // Config points to a match, but activeScheduleId hasn't caught up
+        shouldBeLoading = true;
     }
-    if (isLoading) setIsLoading(false);
+
+
+    if (isLoading !== shouldBeLoading) {
+        setIsLoading(shouldBeLoading);
+    }
+    if (shouldBeLoading) return; // Don't proceed to score calculation if still loading
+
+    // If we reach here, isLoading should be false (or will be set to false)
+    // and all essential data for score calculation is assumed to be available.
 
     const allJuriDataInput = [juri1Scores, juri2Scores, juri3Scores].filter(Boolean) as JuriMatchDataWithId[];
     if (allJuriDataInput.length === 0 && prevSavedUnstruckKeys.size === 0 && prevSavedStruckKeys.size === 0 && ketuaActionsLog.length === 0) {
@@ -420,7 +437,6 @@ export default function ScoringTandingDewanSatuPage() {
         }
     });
 
-    // Removed Math.max(0, ...) to allow negative scores
     setConfirmedScoreMerah(calculatedTotalMerah);
     setConfirmedScoreBiru(calculatedTotalBiru);
 
@@ -449,7 +465,7 @@ export default function ScoringTandingDewanSatuPage() {
           }).catch(err => console.error(`[Dewan-1] Error updating Firestore logs at path '${matchDocPath}':`, err));
       }
     }
-  }, [juri1Scores, juri2Scores, juri3Scores, activeScheduleId, matchDetailsLoaded, prevSavedUnstruckKeys, prevSavedStruckKeys, ketuaActionsLog, isLoading]); // Added isLoading dependency
+  }, [juri1Scores, juri2Scores, juri3Scores, activeScheduleId, matchDetailsLoaded, prevSavedUnstruckKeys, prevSavedStruckKeys, ketuaActionsLog, configMatchId]); // isLoading REMOVED from dependencies, added configMatchId to re-evaluate loading status
 
 
   useEffect(() => {
@@ -537,10 +553,10 @@ export default function ScoringTandingDewanSatuPage() {
                                    ? docSnap.data()?.timer_status as TimerStatus
                                    : timerStatus;
 
-      const newFullStatus: TimerStatus = { // Ensure newFullStatus conforms to TimerStatus
+      const newFullStatus: TimerStatus = { 
         ...currentDBTimerStatus,
         ...newStatusUpdates,
-        roundDuration: currentDBTimerStatus.roundDuration || ROUND_DURATION_SECONDS // Ensure roundDuration is present
+        roundDuration: currentDBTimerStatus.roundDuration || ROUND_DURATION_SECONDS 
       };
       await setDoc(matchDocRef, { timer_status: newFullStatus }, { merge: true });
     } catch (e) {
@@ -591,7 +607,6 @@ export default function ScoringTandingDewanSatuPage() {
             newTimerSeconds = ROUND_DURATION_SECONDS;
         }
     } else if (timerStatus.matchStatus.startsWith('PausedForVerificationRound')) {
-        // If changing babak from verification pause, default to Pending of new babak
         newMatchStatus = 'Pending';
         newTimerSeconds = ROUND_DURATION_SECONDS;
     }
@@ -623,11 +638,10 @@ export default function ScoringTandingDewanSatuPage() {
     }
     
     if (isPausedForVerification && timerStatus.currentRound <= TOTAL_ROUNDS) {
-        // If paused for verification, next action should be to start the current round again
         updateTimerStatusInFirestore({
-            timerSeconds: timerStatus.timerSeconds, // Keep remaining time if any
-            isTimerRunning: false, // Dewan should press start
-            matchStatus: 'Pending', // Allow Dewan to start when ready
+            timerSeconds: timerStatus.timerSeconds, 
+            isTimerRunning: false, 
+            matchStatus: 'Pending', 
         });
         return;
     }
@@ -682,7 +696,6 @@ export default function ScoringTandingDewanSatuPage() {
             batch.delete(doc.ref);
         });
         
-        // Also delete verifications
         const verificationsCollectionRef = collection(db, MATCHES_TANDING_COLLECTION, activeScheduleId, 'verifications');
         const verificationsSnapshot = await getDocs(verificationsCollectionRef);
         verificationsSnapshot.forEach((doc) => {
@@ -997,3 +1010,5 @@ export default function ScoringTandingDewanSatuPage() {
   );
 }
 
+
+    
