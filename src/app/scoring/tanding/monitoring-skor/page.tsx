@@ -6,7 +6,7 @@ import Link from 'next/link';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription as DialogVerificationDescription } from "@/components/ui/dialog";
 import { ArrowLeft, Eye, Loader2, RadioTower, AlertTriangle } from 'lucide-react';
-import type { ScheduleTanding, TimerStatus, VerificationRequest, JuriVoteValue, KetuaActionLogEntry, PesilatColorIdentity, KetuaActionType, RoundScores } from '@/lib/types'; // Removed FullJuriMatchData as DisplayJuriMatchData is used locally
+import type { ScheduleTanding, TimerStatus, VerificationRequest, JuriVoteValue, KetuaActionLogEntry, PesilatColorIdentity, KetuaActionType, RoundScores, TimerMatchStatus } from '@/lib/types';
 import { db } from '@/lib/firebase';
 import { doc, onSnapshot, getDoc, collection, query, orderBy, limit, Timestamp } from 'firebase/firestore';
 import { cn } from '@/lib/utils';
@@ -33,26 +33,11 @@ const initialTimerStatus: TimerStatus = {
   roundDuration: 120,
 };
 
-// Simplified JuriMatchData for monitoring display
 interface DisplayJuriMatchData {
   merah: RoundScores;
   biru: RoundScores;
   lastUpdated?: Timestamp;
 }
-
-
-const FistIcon = () => (
-  <svg viewBox="0 0 24 24" fill="currentColor" className="w-5 h-5 md:w-6 md:h-6 inline-block">
-    <path d="M16.5 9.4C16.5 8.29543 17.3954 7.4 18.5 7.4C19.6046 7.4 20.5 8.29543 20.5 9.4V12.4C20.5 13.5046 19.6046 14.4 18.5 14.4H15.5C14.3954 14.4 13.5 13.5046 13.5 12.4V9.4C13.5 8.29543 14.3954 7.4 15.5 7.4C16.6046 7.4 17.5 8.29543 17.5 9.4H16.5ZM9.5 9.4C9.5 8.29543 10.3954 7.4 11.5 7.4C12.6046 7.4 13.5 8.29543 13.5 9.4V12.4C13.5 13.5046 12.6046 14.4 11.5 14.4H8.5C7.39543 14.4 6.5 13.5046 6.5 12.4V9.4C6.5 8.29543 7.39543 7.4 8.5 7.4C9.60457 7.4 10.5 8.29543 10.5 9.4H9.5ZM4.5 11.4C4.5 10.2954 5.39543 9.4 6.5 9.4C7.60457 9.4 8.5 10.2954 8.5 11.4V13.4C8.5 14.5046 7.60457 15.4 6.5 15.4H4C2.89543 15.4 2 14.5046 2 13.4V12.9C2 11.8333 2.56667 11.4 4.5 11.4Z"/>
-  </svg>
-);
-
-const KickIcon = () => (
-  <svg viewBox="0 0 24 24" fill="currentColor" className="w-5 h-5 md:w-6 md:h-6 inline-block">
-    <path d="M14.07 13.02L12.66 11.61L8.5 15.77L9.91 17.18L14.07 13.02M17.71 5.29L16.29 6.71L12.13 10.87L13.54 12.28L19.13 6.7L17.71 5.29M6.46 8.09L5.05 9.5L2 12.54L3.41 13.95L6.46 10.91L9.29 13.75L10.71 12.33L6.46 8.09Z"/>
-  </svg>
-);
-
 
 export default function MonitoringSkorPage() {
   const [configMatchId, setConfigMatchId] = useState<string | null | undefined>(undefined);
@@ -63,8 +48,8 @@ export default function MonitoringSkorPage() {
   const [pesilatBiruInfo, setPesilatBiruInfo] = useState<PesilatDisplayInfo | null>(null);
 
   const [timerStatus, setTimerStatus] = useState<TimerStatus>(initialTimerStatus);
-  const [confirmedScoreMerah, setConfirmedScoreMerah] = useState(0); // Placeholder
-  const [confirmedScoreBiru, setConfirmedScoreBiru] = useState(0); // Placeholder
+  const [confirmedScoreMerah, setConfirmedScoreMerah] = useState(0); 
+  const [confirmedScoreBiru, setConfirmedScoreBiru] = useState(0); 
 
   const [ketuaActionsLog, setKetuaActionsLog] = useState<KetuaActionLogEntry[]>([]);
   const [juriScoresData, setJuriScoresData] = useState<Record<string, DisplayJuriMatchData | null>>({
@@ -164,10 +149,8 @@ export default function MonitoringSkorPage() {
           if (docSnap.exists()) {
             const data = docSnap.data();
             if (data?.timer_status) setTimerStatus(data.timer_status as TimerStatus);
-            // TODO: Replicate Dewan 1's score calculation logic here if precise scores are needed.
-            // For now, using placeholders or direct values if available.
-            // setConfirmedScoreMerah(data.calculatedMerahScore || 0); 
-            // setConfirmedScoreBiru(data.calculatedBiruScore || 0);
+            // TODO: Implement score calculation similar to Dewan 1 if needed for confirmed scores
+            // For now, confirmed scores are placeholders.
           } else { 
             setTimerStatus(initialTimerStatus); 
             setConfirmedScoreMerah(0); setConfirmedScoreBiru(0);
@@ -201,7 +184,6 @@ export default function MonitoringSkorPage() {
               setActiveDisplayVerificationRequest(latestVerification);
               setIsDisplayVerificationModalOpen(true);
             } else { 
-              // Only close if the currently displayed verification is the one that's no longer pending
               if (activeDisplayVerificationRequest?.id === latestVerification.id) {
                 setActiveDisplayVerificationRequest(null); 
                 setIsDisplayVerificationModalOpen(false); 
@@ -231,7 +213,7 @@ export default function MonitoringSkorPage() {
 
     loadData(activeScheduleId);
     return () => { mounted = false; unsubscribers.forEach(unsub => unsub()); };
-  }, [activeScheduleId]);
+  }, [activeScheduleId, matchDetailsLoaded]); // Removed isLoading from here as it's managed inside
 
   useEffect(() => {
     if (activeScheduleId && !matchDetailsLoaded && !error?.includes("Detail jadwal ID")) {
@@ -316,10 +298,9 @@ export default function MonitoringSkorPage() {
     return actionsInRound.length >= count;
   };
 
-
   const FoulBox = ({ label, isActive }: { label: string; isActive: boolean }) => (
     <div className={cn(
-      "w-full h-5 md:h-6 flex items-center justify-center rounded-sm border border-gray-400 dark:border-gray-500 text-[9px] md:text-[10px] font-medium leading-tight",
+      "w-full h-full flex items-center justify-center rounded-sm border border-gray-400 dark:border-gray-500 text-[9px] md:text-[10px] font-medium leading-tight",
       isActive 
         ? "bg-yellow-400 text-black" 
         : "bg-gray-200 dark:bg-gray-600 text-gray-700 dark:text-gray-200"
@@ -342,8 +323,20 @@ export default function MonitoringSkorPage() {
     if (vote === 'merah') return "bg-red-600 text-white";
     if (vote === 'biru') return "bg-blue-600 text-white";
     if (vote === 'invalid') return "bg-yellow-400 text-black";
-    return "bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"; // Default for "Belum Vote"
+    return "bg-gray-300 dark:bg-gray-700 text-gray-900 dark:text-gray-100";
   };
+  
+  const getMatchStatusTextForMonitor = (): string => {
+    if (!timerStatus) return "Memuat status...";
+    if (timerStatus.matchStatus.startsWith("OngoingRound")) return `Babak ${timerStatus.currentRound} Berlangsung`;
+    if (timerStatus.matchStatus.startsWith("PausedRound")) return `Babak ${timerStatus.currentRound} Jeda`;
+    if (timerStatus.matchStatus.startsWith("FinishedRound")) return `Babak ${timerStatus.currentRound} Selesai`;
+    if (timerStatus.matchStatus.startsWith("PausedForVerificationRound")) return `Babak ${timerStatus.currentRound} Verifikasi`;
+    if (timerStatus.matchStatus === 'MatchFinished') return "Pertandingan Selesai";
+    if (timerStatus.matchStatus === 'Pending') return `Babak ${timerStatus.currentRound} Menunggu`;
+    return timerStatus.matchStatus || "Status Tidak Diketahui";
+  };
+
 
   if (isLoading && configMatchId === undefined) { 
     return (
@@ -353,7 +346,6 @@ export default function MonitoringSkorPage() {
         </div>
     ); 
   }
-
 
   return (
     <div className="flex flex-col min-h-screen bg-gray-700 text-white font-sans overflow-hidden">
@@ -373,17 +365,23 @@ export default function MonitoringSkorPage() {
             <div className="text-xs md:text-base text-blue-400">{pesilatBiruInfo?.contingent || <Skeleton className="h-4 w-24 bg-gray-600 mt-1" />}</div>
           </div>
           
-          <div className="flex w-full items-center gap-1 md:gap-2 mb-1 md:mb-2">
-            <div className="grid grid-cols-2 gap-1 p-0.5 w-14 md:w-16">
-                <FoulBox label="B1" isActive={getFoulStatus('biru', 'Binaan', 1)} />
-                <FoulBox label="B2" isActive={getFoulStatus('biru', 'Binaan', 2)} />
-                <FoulBox label="T1" isActive={getFoulStatus('biru', 'Teguran', 1)} />
-                <FoulBox label="T2" isActive={getFoulStatus('biru', 'Teguran', 2)} />
-                <FoulBox label="P1" isActive={getFoulStatus('biru', 'Peringatan', 1)} />
-                <FoulBox label="P2" isActive={getFoulStatus('biru', 'Peringatan', 2)} />
-                <FoulBox label="P3" isActive={getFoulStatus('biru', 'Peringatan', 3)} />
+          <div className="flex w-full items-stretch gap-1 md:gap-2 mb-1 md:mb-2 h-36 md:h-44">
+            <div className="flex flex-col gap-1 p-0.5 w-20 md:w-28 h-full">
+                <div className="grid grid-cols-2 gap-1 flex-1">
+                    <FoulBox label="B1" isActive={getFoulStatus('biru', 'Binaan', 1)} />
+                    <FoulBox label="B2" isActive={getFoulStatus('biru', 'Binaan', 2)} />
+                </div>
+                <div className="grid grid-cols-2 gap-1 flex-1">
+                    <FoulBox label="T1" isActive={getFoulStatus('biru', 'Teguran', 1)} />
+                    <FoulBox label="T2" isActive={getFoulStatus('biru', 'Teguran', 2)} />
+                </div>
+                <div className="grid grid-cols-3 gap-1 flex-1">
+                    <FoulBox label="P1" isActive={getFoulStatus('biru', 'Peringatan', 1)} />
+                    <FoulBox label="P2" isActive={getFoulStatus('biru', 'Peringatan', 2)} />
+                    <FoulBox label="P3" isActive={getFoulStatus('biru', 'Peringatan', 3)} />
+                </div>
             </div>
-            <div className="flex-grow h-32 md:h-64 bg-blue-600 flex items-center justify-center text-5xl md:text-8xl font-bold rounded-md">
+            <div className="flex-grow h-full bg-blue-600 flex items-center justify-center text-5xl md:text-8xl font-bold rounded-md">
                 {confirmedScoreBiru}
             </div>
           </div>
@@ -398,19 +396,29 @@ export default function MonitoringSkorPage() {
           </div>
         </div>
 
-        <div className="flex flex-col items-center justify-center space-y-2 md:space-y-4 px-1 md:px-2">
-          <div className="text-4xl md:text-7xl font-mono font-bold text-yellow-300">
+        {/* Central Column: Timer, Babak Indicators, Match Status */}
+        <div className="flex flex-col items-center justify-center space-y-2 md:space-y-3 px-1 md:px-2">
+          <div className="text-4xl md:text-6xl font-mono font-bold text-white">
             {formatTime(timerStatus.timerSeconds)}
           </div>
-          <div className="space-y-1 md:space-y-2">
+          <div className="space-y-1 md:space-y-2 w-full max-w-[120px] md:max-w-[180px]">
             {[1, 2, 3].map(b => (
-              <div key={`babak-${b}`} className={cn("w-6 h-6 md:w-8 md:h-8 border-2 border-gray-400 flex items-center justify-center text-sm md:text-lg font-bold", timerStatus.currentRound === b ? "bg-yellow-300 text-black border-yellow-300" : "text-gray-400")}>
-                {b === 1 ? 'I' : b === 2 ? 'II' : 'III'}
+              <div 
+                key={`babak-indicator-${b}`} 
+                className={cn(
+                  "w-full py-1 md:py-1.5 border-2 flex items-center justify-center text-xs md:text-sm font-semibold rounded-md", 
+                  timerStatus.currentRound === b 
+                    ? "bg-yellow-300 text-black border-yellow-400" 
+                    : "bg-gray-600 text-gray-200 border-gray-500"
+                )}
+              >
+                Babak {b}
               </div>
             ))}
           </div>
-          <FistIcon />
-          <KickIcon />
+          <div className="text-xs md:text-sm text-gray-300 dark:text-gray-400 mt-1 md:mt-2 text-center">
+            {getMatchStatusTextForMonitor()}
+          </div>
         </div>
 
         {/* Pesilat Merah Side */}
@@ -420,18 +428,24 @@ export default function MonitoringSkorPage() {
             <div className="text-xs md:text-base text-red-400">{pesilatMerahInfo?.contingent || <Skeleton className="h-4 w-24 bg-gray-600 mt-1" />}</div>
           </div>
 
-          <div className="flex w-full items-center gap-1 md:gap-2 mb-1 md:mb-2">
-            <div className="flex-grow h-32 md:h-64 bg-red-600 flex items-center justify-center text-5xl md:text-8xl font-bold rounded-md">
+          <div className="flex w-full items-stretch gap-1 md:gap-2 mb-1 md:mb-2 h-36 md:h-44">
+            <div className="flex-grow h-full bg-red-600 flex items-center justify-center text-5xl md:text-8xl font-bold rounded-md">
                 {confirmedScoreMerah}
             </div>
-            <div className="grid grid-cols-2 gap-1 p-0.5 w-14 md:w-16">
-                <FoulBox label="B1" isActive={getFoulStatus('merah', 'Binaan', 1)} />
-                <FoulBox label="B2" isActive={getFoulStatus('merah', 'Binaan', 2)} />
-                <FoulBox label="T1" isActive={getFoulStatus('merah', 'Teguran', 1)} />
-                <FoulBox label="T2" isActive={getFoulStatus('merah', 'Teguran', 2)} />
-                <FoulBox label="P1" isActive={getFoulStatus('merah', 'Peringatan', 1)} />
-                <FoulBox label="P2" isActive={getFoulStatus('merah', 'Peringatan', 2)} />
-                <FoulBox label="P3" isActive={getFoulStatus('merah', 'Peringatan', 3)} />
+            <div className="flex flex-col gap-1 p-0.5 w-20 md:w-28 h-full">
+                <div className="grid grid-cols-2 gap-1 flex-1">
+                    <FoulBox label="B1" isActive={getFoulStatus('merah', 'Binaan', 1)} />
+                    <FoulBox label="B2" isActive={getFoulStatus('merah', 'Binaan', 2)} />
+                </div>
+                <div className="grid grid-cols-2 gap-1 flex-1">
+                    <FoulBox label="T1" isActive={getFoulStatus('merah', 'Teguran', 1)} />
+                    <FoulBox label="T2" isActive={getFoulStatus('merah', 'Teguran', 2)} />
+                </div>
+                <div className="grid grid-cols-3 gap-1 flex-1">
+                    <FoulBox label="P1" isActive={getFoulStatus('merah', 'Peringatan', 1)} />
+                    <FoulBox label="P2" isActive={getFoulStatus('merah', 'Peringatan', 2)} />
+                    <FoulBox label="P3" isActive={getFoulStatus('merah', 'Peringatan', 3)} />
+                </div>
             </div>
           </div>
           
@@ -462,17 +476,14 @@ export default function MonitoringSkorPage() {
             </DialogHeader>
             <div className="py-4 px-2 md:px-6">
                 <div className="mb-6">
-                  <div className="text-lg md:text-xl font-semibold mb-1 text-center md:text-left text-gray-100">
-                    Detail Verifikasi
-                  </div>
-                  {activeDisplayVerificationRequest && (
-                    <div className="text-md md:text-lg text-gray-300 text-center md:text-left">
-                      <div>
-                        {activeDisplayVerificationRequest.type === 'jatuhan' ? 'Verifikasi Jatuhan' : 'Verifikasi Pelanggaran'}
+                  <DialogVerificationDescription asChild>
+                    <div className="text-center mt-2">
+                      <div className="text-lg font-semibold">
+                        {activeDisplayVerificationRequest?.type === 'jatuhan' ? 'Verifikasi Jatuhan' : 'Verifikasi Pelanggaran'}
                       </div>
-                      <div className="text-sm text-gray-400">Babak {activeDisplayVerificationRequest.round}</div>
+                      <div className="text-sm text-muted-foreground">Babak {activeDisplayVerificationRequest?.round}</div>
                     </div>
-                  )}
+                  </DialogVerificationDescription>
                 </div>
               <div className="grid grid-cols-3 gap-3 md:gap-4 items-start justify-items-center text-center">
                 {JURI_IDS.map((juriKey, index) => {
