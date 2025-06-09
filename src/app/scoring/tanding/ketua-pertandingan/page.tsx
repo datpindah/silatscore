@@ -7,13 +7,13 @@ import { Header } from '@/components/layout/Header';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { ArrowLeft, Loader2, Trash2, ShieldCheck, Trophy, Vote, Play, Pause, Info } from 'lucide-react';
+import { ArrowLeft, Loader2, Trash2, ShieldCheck, Trophy, Vote, Play, Pause, Info, Eye } from 'lucide-react';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger, DialogClose } from "@/components/ui/dialog";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
-import type { ScheduleTanding, KetuaActionLogEntry, PesilatColorIdentity, KetuaActionType, VerificationType, VerificationRequest, JuriVoteValue, JuriVotes } from '@/lib/types';
-import { JATUHAN_POINTS, PERINGATAN_POINTS_FIRST_PRESS, PERINGATAN_POINTS_SECOND_PRESS, TEGURAN_POINTS } from '@/lib/types';
+import type { ScheduleTanding, KetuaActionLogEntry, PesilatColorIdentity, KetuaActionType, VerificationType, VerificationRequest, JuriVoteValue, JuriVotes, TimerStatus as DewanTimerType, TimerMatchStatus } from '@/lib/types';
+import { JATUHAN_POINTS, TEGURAN_POINTS, PERINGATAN_POINTS_FIRST_PRESS, PERINGATAN_POINTS_SECOND_PRESS } from '@/lib/types';
 import { db } from '@/lib/firebase';
 import { doc, onSnapshot, getDoc, Timestamp, collection, addDoc, query, orderBy, deleteDoc, limit, getDocs, serverTimestamp, writeBatch, where, updateDoc } from 'firebase/firestore';
 import { cn } from '@/lib/utils';
@@ -30,18 +30,12 @@ interface PesilatDisplayInfo {
   contingent: string;
 }
 
-interface TimerStatusFromDewan {
-  currentRound: 1 | 2 | 3;
-  timerSeconds: number;
-  isTimerRunning: boolean;
-  matchStatus: string;
-}
-
-const initialTimerStatus: TimerStatusFromDewan = {
+const initialDewanTimerStatus: DewanTimerType = {
   currentRound: 1,
   timerSeconds: 0,
   isTimerRunning: false,
   matchStatus: 'Pending',
+  roundDuration: 120, // Default, Dewan 1 controls actual
 };
 
 const ROUNDS = [1, 2, 3] as const;
@@ -101,7 +95,7 @@ export default function KetuaPertandinganPage() {
   const [pesilatBiruInfo, setPesilatBiruInfo] = useState<PesilatDisplayInfo | null>(null);
   const [matchDetailsLoaded, setMatchDetailsLoaded] = useState(false);
 
-  const [dewanTimerStatus, setDewanTimerStatus] = useState<TimerStatusFromDewan>(initialTimerStatus);
+  const [dewanTimerStatus, setDewanTimerStatus] = useState<DewanTimerType>(initialDewanTimerStatus);
   const [ketuaActionsLog, setKetuaActionsLog] = useState<KetuaActionLogEntry[]>([]);
 
   const [isSubmittingAction, setIsSubmittingAction] = useState(false);
@@ -123,7 +117,7 @@ export default function KetuaPertandinganPage() {
     setPesilatMerahInfo(null);
     setPesilatBiruInfo(null);
     setMatchDetailsLoaded(false);
-    setDewanTimerStatus(initialTimerStatus);
+    setDewanTimerStatus(initialDewanTimerStatus);
     setKetuaActionsLog([]);
     setActiveVerificationDetails(null);
     setIsVoteResultModalOpen(false);
@@ -161,7 +155,7 @@ export default function KetuaPertandinganPage() {
       if (isLoading) setIsLoading(false);
       setError(null);
       setMatchDetails(null); setPesilatMerahInfo(null); setPesilatBiruInfo(null);
-      setKetuaActionsLog([]); setDewanTimerStatus(initialTimerStatus);
+      setKetuaActionsLog([]); setDewanTimerStatus(initialDewanTimerStatus);
       setActiveVerificationDetails(null); setIsVoteResultModalOpen(false);
       return;
     }
@@ -190,8 +184,8 @@ export default function KetuaPertandinganPage() {
 
     const unsubTimer = onSnapshot(doc(db, MATCHES_TANDING_COLLECTION, activeMatchId), (docSnap) => {
       if (!mounted) return;
-      if (docSnap.exists() && docSnap.data()?.timer_status) setDewanTimerStatus(docSnap.data()?.timer_status as TimerStatusFromDewan);
-      else setDewanTimerStatus(initialTimerStatus);
+      if (docSnap.exists() && docSnap.data()?.timer_status) setDewanTimerStatus(docSnap.data()?.timer_status as DewanTimerType);
+      else setDewanTimerStatus(initialDewanTimerStatus);
     }, (err) => { if (!mounted) return; console.error("Error fetching dewan timer:", err); setError("Gagal status timer dewan."); });
     unsubscribers.push(unsubTimer);
 
@@ -204,7 +198,6 @@ export default function KetuaPertandinganPage() {
     }, (err) => { if (!mounted) return; console.error("Error fetching official actions:", err); setError("Gagal memuat log tindakan."); });
     unsubscribers.push(unsubActions);
 
-    // Listener for active verification details
     const verificationsQuery = query(
       collection(db, MATCHES_TANDING_COLLECTION, activeMatchId, VERIFICATIONS_SUBCOLLECTION),
       orderBy('timestamp', 'desc'),
@@ -214,16 +207,17 @@ export default function KetuaPertandinganPage() {
       if (!mounted) return;
       if (!snapshot.empty) {
         const latestVerification = { id: snapshot.docs[0].id, ...snapshot.docs[0].data() } as VerificationRequest;
+        // Hanya set activeVerificationDetails jika statusnya 'pending'
+        // Dialog akan dibuka secara manual oleh tombol "Tinjau Verifikasi"
         if (latestVerification.status === 'pending') {
           setActiveVerificationDetails(latestVerification);
-          setIsVoteResultModalOpen(true); // Open modal to show votes and allow Ketua decision
-          setKetuaSelectedDecision(null); // Reset Ketua's decision for new/updated verification
         } else {
-          setActiveVerificationDetails(null); // Clear if latest is not pending
-          setIsVoteResultModalOpen(false);
+          // Jika tidak ada verifikasi pending, pastikan details di-clear dan modal ditutup
+          setActiveVerificationDetails(null);
+          setIsVoteResultModalOpen(false); 
         }
       } else {
-        setActiveVerificationDetails(null); // No verifications found
+        setActiveVerificationDetails(null);
         setIsVoteResultModalOpen(false);
       }
     }, (err) => {
@@ -237,7 +231,7 @@ export default function KetuaPertandinganPage() {
     if (matchDetailsLoaded && isLoading) setIsLoading(false);
 
     return () => { mounted = false; unsubscribers.forEach(unsub => unsub()); };
-  }, [activeMatchId, isLoading, matchDetailsLoaded]);
+  }, [activeMatchId, isLoading, matchDetailsLoaded]); // resetAllMatchData removed
 
   useEffect(() => { if (isLoading && (matchDetailsLoaded || activeMatchId === null)) setIsLoading(false); }, [isLoading, matchDetailsLoaded, activeMatchId]);
 
@@ -258,19 +252,19 @@ export default function KetuaPertandinganPage() {
         pointsToLog = TEGURAN_POINTS; 
       } else if (actionTypeButtonPressed === 'Binaan') {
         originalActionTypeForLog = 'Binaan';
-        const binaanMurniCount = ketuaActionsLog.filter(
+        const binaanAsliCount = ketuaActionsLog.filter(
           log => log.pesilatColor === pesilatColor &&
                  log.round === dewanTimerStatus.currentRound &&
-                 log.actionType === 'Binaan' && // Only count pure Binaan actions
-                 !log.originalActionType // Ensure it wasn't a Binaan button press that became a Teguran
+                 log.actionType === 'Binaan' && // Hanya Binaan murni
+                 !log.originalActionType 
         ).length;
 
-        if (binaanMurniCount === 0) { 
+        if (binaanAsliCount < 1) { // Binaan pertama di babak ini
           actionTypeToLog = 'Binaan';
           pointsToLog = 0;
-        } else { 
+        } else { // Binaan kedua (atau lebih, yang seharusnya tidak terjadi jika logika tombol dijaga) menjadi Teguran
           actionTypeToLog = 'Teguran';
-          pointsToLog = TEGURAN_POINTS; 
+          pointsToLog = TEGURAN_POINTS;
         }
       } else if (actionTypeButtonPressed === 'Peringatan') {
         const peringatanCount = countActionsInRound(ketuaActionsLog, pesilatColor, 'Peringatan', dewanTimerStatus.currentRound);
@@ -356,13 +350,13 @@ export default function KetuaPertandinganPage() {
 
     setIsCreatingVerification(true);
     try {
-      const verificationData = {
+      const verificationData: Omit<VerificationRequest, 'id'> = {
         matchId: activeMatchId,
         type: selectedVerificationTypeForCreation,
         status: 'pending',
         round: dewanTimerStatus.currentRound,
         timestamp: serverTimestamp(), 
-        votes: { 'juri-1': null, 'juri-2': null, 'juri-3': null } as JuriVotes,
+        votes: { 'juri-1': null, 'juri-2': null, 'juri-3': null },
         result: null,
         requestingOfficial: 'ketua',
       };
@@ -372,13 +366,28 @@ export default function KetuaPertandinganPage() {
       const pendingSnapshot = await getDocs(qPending);
       
       const batch = writeBatch(db);
-      pendingSnapshot.forEach(doc => {
-        batch.update(doc.ref, { status: 'cancelled' }); 
+      pendingSnapshot.forEach(docSnap => { // Renamed from doc to docSnap
+        batch.update(docSnap.ref, { status: 'cancelled' }); 
       });
+      
+      // Pause the timer
+      const matchDocRef = doc(db, MATCHES_TANDING_COLLECTION, activeMatchId);
+      const currentTimerStatusForPause = dewanTimerStatus.isTimerRunning || dewanTimerStatus.matchStatus.startsWith('Ongoing')
+                                    ? (`PausedForVerificationRound${dewanTimerStatus.currentRound}` as TimerMatchStatus)
+                                    : dewanTimerStatus.matchStatus; // if already paused, keep that specific pause status
+      
+      batch.update(matchDocRef, {
+          "timer_status.isTimerRunning": false,
+          "timer_status.matchStatus": currentTimerStatusForPause
+      });
+      
+      // Add new verification request
+      const newVerificationRef = doc(collection(db, MATCHES_TANDING_COLLECTION, activeMatchId, VERIFICATIONS_SUBCOLLECTION));
+      batch.set(newVerificationRef, verificationData);
+
       await batch.commit();
 
-      await addDoc(verificationsRef, verificationData);
-      alert(`Verifikasi untuk ${selectedVerificationTypeForCreation === 'jatuhan' ? 'Jatuhan' : 'Pelanggaran'} telah dimulai.`);
+      alert(`Verifikasi untuk ${selectedVerificationTypeForCreation === 'jatuhan' ? 'Jatuhan' : 'Pelanggaran'} telah dimulai. Timer pertandingan dijeda.`);
       setIsVerificationCreationDialogOpen(false);
       setSelectedVerificationTypeForCreation('');
     } catch (err) {
@@ -391,26 +400,43 @@ export default function KetuaPertandinganPage() {
   };
 
   const handleConfirmVerificationDecision = async () => {
-    if (!activeVerificationDetails || !ketuaSelectedDecision) {
+    if (!activeVerificationDetails || !ketuaSelectedDecision || !activeMatchId) {
       alert("Tidak ada verifikasi aktif atau keputusan belum dipilih.");
       return;
     }
     setIsConfirmingVerification(true);
     try {
-      const verificationDocRef = doc(db, MATCHES_TANDING_COLLECTION, activeMatchId!, VERIFICATIONS_SUBCOLLECTION, activeVerificationDetails.id);
-      await updateDoc(verificationDocRef, {
+      const verificationDocRef = doc(db, MATCHES_TANDING_COLLECTION, activeMatchId, VERIFICATIONS_SUBCOLLECTION, activeVerificationDetails.id);
+      
+      const batch = writeBatch(db);
+      batch.update(verificationDocRef, {
         status: 'completed',
         result: ketuaSelectedDecision,
       });
 
       // Award points for 'Jatuhan' if confirmed
+      let pointsAwardedMessage = "";
       if (activeVerificationDetails.type === 'jatuhan' && (ketuaSelectedDecision === 'merah' || ketuaSelectedDecision === 'biru')) {
-        await handleKetuaAction(ketuaSelectedDecision as PesilatColorIdentity, 'Jatuhan');
+        const actionData: Omit<KetuaActionLogEntry, 'id'> = {
+            pesilatColor: ketuaSelectedDecision as PesilatColorIdentity,
+            actionType: 'Jatuhan',
+            round: activeVerificationDetails.round,
+            timestamp: Timestamp.now(), // Use current time for the awarded action
+            points: JATUHAN_POINTS,
+        };
+        const newActionRef = doc(collection(db, MATCHES_TANDING_COLLECTION, activeMatchId, OFFICIAL_ACTIONS_SUBCOLLECTION));
+        batch.set(newActionRef, actionData);
+        pointsAwardedMessage = ` Poin +${JATUHAN_POINTS} diberikan untuk Jatuhan.`;
       }
+      
+      // Optionally, resume timer if it was paused by verification
+      // For now, let Dewan 1 control resuming the timer after Ketua is done.
 
-      alert(`Verifikasi ${activeVerificationDetails.type} dikonfirmasi dengan hasil: ${ketuaSelectedDecision}.`);
+      await batch.commit();
+
+      alert(`Verifikasi ${activeVerificationDetails.type} dikonfirmasi dengan hasil: ${ketuaSelectedDecision}.${pointsAwardedMessage}`);
       setIsVoteResultModalOpen(false);
-      setActiveVerificationDetails(null);
+      // setActiveVerificationDetails(null); // Listener will clear this or update if another pending one exists
       setKetuaSelectedDecision(null);
     } catch (err) {
       console.error("Error confirming verification:", err);
@@ -421,17 +447,17 @@ export default function KetuaPertandinganPage() {
   };
 
   const handleCancelCurrentVerification = async () => {
-    if (!activeVerificationDetails) {
+    if (!activeVerificationDetails || !activeMatchId) {
       alert("Tidak ada verifikasi aktif untuk dibatalkan.");
       return;
     }
     setIsConfirmingVerification(true); // Re-use loading state
     try {
-      const verificationDocRef = doc(db, MATCHES_TANDING_COLLECTION, activeMatchId!, VERIFICATIONS_SUBCOLLECTION, activeVerificationDetails.id);
+      const verificationDocRef = doc(db, MATCHES_TANDING_COLLECTION, activeMatchId, VERIFICATIONS_SUBCOLLECTION, activeVerificationDetails.id);
       await updateDoc(verificationDocRef, { status: 'cancelled' });
       alert(`Verifikasi ${activeVerificationDetails.type} telah dibatalkan.`);
       setIsVoteResultModalOpen(false);
-      setActiveVerificationDetails(null);
+      // setActiveVerificationDetails(null); // Listener will handle this
       setKetuaSelectedDecision(null);
     } catch (err) {
        console.error("Error cancelling verification:", err);
@@ -446,11 +472,11 @@ export default function KetuaPertandinganPage() {
 
   const isActionButtonDisabled = isSubmittingAction || dewanTimerStatus.matchStatus === 'MatchFinished' || isLoading || !dewanTimerStatus.isTimerRunning;
 
-  const getJuriVoteBadge = (vote: JuriVoteValue) => {
-    if (vote === 'merah') return <Badge className="bg-red-500 text-white">Merah</Badge>;
-    if (vote === 'biru') return <Badge className="bg-blue-500 text-white">Biru</Badge>;
-    if (vote === 'invalid') return <Badge className="bg-yellow-500 text-black">Invalid</Badge>;
-    return <Badge variant="outline">Belum Vote</Badge>;
+  const getJuriVoteBoxClass = (vote: JuriVoteValue) => {
+    if (vote === 'merah') return "bg-red-500";
+    if (vote === 'biru') return "bg-blue-500";
+    if (vote === 'invalid') return "bg-yellow-400";
+    return "bg-gray-300 dark:bg-gray-600"; // Belum vote
   };
 
 
@@ -546,16 +572,27 @@ export default function KetuaPertandinganPage() {
           </div>
 
           <div className="flex flex-col items-center justify-center space-y-3 md:pt-8 order-first md:order-none">
-             <div className={cn("text-center p-2 rounded-md", dewanTimerStatus.isTimerRunning ? "bg-green-100 dark:bg-green-900" : "bg-gray-100 dark:bg-gray-700")}>
-                <div className="text-2xl font-mono font-bold text-gray-800 dark:text-gray-100">{dewanTimerStatus.isTimerRunning ? formatTime(dewanTimerStatus.timerSeconds) : "JEDA"}</div>
-                <div className="text-xs text-gray-500 dark:text-gray-400">Babak {dewanTimerStatus.currentRound || '?'} - {dewanTimerStatus.matchStatus || 'Menunggu'}</div>
+             <div className={cn("text-center p-2 rounded-md w-full", 
+                dewanTimerStatus.matchStatus.startsWith('PausedForVerification') ? "bg-orange-100 dark:bg-orange-900" :
+                dewanTimerStatus.isTimerRunning ? "bg-green-100 dark:bg-green-900" : 
+                "bg-gray-100 dark:bg-gray-700"
+              )}>
+                <div className="text-2xl font-mono font-bold text-gray-800 dark:text-gray-100">
+                    {dewanTimerStatus.isTimerRunning ? formatTime(dewanTimerStatus.timerSeconds) : "JEDA"}
+                </div>
+                <div className="text-xs text-gray-500 dark:text-gray-400">
+                    Babak {dewanTimerStatus.currentRound || '?'} - {
+                        dewanTimerStatus.matchStatus.startsWith('PausedForVerification') ? `Verifikasi Babak ${dewanTimerStatus.currentRound}` :
+                        dewanTimerStatus.matchStatus || 'Menunggu'
+                    }
+                </div>
             </div>
 
             <Dialog open={isVerificationCreationDialogOpen} onOpenChange={setIsVerificationCreationDialogOpen}>
               <DialogTrigger asChild>
                 <Button
                   className="w-full md:w-auto bg-yellow-500 hover:bg-yellow-600 text-black py-3 text-sm sm:text-base"
-                  disabled={isLoading || dewanTimerStatus.matchStatus === 'MatchFinished' || isCreatingVerification || !!activeVerificationDetails}
+                  disabled={isLoading || dewanTimerStatus.matchStatus === 'MatchFinished' || isCreatingVerification || !!(activeVerificationDetails && activeVerificationDetails.status === 'pending')}
                   onClick={() => setSelectedVerificationTypeForCreation('')}
                 >
                   {isCreatingVerification ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Vote className="mr-2 h-4 w-4"/>}
@@ -566,7 +603,7 @@ export default function KetuaPertandinganPage() {
                 <DialogHeader>
                   <DialogTitle>Mulai Verifikasi Juri</DialogTitle>
                   <DialogDescription>
-                    Pilih jenis verifikasi yang ingin Anda ajukan kepada para juri. Verifikasi sebelumnya yang masih 'pending' akan dibatalkan.
+                    Pilih jenis verifikasi. Ini akan menjeda timer dan mengirim permintaan ke juri. Verifikasi sebelumnya yang masih 'pending' akan dibatalkan.
                   </DialogDescription>
                 </DialogHeader>
                 <div className="py-4">
@@ -589,11 +626,19 @@ export default function KetuaPertandinganPage() {
                   </DialogClose>
                   <Button type="button" onClick={handleCreateVerificationRequest} className="bg-primary hover:bg-primary/90 text-primary-foreground" disabled={isCreatingVerification || !selectedVerificationTypeForCreation}>
                     {isCreatingVerification ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
-                    Buat Verifikasi
+                    Buat & Jeda Timer
                   </Button>
                 </DialogFooter>
               </DialogContent>
             </Dialog>
+            
+            <Button 
+                className="w-full md:w-auto bg-purple-500 hover:bg-purple-600 text-white py-3 text-sm sm:text-base"
+                onClick={() => setIsVoteResultModalOpen(true)}
+                disabled={!activeVerificationDetails || activeVerificationDetails.status !== 'pending' || isVoteResultModalOpen}
+            >
+                <Eye className="mr-2 h-4 w-4" /> Tinjau Verifikasi Aktif
+            </Button>
 
             <Button onClick={handleTentukanPemenang} className="w-full md:w-auto bg-green-600 hover:bg-green-700 text-white py-3 text-sm sm:text-base" disabled={isLoading || dewanTimerStatus.matchStatus !== 'MatchFinished'}><Trophy className="mr-2 h-4 w-4"/>Tentukan Pemenang</Button>
           </div>
@@ -612,20 +657,17 @@ export default function KetuaPertandinganPage() {
         </div>
         {error && <div className="text-red-500 text-center mt-4 p-2 bg-red-100 border border-red-500 rounded-md">Error: {error}</div>}
 
-        {/* Dialog for Displaying Vote Results and Ketua's Confirmation */}
-        <Dialog open={isVoteResultModalOpen} onOpenChange={(isOpen) => {
-          if (!isOpen) { // If dialog is closed by user action (e.g., clicking outside, pressing Esc)
+        <Dialog open={isVoteResultModalOpen && !!activeVerificationDetails && activeVerificationDetails.status === 'pending'} onOpenChange={(isOpen) => {
+          if (!isOpen) {
             setIsVoteResultModalOpen(false);
-            // Optionally, if you want to clear details immediately when dialog is dismissed without action:
-            // setActiveVerificationDetails(null); 
-            // setKetuaSelectedDecision(null);
-          } else {
+            // Tidak clear activeVerificationDetails agar tombol Tinjau tetap berfungsi
+          } else if (activeVerificationDetails && activeVerificationDetails.status === 'pending') {
             setIsVoteResultModalOpen(true);
           }
         }}>
-          <DialogContent className="sm:max-w-md">
+          <DialogContent className="sm:max-w-lg">
             <DialogHeader>
-              <DialogTitle className="text-2xl font-bold font-headline text-center">Verifikasi Juri</DialogTitle>
+              <DialogTitle className="text-2xl font-bold font-headline text-center">Hasil Verifikasi Juri</DialogTitle>
               {activeVerificationDetails && (
                 <DialogDescription className="text-center text-lg">
                   {activeVerificationDetails.type === 'jatuhan' ? 'Verifikasi Jatuhan' : 'Verifikasi Pelanggaran'} (Babak {activeVerificationDetails.round})
@@ -633,44 +675,40 @@ export default function KetuaPertandinganPage() {
               )}
             </DialogHeader>
             
-            <div className="my-4 space-y-2">
-              <h3 className="font-semibold mb-2 text-center">Vote Juri:</h3>
-              <div className="grid grid-cols-3 gap-2 text-center">
-                <div>
-                  <p className="text-sm font-medium">Juri 1</p>
-                  {getJuriVoteBadge(activeVerificationDetails?.votes['juri-1'] || null)}
-                </div>
-                <div>
-                  <p className="text-sm font-medium">Juri 2</p>
-                  {getJuriVoteBadge(activeVerificationDetails?.votes['juri-2'] || null)}
-                </div>
-                <div>
-                  <p className="text-sm font-medium">Juri 3</p>
-                  {getJuriVoteBadge(activeVerificationDetails?.votes['juri-3'] || null)}
-                </div>
+            <div className="my-4 space-y-3">
+              <h3 className="font-semibold text-center text-lg">Vote Juri:</h3>
+              <div className="grid grid-cols-3 gap-3 items-center justify-items-center">
+                {(['juri-1', 'juri-2', 'juri-3'] as const).map((juriKey, index) => (
+                  <div key={juriKey} className="flex flex-col items-center space-y-1">
+                    <div className={cn("w-16 h-16 rounded-md border-2 border-gray-400 flex items-center justify-center", getJuriVoteBoxClass(activeVerificationDetails?.votes[juriKey] || null))}>
+                       {/* Visual only, no text inside box for now */}
+                    </div>
+                    <p className="text-xs font-medium">Juri {index + 1}</p>
+                  </div>
+                ))}
               </div>
             </div>
             
-            <div className="my-4 space-y-3">
-                <p className="text-center font-semibold">Keputusan Ketua Pertandingan:</p>
+            <div className="my-6 space-y-3">
+                <p className="text-center font-semibold text-lg">Keputusan Ketua Pertandingan:</p>
                 <div className="flex justify-around gap-2">
                     <Button 
                         onClick={() => setKetuaSelectedDecision('merah')} 
-                        className={cn("flex-1 text-white", ketuaSelectedDecision === 'merah' ? "ring-2 ring-offset-2 ring-red-700 bg-red-700" : "bg-red-500 hover:bg-red-600")}
+                        className={cn("flex-1 text-white py-3 text-base", ketuaSelectedDecision === 'merah' ? "ring-4 ring-offset-2 ring-red-700 bg-red-700" : "bg-red-500 hover:bg-red-600")}
                         disabled={isConfirmingVerification}
                     >
                         SUDUT MERAH
                     </Button>
                     <Button 
                         onClick={() => setKetuaSelectedDecision('biru')} 
-                        className={cn("flex-1 text-white", ketuaSelectedDecision === 'biru' ? "ring-2 ring-offset-2 ring-blue-700 bg-blue-700" : "bg-blue-500 hover:bg-blue-600")}
+                        className={cn("flex-1 text-white py-3 text-base", ketuaSelectedDecision === 'biru' ? "ring-4 ring-offset-2 ring-blue-700 bg-blue-700" : "bg-blue-500 hover:bg-blue-600")}
                         disabled={isConfirmingVerification}
                     >
                         SUDUT BIRU
                     </Button>
                     <Button 
                         onClick={() => setKetuaSelectedDecision('invalid')} 
-                        className={cn("flex-1 text-black", ketuaSelectedDecision === 'invalid' ? "ring-2 ring-offset-2 ring-yellow-600 bg-yellow-600" : "bg-yellow-400 hover:bg-yellow-500")}
+                        className={cn("flex-1 text-black py-3 text-base", ketuaSelectedDecision === 'invalid' ? "ring-4 ring-offset-2 ring-yellow-600 bg-yellow-600" : "bg-yellow-400 hover:bg-yellow-500")}
                         disabled={isConfirmingVerification}
                     >
                         INVALID
@@ -693,6 +731,9 @@ export default function KetuaPertandinganPage() {
                 Konfirmasi Keputusan
               </Button>
             </DialogFooter>
+             <DialogClose asChild>
+                <Button variant="ghost" className="absolute top-4 right-4" onClick={() => setIsVoteResultModalOpen(false)}>X</Button>
+            </DialogClose>
           </DialogContent>
         </Dialog>
 
@@ -700,3 +741,4 @@ export default function KetuaPertandinganPage() {
     </div>
   );
 }
+

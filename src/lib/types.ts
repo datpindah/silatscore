@@ -94,7 +94,8 @@ export interface KetuaActionLogEntry {
 }
 
 export const JATUHAN_POINTS = 3;
-export const TEGURAN_POINTS = -1;
+export const TEGURAN_POINTS = -1; // Teguran selalu -1
+// Binaan pertama 0 poin, binaan kedua (dan seterusnya dalam babak yg sama) jadi teguran -1
 export const PERINGATAN_POINTS_FIRST_PRESS = -5;
 export const PERINGATAN_POINTS_SECOND_PRESS = -10;
 
@@ -123,6 +124,24 @@ export interface VerificationRequest {
 }
 // --- END VERIFICATION TYPES ---
 
+// --- TIMER STATUS for DEWAN 1 ---
+export type TimerMatchStatus = 
+  | 'Pending' 
+  | `OngoingRound${number}` 
+  | `PausedRound${number}` 
+  | `FinishedRound${number}` 
+  | `PausedForVerificationRound${number}`
+  | 'MatchFinished';
+
+export interface TimerStatus {
+  currentRound: 1 | 2 | 3;
+  timerSeconds: number;
+  isTimerRunning: boolean;
+  matchStatus: TimerMatchStatus;
+  roundDuration: number;
+}
+// --- END TIMER STATUS ---
+
 
 export const foulIcons: Record<string, string> = {
   'Teguran': 'MinusCircle',
@@ -132,3 +151,4 @@ export const foulIcons: Record<string, string> = {
   'Binaan': 'Info',
   'Peringatan Ketua': 'Megaphone',
 };
+

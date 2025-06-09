@@ -7,7 +7,7 @@ import { Header } from '@/components/layout/Header';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { ArrowLeft, Play, Pause, RotateCcw, ChevronRight, CheckCircle2, RadioTower, Loader2 } from 'lucide-react';
-import type { ScheduleTanding, KetuaActionLogEntry } from '@/lib/types';
+import type { ScheduleTanding, KetuaActionLogEntry, TimerStatus, TimerMatchStatus } from '@/lib/types'; // Updated TimerStatus import
 import { db } from '@/lib/firebase';
 import { doc, onSnapshot, setDoc, getDoc, Timestamp, updateDoc, writeBatch, collection, query, orderBy, getDocs, deleteDoc } from 'firebase/firestore';
 import { cn } from '@/lib/utils';
@@ -55,13 +55,7 @@ interface JuriMatchDataWithId extends JuriMatchData {
   juriId: string;
 }
 
-interface TimerStatus {
-  currentRound: 1 | 2 | 3;
-  timerSeconds: number;
-  isTimerRunning: boolean;
-  matchStatus: 'Pending' | `OngoingRound${number}` | `PausedRound${number}` | `FinishedRound${number}` | 'MatchFinished';
-  roundDuration: number;
-}
+// TimerStatus is now imported from @/lib/types
 
 const initialTimerStatus: TimerStatus = {
   currentRound: 1,
@@ -116,7 +110,7 @@ export default function ScoringTandingDewanSatuPage() {
       setConfigMatchId(null);
     });
     return () => unsubConfig();
-  }, []);
+  }, []); // configMatchId removed as per previous successful modification
 
   useEffect(() => {
     let unsubscribers: (() => void)[] = [];
@@ -283,7 +277,7 @@ export default function ScoringTandingDewanSatuPage() {
       mounted = false;
       unsubscribers.forEach(unsub => unsub());
     };
-  }, [configMatchId, activeScheduleId]);
+  }, [configMatchId, activeScheduleId, isLoading]);
 
 
   useEffect(() => {
@@ -426,6 +420,7 @@ export default function ScoringTandingDewanSatuPage() {
         }
     });
 
+    // Removed Math.max(0, ...) to allow negative scores
     setConfirmedScoreMerah(calculatedTotalMerah);
     setConfirmedScoreBiru(calculatedTotalBiru);
 
@@ -454,7 +449,7 @@ export default function ScoringTandingDewanSatuPage() {
           }).catch(err => console.error(`[Dewan-1] Error updating Firestore logs at path '${matchDocPath}':`, err));
       }
     }
-  }, [juri1Scores, juri2Scores, juri3Scores, activeScheduleId, matchDetailsLoaded, prevSavedUnstruckKeys, prevSavedStruckKeys, ketuaActionsLog]);
+  }, [juri1Scores, juri2Scores, juri3Scores, activeScheduleId, matchDetailsLoaded, prevSavedUnstruckKeys, prevSavedStruckKeys, ketuaActionsLog, isLoading]); // Added isLoading dependency
 
 
   useEffect(() => {
@@ -500,7 +495,7 @@ export default function ScoringTandingDewanSatuPage() {
 
                 if (newSeconds === 0) {
                     newIsTimerRunning = false;
-                    newMatchStatus = `FinishedRound${currentDBTimerStatus.currentRound}` as TimerStatus['matchStatus'];
+                    newMatchStatus = `FinishedRound${currentDBTimerStatus.currentRound}` as TimerMatchStatus;
                     if (currentDBTimerStatus.currentRound === TOTAL_ROUNDS) {
                         newMatchStatus = 'MatchFinished';
                     }
@@ -542,7 +537,11 @@ export default function ScoringTandingDewanSatuPage() {
                                    ? docSnap.data()?.timer_status as TimerStatus
                                    : timerStatus;
 
-      const newFullStatus = { ...currentDBTimerStatus, ...newStatusUpdates };
+      const newFullStatus: TimerStatus = { // Ensure newFullStatus conforms to TimerStatus
+        ...currentDBTimerStatus,
+        ...newStatusUpdates,
+        roundDuration: currentDBTimerStatus.roundDuration || ROUND_DURATION_SECONDS // Ensure roundDuration is present
+      };
       await setDoc(matchDocRef, { timer_status: newFullStatus }, { merge: true });
     } catch (e) {
       console.error(`[Dewan-1] Error updating timer status in Firestore at path '${matchDocPath}':`, e);
@@ -556,14 +555,14 @@ export default function ScoringTandingDewanSatuPage() {
       if (timerStatus.timerSeconds > 0 && !timerStatus.isTimerRunning) {
          updateTimerStatusInFirestore({
              isTimerRunning: true,
-             matchStatus: `OngoingRound${timerStatus.currentRound}` as TimerStatus['matchStatus']
+             matchStatus: `OngoingRound${timerStatus.currentRound}` as TimerMatchStatus
          });
       }
     } else if (action === 'pause') {
       if (timerStatus.isTimerRunning) {
         updateTimerStatusInFirestore({
             isTimerRunning: false,
-            matchStatus: `PausedRound${timerStatus.currentRound}` as TimerStatus['matchStatus']
+            matchStatus: `PausedRound${timerStatus.currentRound}` as TimerMatchStatus
         });
       }
     }
@@ -576,22 +575,27 @@ export default function ScoringTandingDewanSatuPage() {
         return;
     }
 
-    let newMatchStatus: TimerStatus['matchStatus'] = 'Pending';
+    let newMatchStatus: TimerMatchStatus = 'Pending';
     let newTimerSeconds = ROUND_DURATION_SECONDS;
 
     if (timerStatus.matchStatus === 'MatchFinished' && round <= TOTAL_ROUNDS) {
-        newMatchStatus = `FinishedRound${round}` as TimerStatus['matchStatus'];
+        newMatchStatus = `FinishedRound${round}` as TimerMatchStatus;
         newTimerSeconds = 0;
     } else if (timerStatus.matchStatus.startsWith('FinishedRound')) {
         const finishedRoundNumber = parseInt(timerStatus.matchStatus.replace('FinishedRound', ''));
         if (round <= finishedRoundNumber) {
-             newMatchStatus = `FinishedRound${round}` as TimerStatus['matchStatus'];
+             newMatchStatus = `FinishedRound${round}` as TimerMatchStatus;
              newTimerSeconds = 0;
         } else {
             newMatchStatus = 'Pending';
             newTimerSeconds = ROUND_DURATION_SECONDS;
         }
+    } else if (timerStatus.matchStatus.startsWith('PausedForVerificationRound')) {
+        // If changing babak from verification pause, default to Pending of new babak
+        newMatchStatus = 'Pending';
+        newTimerSeconds = ROUND_DURATION_SECONDS;
     }
+
 
      updateTimerStatusInFirestore({
       currentRound: round,
@@ -609,12 +613,25 @@ export default function ScoringTandingDewanSatuPage() {
     }
 
     const isCurrentRoundActuallyFinished = timerStatus.matchStatus === `FinishedRound${timerStatus.currentRound}` && timerStatus.timerSeconds === 0;
+    const isPausedForVerification = timerStatus.matchStatus.startsWith('PausedForVerificationRound');
 
-    if (timerStatus.timerSeconds > 0 && !isCurrentRoundActuallyFinished && timerStatus.currentRound <= TOTAL_ROUNDS && timerStatus.matchStatus !== 'MatchFinished') {
+
+    if (timerStatus.timerSeconds > 0 && !isCurrentRoundActuallyFinished && timerStatus.currentRound <= TOTAL_ROUNDS && timerStatus.matchStatus !== 'MatchFinished' && !isPausedForVerification) {
         if (!confirm(`Babak ${timerStatus.currentRound} belum selesai (timer belum 0 atau status belum 'Finished'). Yakin ingin melanjutkan? Ini akan menganggap babak saat ini selesai.`)) {
             return;
         }
     }
+    
+    if (isPausedForVerification && timerStatus.currentRound <= TOTAL_ROUNDS) {
+        // If paused for verification, next action should be to start the current round again
+        updateTimerStatusInFirestore({
+            timerSeconds: timerStatus.timerSeconds, // Keep remaining time if any
+            isTimerRunning: false, // Dewan should press start
+            matchStatus: 'Pending', // Allow Dewan to start when ready
+        });
+        return;
+    }
+
 
     if (timerStatus.currentRound < TOTAL_ROUNDS) {
         const nextRound = (timerStatus.currentRound + 1) as 1 | 2 | 3;
@@ -665,6 +682,13 @@ export default function ScoringTandingDewanSatuPage() {
             batch.delete(doc.ref);
         });
         
+        // Also delete verifications
+        const verificationsCollectionRef = collection(db, MATCHES_TANDING_COLLECTION, activeScheduleId, 'verifications');
+        const verificationsSnapshot = await getDocs(verificationsCollectionRef);
+        verificationsSnapshot.forEach((doc) => {
+            batch.delete(doc.ref);
+        });
+
         await batch.commit();
 
         setTimerStatus(initialTimerStatus);
@@ -699,6 +723,7 @@ export default function ScoringTandingDewanSatuPage() {
     if (timerStatus.matchStatus.startsWith("OngoingRound")) return `Babak ${timerStatus.currentRound} Berlangsung`;
     if (timerStatus.matchStatus.startsWith("PausedRound")) return `Babak ${timerStatus.currentRound} Jeda`;
     if (timerStatus.matchStatus.startsWith("FinishedRound")) return `Babak ${timerStatus.currentRound} Selesai`;
+    if (timerStatus.matchStatus.startsWith("PausedForVerificationRound")) return `Babak ${timerStatus.currentRound} Verifikasi`;
     if (timerStatus.matchStatus === 'MatchFinished') return "Pertandingan Selesai";
     if (timerStatus.matchStatus === 'Pending') return `Babak ${timerStatus.currentRound} Menunggu`;
     return "Status Tidak Diketahui";
@@ -729,7 +754,7 @@ export default function ScoringTandingDewanSatuPage() {
       const entryKey = `${juriData.juriId}_${entryTimestampMillis}_${entry.points}`;
       const isUnstruck = unstruckKeys.has(entryKey);
       const isPermanentlyStruck = struckKeys.has(entryKey);
-      const isGracePeriodForDisplay = (Date.now() - entryTimestampMillis) <= 2000; 
+      const isGracePeriodForDisplay = (Date.now() - entryTimestampMillis <= 2000); 
 
       const shouldDisplayAsStruck = isPermanentlyStruck || (!isUnstruck && !isGracePeriodForDisplay);
 
@@ -806,18 +831,20 @@ export default function ScoringTandingDewanSatuPage() {
     );
   }
 
-  const nextButtonText: string = timerStatus.matchStatus === 'MatchFinished' ? 'Selesai' : (timerStatus.currentRound < TOTAL_ROUNDS ? `Lanjut Babak ${timerStatus.currentRound + 1}` : 'Selesaikan Match');
+  const nextButtonText: string = timerStatus.matchStatus === 'MatchFinished' ? 'Selesai' 
+    : timerStatus.matchStatus.startsWith('PausedForVerificationRound') ? `Lanjutkan Babak ${timerStatus.currentRound}`
+    : (timerStatus.currentRound < TOTAL_ROUNDS ? `Lanjut Babak ${timerStatus.currentRound + 1}` : 'Selesaikan Match');
 
   const isNextActionPossible: boolean =
-    (timerStatus.currentRound < TOTAL_ROUNDS || (timerStatus.currentRound === TOTAL_ROUNDS && timerStatus.matchStatus !== 'MatchFinished'));
+    (timerStatus.currentRound < TOTAL_ROUNDS || (timerStatus.currentRound === TOTAL_ROUNDS && timerStatus.matchStatus !== 'MatchFinished') || timerStatus.matchStatus.startsWith('PausedForVerificationRound'));
 
-  const isTimerStartDisabled: boolean = !activeScheduleId || isLoading || timerStatus.isTimerRunning || timerStatus.matchStatus === 'MatchFinished' || timerStatus.timerSeconds === 0 || timerStatus.matchStatus.startsWith('FinishedRound');
+  const isTimerStartDisabled: boolean = !activeScheduleId || isLoading || timerStatus.isTimerRunning || timerStatus.matchStatus === 'MatchFinished' || timerStatus.timerSeconds === 0 || timerStatus.matchStatus.startsWith('FinishedRound') || timerStatus.matchStatus.startsWith('PausedForVerificationRound');
   const isTimerPauseDisabled: boolean = !activeScheduleId || isLoading || !timerStatus.isTimerRunning || timerStatus.matchStatus === 'MatchFinished';
   const isNextActionDisabledBtn: boolean = !activeScheduleId || isLoading || timerStatus.isTimerRunning || !isNextActionPossible || timerStatus.matchStatus.startsWith("OngoingRound");
   const isResetButtonDisabled: boolean = !activeScheduleId || isLoading;
 
   const isBabakButtonDisabled = (round: number): boolean => {
-    if (!activeScheduleId || isLoading || timerStatus.isTimerRunning || timerStatus.matchStatus === 'MatchFinished') return true;
+    if (!activeScheduleId || isLoading || timerStatus.isTimerRunning || timerStatus.matchStatus === 'MatchFinished' || timerStatus.matchStatus.startsWith('PausedForVerificationRound')) return true;
     return false;
   };
 
@@ -853,14 +880,17 @@ export default function ScoringTandingDewanSatuPage() {
           </div>
 
           <div className="col-span-2 flex flex-col items-center justify-center space-y-2 md:space-y-3">
-            <div className="text-3xl md:text-5xl font-mono font-bold text-gray-800 dark:text-gray-200">{formatTime(timerStatus.timerSeconds)}</div>
+            <div className={cn(
+                "text-3xl md:text-5xl font-mono font-bold",
+                timerStatus.matchStatus.startsWith('PausedForVerification') ? "text-orange-500" : "text-gray-800 dark:text-gray-200"
+                )}>{formatTime(timerStatus.timerSeconds)}</div>
             <div className="flex flex-col space-y-1 w-full">
               {[1, 2, 3].map((round) => (
                 <Button
                   key={round}
-                  variant={timerStatus.currentRound === round ? "default" : "outline"}
+                  variant={timerStatus.currentRound === round && !timerStatus.matchStatus.startsWith('PausedForVerification') ? "default" : "outline"}
                   className={`w-full text-xs md:text-sm py-1 md:py-2 h-auto transition-all ${
-                    timerStatus.currentRound === round
+                    timerStatus.currentRound === round && !timerStatus.matchStatus.startsWith('PausedForVerification')
                       ? 'bg-accent text-accent-foreground ring-2 ring-offset-1 ring-accent dark:ring-offset-gray-800 font-semibold'
                       : 'bg-white dark:bg-gray-700 text-gray-700 dark:text-gray-200 border-gray-300 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-600'
                   } ${ isBabakButtonDisabled(round) ? 'opacity-50 cursor-not-allowed' : ''}`}
@@ -871,7 +901,9 @@ export default function ScoringTandingDewanSatuPage() {
                 </Button>
               ))}
             </div>
-             <p className="text-xs text-center text-gray-600 dark:text-gray-400 mt-1 md:mt-2 px-1 font-semibold">{getMatchStatusText()}</p>
+             <p className={cn("text-xs text-center px-1 font-semibold",
+                timerStatus.matchStatus.startsWith('PausedForVerification') ? "text-orange-600 dark:text-orange-400" : "text-gray-600 dark:text-gray-400"
+             )}>{getMatchStatusText()}</p>
           </div>
 
           <div className="col-span-5">
