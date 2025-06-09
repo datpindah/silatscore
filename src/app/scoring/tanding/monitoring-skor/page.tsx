@@ -300,7 +300,7 @@ export default function MonitoringSkorPage() {
       "w-full h-full flex items-center justify-center rounded-sm border text-[9px] md:text-[10px] font-medium leading-tight",
       isActive 
         ? "bg-[var(--monitor-foulbox-active-bg)] text-[var(--monitor-foulbox-active-text)] border-[var(--monitor-foulbox-active-border)]" 
-        : "bg-[var(--monitor-foulbox-inactive-bg)] text-[var(--monitor-foulbox-inactive-text)] border-[var(--monitor-foulbox-inactive-border)]"
+        : "bg-[var(--monitor-foulbox-inactive-bg)] text-[var(--monitor-foulbox-inactive-text)] border-[var(--monitor-foulbox-inactive-border)] dark:bg-gray-600 dark:text-gray-200 dark:border-gray-500"
     )}>
       {label}
     </div>
@@ -309,7 +309,7 @@ export default function MonitoringSkorPage() {
   const JuriInputIndicator = ({ juri, type, pesilatColor }: { juri: string; type: 'pukulan' | 'tendangan'; pesilatColor: PesilatColorIdentity }) => {
     const isActive = activeJuriHighlights[`${pesilatColor}-${type}-${juri}`];
     return (
-      <div className={cn("flex-1 border py-1 md:py-2 text-center text-xs md:text-sm font-medium rounded-sm", 
+      <div className={cn("flex-1 border py-1 md:py-2 text-center text-xs md:text-sm font-medium rounded-sm dark:border-gray-500", 
         isActive ? "bg-[var(--monitor-juri-indicator-active-bg)] text-[var(--monitor-juri-indicator-active-text)] border-[var(--monitor-juri-indicator-inactive-border)]"
                  : "bg-[var(--monitor-juri-indicator-inactive-bg)] text-[var(--monitor-juri-indicator-inactive-text)] border-[var(--monitor-juri-indicator-inactive-border)]")}>
         {juri.toUpperCase().replace('JURI-','J')}
@@ -339,7 +339,7 @@ export default function MonitoringSkorPage() {
   if (isLoading && configMatchId === undefined) { 
     return (
         <div className={cn("flex flex-col min-h-screen items-center justify-center", pageTheme === 'light' ? 'monitoring-theme-light' : 'monitoring-theme-dark', "bg-[var(--monitor-bg)] text-[var(--monitor-text)]")}>
-            <Loader2 className="h-16 w-16 animate-spin text-[var(--monitor-accent-bg)] mb-4" />
+            <Loader2 className="h-16 w-16 animate-spin text-[var(--monitor-overlay-accent-text)] mb-4" />
             <p className="text-xl">Memuat Konfigurasi Monitor...</p>
         </div>
     ); 
@@ -360,7 +360,7 @@ export default function MonitoringSkorPage() {
           <Moon className="h-[1.2rem] w-[1.2rem]" />
         )}
       </Button>
-      <div className="bg-[var(--monitor-header-section-bg)] p-2 md:p-3 text-center">
+      <div className="bg-[var(--monitor-header-section-bg)] p-4 md:p-5 text-center"> {/* Increased padding */}
         <div className="grid grid-cols-3 gap-1 md:gap-2 text-xs md:text-sm font-semibold">
           <div>{matchDetails?.place || <Skeleton className="h-4 w-20 inline-block bg-[var(--monitor-skeleton-bg)]" />}</div>
           <div>{matchDetails?.round || <Skeleton className="h-4 w-20 inline-block bg-[var(--monitor-skeleton-bg)]" />}</div>
@@ -376,8 +376,8 @@ export default function MonitoringSkorPage() {
             <div className="text-xs md:text-base text-[var(--monitor-pesilat-biru-contingent-text)]">{pesilatBiruInfo?.contingent || <Skeleton className="h-4 w-24 bg-[var(--monitor-skeleton-bg)] mt-1" />}</div>
           </div>
           
-          <div className="flex w-full items-stretch gap-1 md:gap-2 mb-1 md:mb-2 h-48 md:h-60">
-             <div className="flex flex-col gap-1 p-0.5 w-14 md:w-16 h-full">
+          <div className="flex w-full items-stretch gap-1 md:gap-2 mb-1 md:mb-2 h-40 md:h-52"> {/* Increased height */}
+             <div className="flex flex-col gap-1 p-0.5 w-20 md:w-28 h-full"> {/* Adjusted width for FoulBoxes */}
                 <div className="grid grid-cols-2 gap-1 flex-1">
                     <FoulBox label="B1" isActive={getFoulStatus('biru', 'Binaan', 1)} />
                     <FoulBox label="B2" isActive={getFoulStatus('biru', 'Binaan', 2)} />
@@ -439,11 +439,11 @@ export default function MonitoringSkorPage() {
             <div className="text-xs md:text-base text-[var(--monitor-pesilat-merah-contingent-text)]">{pesilatMerahInfo?.contingent || <Skeleton className="h-4 w-24 bg-[var(--monitor-skeleton-bg)] mt-1" />}</div>
           </div>
 
-          <div className="flex w-full items-stretch gap-1 md:gap-2 mb-1 md:mb-2 h-48 md:h-60">
+          <div className="flex w-full items-stretch gap-1 md:gap-2 mb-1 md:mb-2 h-40 md:h-52"> {/* Increased height */}
             <div className="flex-grow h-full bg-[var(--monitor-skor-merah-bg)] flex items-center justify-center text-5xl md:text-8xl font-bold rounded-md text-[var(--monitor-skor-text)]">
                 {confirmedScoreMerah}
             </div>
-             <div className="flex flex-col gap-1 p-0.5 w-14 md:w-16 h-full">
+             <div className="flex flex-col gap-1 p-0.5 w-20 md:w-28 h-full"> {/* Adjusted width for FoulBoxes */}
                 <div className="grid grid-cols-2 gap-1 flex-1">
                     <FoulBox label="B1" isActive={getFoulStatus('merah', 'Binaan', 1)} />
                     <FoulBox label="B2" isActive={getFoulStatus('merah', 'Binaan', 2)} />
@@ -487,10 +487,10 @@ export default function MonitoringSkorPage() {
             </DialogHeader>
             <div className="py-4 px-2 md:px-6">
                 <div className="text-center mt-2">
-                    <div className="text-lg font-semibold">
-                      {activeDisplayVerificationRequest?.type === 'jatuhan' ? 'Verifikasi Jatuhan' : 'Verifikasi Pelanggaran'}
-                    </div>
-                    <div className="text-sm text-[var(--monitor-text-muted)]">Babak {activeDisplayVerificationRequest?.round}</div>
+                  <div className="text-lg font-semibold">
+                    {activeDisplayVerificationRequest?.type === 'jatuhan' ? 'Verifikasi Jatuhan' : 'Verifikasi Pelanggaran'}
+                  </div>
+                  <div className="text-sm text-[var(--monitor-text-muted)]">Babak {activeDisplayVerificationRequest?.round}</div>
                 </div>
               <div className="mt-6 grid grid-cols-3 gap-3 md:gap-4 items-start justify-items-center text-center">
                 {JURI_IDS.map((juriKey, index) => {
@@ -532,3 +532,4 @@ export default function MonitoringSkorPage() {
     </div>
   );
 }
+
