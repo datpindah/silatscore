@@ -476,11 +476,11 @@ export default function JuriDynamicPage({ params: paramsPromise }: { params: Pro
 
         <div className="grid grid-cols-2 gap-4 md:gap-8">
           <div className="space-y-3">
-            <Button onClick={() => handleScore('merah', 1)} className="w-full bg-red-500 hover:bg-red-600 text-white text-base py-4 h-auto disabled:opacity-70" disabled={isInputDisabled} aria-label="Pukulan Merah (+1)">
-              <Target className="mr-2 h-5 w-5" /> Pukulan (+1)
+            <Button onClick={() => handleScore('merah', 1)} className="w-full bg-red-500 hover:bg-red-600 text-white text-base py-4 h-auto disabled:opacity-70" disabled={isInputDisabled} aria-label="Pukulan Merah">
+              <Target className="mr-2 h-5 w-5" /> Pukulan
             </Button>
-            <Button onClick={() => handleScore('merah', 2)} className="w-full bg-red-500 hover:bg-red-600 text-white text-base py-4 h-auto disabled:opacity-70" disabled={isInputDisabled} aria-label="Tendangan Merah (+2)">
-              <Shield className="mr-2 h-5 w-5" /> Tendangan (+2)
+            <Button onClick={() => handleScore('merah', 2)} className="w-full bg-red-500 hover:bg-red-600 text-white text-base py-4 h-auto disabled:opacity-70" disabled={isInputDisabled} aria-label="Tendangan Merah">
+              <Shield className="mr-2 h-5 w-5" /> Tendangan
             </Button>
             <Button onClick={() => handleDeleteScore('merah')} className="w-full bg-red-700 hover:bg-red-800 text-white text-base py-4 h-auto disabled:opacity-70" disabled={isInputDisabled || (scoresData.merah[`round${dewanControlledRound}` as keyof RoundScores]?.length === 0)} aria-label="Hapus Skor Terakhir Merah">
               <MinusSquare className="mr-2 h-5 w-5" /> Hapus
@@ -488,11 +488,11 @@ export default function JuriDynamicPage({ params: paramsPromise }: { params: Pro
           </div>
 
           <div className="space-y-3">
-            <Button onClick={() => handleScore('biru', 1)} className="w-full bg-blue-500 hover:bg-blue-600 text-white text-base py-4 h-auto disabled:opacity-70" disabled={isInputDisabled} aria-label="Pukulan Biru (+1)">
-              <Target className="mr-2 h-5 w-5" /> Pukulan (+1)
+            <Button onClick={() => handleScore('biru', 1)} className="w-full bg-blue-500 hover:bg-blue-600 text-white text-base py-4 h-auto disabled:opacity-70" disabled={isInputDisabled} aria-label="Pukulan Biru">
+              <Target className="mr-2 h-5 w-5" /> Pukulan
             </Button>
-            <Button onClick={() => handleScore('biru', 2)} className="w-full bg-blue-500 hover:bg-blue-600 text-white text-base py-4 h-auto disabled:opacity-70" disabled={isInputDisabled} aria-label="Tendangan Biru (+2)">
-              <Shield className="mr-2 h-5 w-5" /> Tendangan (+2)
+            <Button onClick={() => handleScore('biru', 2)} className="w-full bg-blue-500 hover:bg-blue-600 text-white text-base py-4 h-auto disabled:opacity-70" disabled={isInputDisabled} aria-label="Tendangan Biru">
+              <Shield className="mr-2 h-5 w-5" /> Tendangan
             </Button>
             <Button onClick={() => handleDeleteScore('biru')} className="w-full bg-blue-700 hover:bg-blue-800 text-white text-base py-4 h-auto disabled:opacity-70" disabled={isInputDisabled || (scoresData.biru[`round${dewanControlledRound}` as keyof RoundScores]?.length === 0)} aria-label="Hapus Skor Terakhir Biru">
               <MinusSquare className="mr-2 h-5 w-5" /> Hapus
