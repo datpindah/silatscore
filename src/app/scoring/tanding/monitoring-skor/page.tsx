@@ -4,13 +4,13 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription as DialogVerificationDescriptionElement } from "@/components/ui/dialog";
-import { ArrowLeft, Eye, Loader2, RadioTower, HandMetal, Zap, AlertTriangle, Info, MinusCircle, ShieldAlert, Megaphone, Ban } from 'lucide-react';
-import type { ScheduleTanding, TimerStatus, TimerMatchStatus, VerificationRequest, JuriVoteValue, KetuaActionLogEntry, PesilatColorIdentity, KetuaActionType } from '@/lib/types';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription as DialogVerificationDescription } from "@/components/ui/dialog";
+import { ArrowLeft, Eye, Loader2, RadioTower, AlertTriangle } from 'lucide-react';
+import type { ScheduleTanding, TimerStatus, VerificationRequest, JuriVoteValue, KetuaActionLogEntry, PesilatColorIdentity, KetuaActionType, RoundScores, JuriMatchData } from '@/lib/types';
 import { db } from '@/lib/firebase';
 import { doc, onSnapshot, getDoc, collection, query, orderBy, limit, Timestamp } from 'firebase/firestore';
 import { cn } from '@/lib/utils';
+import { Skeleton } from '@/components/ui/skeleton';
 
 const ACTIVE_TANDING_SCHEDULE_CONFIG_PATH = 'app_settings/active_match_tanding';
 const SCHEDULE_TANDING_COLLECTION = 'schedules_tanding';
@@ -33,20 +33,13 @@ const initialTimerStatus: TimerStatus = {
   roundDuration: 120,
 };
 
-interface ScoreEntry {
-  points: 1 | 2;
-  timestamp: Timestamp;
-}
-interface RoundScores {
-  round1: ScoreEntry[];
-  round2: ScoreEntry[];
-  round3: ScoreEntry[];
-}
-interface JuriMatchData {
+// Simplified JuriMatchData for monitoring, full score calculation is complex here
+interface DisplayJuriMatchData {
   merah: RoundScores;
   biru: RoundScores;
   lastUpdated?: Timestamp;
 }
+
 
 const FistIcon = () => (
   <svg viewBox="0 0 24 24" fill="currentColor" className="w-5 h-5 md:w-6 md:h-6 inline-block">
@@ -74,10 +67,10 @@ export default function MonitoringSkorPage() {
   const [confirmedScoreBiru, setConfirmedScoreBiru] = useState(0); // Placeholder
 
   const [ketuaActionsLog, setKetuaActionsLog] = useState<KetuaActionLogEntry[]>([]);
-  const [juriScoresData, setJuriScoresData] = useState<Record<string, JuriMatchData | null>>({
+  const [juriScoresData, setJuriScoresData] = useState<Record<string, DisplayJuriMatchData | null>>({
     'juri-1': null, 'juri-2': null, 'juri-3': null
   });
-  const prevJuriScoresDataRef = useRef<Record<string, JuriMatchData | null>>(juriScoresData);
+  const prevJuriScoresDataRef = useRef<Record<string, DisplayJuriMatchData | null>>(juriScoresData);
   
   const [activeJuriHighlights, setActiveJuriHighlights] = useState<Record<string, boolean>>({});
   const highlightTimeoutsRef = useRef<Record<string, NodeJS.Timeout>>({});
@@ -126,11 +119,20 @@ export default function MonitoringSkorPage() {
       if (activeScheduleId !== null) { resetMatchDisplayData(); setActiveScheduleId(null); }
       setIsLoading(false); setError("Tidak ada jadwal pertandingan yang aktif."); return;
     }
-    if (configMatchId !== activeScheduleId) { resetMatchDisplayData(); setActiveScheduleId(configMatchId); }
+    if (configMatchId !== activeScheduleId) { 
+        resetMatchDisplayData(); 
+        setActiveScheduleId(configMatchId); 
+        // setIsLoading(true) will be handled by the next effect if activeScheduleId is set
+    }
   }, [configMatchId, activeScheduleId, resetMatchDisplayData]);
 
   useEffect(() => {
-    if (!activeScheduleId) { setIsLoading(false); return; }
+    if (!activeScheduleId) { 
+        setIsLoading(false); 
+        // Ensure error is cleared if there's no active match, or let previous error persist if it was from config loading
+        if (!error?.includes("konfigurasi")) setError(null); 
+        return; 
+    }
 
     setIsLoading(true);
     let mounted = true;
@@ -148,7 +150,16 @@ export default function MonitoringSkorPage() {
           setPesilatMerahInfo({ name: data.pesilatMerahName, contingent: data.pesilatMerahContingent });
           setPesilatBiruInfo({ name: data.pesilatBiruName, contingent: data.pesilatBiruContingent });
           setMatchDetailsLoaded(true);
-        } else { setError(`Detail jadwal ID ${currentMatchId} tidak ditemukan.`); resetMatchDisplayData(); return; }
+        } else { 
+            setError(`Detail jadwal ID ${currentMatchId} tidak ditemukan.`); 
+            // Don't reset all data here, as other listeners might still be setting up or configMatchId might change again
+            setMatchDetails(null);
+            setPesilatMerahInfo(null);
+            setPesilatBiruInfo(null);
+            setMatchDetailsLoaded(false); // Explicitly set to false
+            setIsLoading(false); // Stop loading if schedule details are gone
+            return; 
+        }
 
         const matchDocRef = doc(db, MATCHES_TANDING_COLLECTION, currentMatchId);
         unsubscribers.push(onSnapshot(matchDocRef, (docSnap) => {
@@ -156,25 +167,32 @@ export default function MonitoringSkorPage() {
           if (docSnap.exists()) {
             const data = docSnap.data();
             if (data?.timer_status) setTimerStatus(data.timer_status as TimerStatus);
-            // Actual score calculation is complex, using placeholders for now.
-            // setConfirmedScoreMerah(data.merahScore || 0); 
-            // setConfirmedScoreBiru(data.biruScore || 0);
+            // TODO: Replicate Dewan 1's score calculation logic here if precise scores are needed.
+            // For now, using placeholders or direct values if available.
+            // setConfirmedScoreMerah(data.calculatedMerahScore || 0); 
+            // setConfirmedScoreBiru(data.calculatedBiruScore || 0);
           } else { 
             setTimerStatus(initialTimerStatus); 
             setConfirmedScoreMerah(0); setConfirmedScoreBiru(0);
           }
+        }, (err) => {
+          if (mounted) console.error("[MonitoringSkor] Error fetching match document (timer/scores):", err);
         }));
 
         unsubscribers.push(onSnapshot(query(collection(matchDocRef, OFFICIAL_ACTIONS_SUBCOLLECTION), orderBy("timestamp", "asc")), (snap) => {
           if (!mounted) return;
           setKetuaActionsLog(snap.docs.map(d => ({ id: d.id, ...d.data() } as KetuaActionLogEntry)));
+        }, (err) => {
+           if (mounted) console.error("[MonitoringSkor] Error fetching official actions:", err);
         }));
         
         JURI_IDS.forEach(juriId => {
           unsubscribers.push(onSnapshot(doc(matchDocRef, JURI_SCORES_SUBCOLLECTION, juriId), (juriDocSnap) => {
             if (!mounted) return;
-            const newJuriData = juriDocSnap.exists() ? juriDocSnap.data() as JuriMatchData : null;
+            const newJuriData = juriDocSnap.exists() ? juriDocSnap.data() as DisplayJuriMatchData : null;
             setJuriScoresData(prev => ({ ...prev, [juriId]: newJuriData }));
+          },(err) => {
+             if (mounted) console.error(`[MonitoringSkor] Error fetching scores for ${juriId}:`, err);
           }));
         });
 
@@ -187,19 +205,43 @@ export default function MonitoringSkorPage() {
               setIsDisplayVerificationModalOpen(true);
             } else { setActiveDisplayVerificationRequest(null); setIsDisplayVerificationModalOpen(false); }
           } else { setActiveDisplayVerificationRequest(null); setIsDisplayVerificationModalOpen(false); }
+        },(err) => {
+          if (mounted) console.error("[MonitoringSkor] Error fetching verifications:", err);
         }));
 
-      } catch (err) { if (mounted) { console.error("[MonitoringSkor] Error in loadData:", err); setError("Gagal memuat data pertandingan."); }
-      } finally { if (mounted) setIsLoading(false); }
+      } catch (err) { 
+          if (mounted) { 
+              console.error("[MonitoringSkor] Error in loadData:", err); 
+              setError("Gagal memuat data pertandingan."); 
+          }
+      } finally { 
+          // isLoading will be set to false once matchDetailsLoaded is true, or if schedule details are not found.
+          // This ensures loading state is managed correctly even with async operations for schedule details.
+          if (mounted && matchDetailsLoaded) setIsLoading(false);
+      }
     };
 
     loadData(activeScheduleId);
     return () => { mounted = false; unsubscribers.forEach(unsub => unsub()); };
-  }, [activeScheduleId, resetMatchDisplayData]);
+  }, [activeScheduleId]); // Removed resetMatchDisplayData from here as it was causing issues.
+
+  // Separate effect to manage isLoading based on matchDetailsLoaded status when activeScheduleId is present
+  useEffect(() => {
+    if (activeScheduleId && !matchDetailsLoaded && !error?.includes("Detail jadwal ID")) {
+        setIsLoading(true);
+    } else if (activeScheduleId && matchDetailsLoaded) {
+        setIsLoading(false);
+    } else if (!activeScheduleId) {
+        setIsLoading(false);
+    }
+  }, [activeScheduleId, matchDetailsLoaded, error]);
+
 
   useEffect(() => {
     const currentJuriData = juriScoresData;
     const prevJuriData = prevJuriScoresDataRef.current;
+    
+    if (!timerStatus || !timerStatus.currentRound) return; // Ensure timerStatus and currentRound are available
     const roundKey = `round${timerStatus.currentRound}` as keyof RoundScores;
 
     JURI_IDS.forEach(juriId => {
@@ -224,31 +266,20 @@ export default function MonitoringSkorPage() {
               }
               highlightTimeoutsRef.current[highlightKey] = setTimeout(() => {
                 setActiveJuriHighlights(prev => ({ ...prev, [highlightKey]: false }));
-              }, 1000);
+              }, 1000); // Highlight duration
             }
           }
         });
       }
     });
     prevJuriScoresDataRef.current = currentJuriData;
-  }, [juriScoresData, timerStatus.currentRound]);
+  }, [juriScoresData, timerStatus.currentRound, timerStatus]);
 
 
   const formatTime = (seconds: number): string => {
     const minutes = Math.floor(seconds / 60);
     const remainingSeconds = seconds % 60;
     return `${minutes.toString().padStart(2, '0')}:${remainingSeconds.toString().padStart(2, '0')}`;
-  };
-
-  const getMatchStatusText = (): string => {
-    if (!timerStatus) return "Memuat...";
-    if (timerStatus.matchStatus.startsWith("OngoingRound")) return `Babak ${timerStatus.currentRound} Berlangsung`;
-    if (timerStatus.matchStatus.startsWith("PausedRound")) return `Babak ${timerStatus.currentRound} Jeda`;
-    if (timerStatus.matchStatus.startsWith("FinishedRound")) return `Babak ${timerStatus.currentRound} Selesai`;
-    if (timerStatus.matchStatus.startsWith("PausedForVerificationRound")) return `Babak ${timerStatus.currentRound} Verifikasi`;
-    if (timerStatus.matchStatus === 'MatchFinished') return "Pertandingan Selesai";
-    if (timerStatus.matchStatus === 'Pending') return `Babak ${timerStatus.currentRound} Menunggu`;
-    return "Status Tidak Diketahui";
   };
   
   const getFoulStatus = (pesilatColor: PesilatColorIdentity, type: KetuaActionType, count: number): boolean => {
@@ -258,11 +289,23 @@ export default function MonitoringSkorPage() {
                 action.round === timerStatus.currentRound &&
                 action.actionType === type
     );
-    if (type === "Binaan" || type === "Teguran") {
-       const binaanCount = ketuaActionsLog.filter(a => a.pesilatColor === pesilatColor && a.round === timerStatus.currentRound && a.actionType === "Binaan").length;
-       const teguranCount = ketuaActionsLog.filter(a => a.pesilatColor === pesilatColor && a.round === timerStatus.currentRound && a.actionType === "Teguran").length;
-       if (type === "Binaan") return binaanCount >= count;
-       if (type === "Teguran") return teguranCount >= count;
+    if (type === "Binaan") { // Binaan logic might differ based on how it converts to Teguran
+       const binaanAsliCount = ketuaActionsLog.filter(
+        log => log.pesilatColor === pesilatColor &&
+               log.round === timerStatus.currentRound &&
+               log.actionType === 'Binaan' && // Only pure Binaan
+               !log.originalActionType 
+      ).length;
+      return binaanAsliCount >= count;
+    }
+    if (type === "Teguran") {
+        // Count Teguran from direct Teguran OR Binaan that became Teguran
+        const teguranCount = ketuaActionsLog.filter(
+            log => log.pesilatColor === pesilatColor &&
+                   log.round === timerStatus.currentRound &&
+                   (log.actionType === 'Teguran' || (log.actionType === 'Teguran' && log.originalActionType === 'Binaan'))
+        ).length;
+        return teguranCount >= count;
     }
     return actionsInRound.length >= count;
   };
@@ -283,12 +326,25 @@ export default function MonitoringSkorPage() {
     );
   };
 
-  if (isLoading && configMatchId === undefined) { /* ... loading spinner ... */ }
-  if (!activeScheduleId && !isLoading) { /* ... no active match message ... */ }
+  const getJuriVoteDisplayBoxClass = (vote: JuriVoteValue): string => {
+    if (vote === 'merah') return "bg-red-600 text-white";
+    if (vote === 'biru') return "bg-blue-600 text-white";
+    if (vote === 'invalid') return "bg-yellow-400 text-black";
+    return "bg-gray-200 dark:bg-gray-600 text-gray-800 dark:text-gray-100"; // Default for "Belum Vote"
+  };
+
+  if (isLoading && configMatchId === undefined) { 
+    return (
+        <div className="flex flex-col min-h-screen bg-gray-700 text-white items-center justify-center">
+            <Loader2 className="h-16 w-16 animate-spin text-yellow-300 mb-4" />
+            <p className="text-xl">Memuat Konfigurasi Monitor...</p>
+        </div>
+    ); 
+  }
+
 
   return (
     <div className="flex flex-col min-h-screen bg-gray-700 text-white font-sans overflow-hidden">
-      {/* Top Info Bar */}
       <div className="bg-gray-800 p-2 md:p-3 text-center">
         <div className="grid grid-cols-3 gap-1 md:gap-2 text-xs md:text-sm font-semibold">
           <div>{matchDetails?.place || <Skeleton className="h-4 w-20 inline-block bg-gray-600" />}</div>
@@ -297,7 +353,6 @@ export default function MonitoringSkorPage() {
         </div>
       </div>
 
-      {/* Main Content Grid */}
       <div className="flex-grow grid grid-cols-[1fr_auto_1fr] gap-1 md:gap-2 p-1 md:p-2 items-stretch">
         {/* Pesilat Biru Side */}
         <div className="flex flex-col items-center">
@@ -306,13 +361,13 @@ export default function MonitoringSkorPage() {
             <div className="text-xs md:text-base text-blue-400">{pesilatBiruInfo?.contingent || <Skeleton className="h-4 w-24 bg-gray-600 mt-1" />}</div>
           </div>
           <div className="grid grid-cols-2 gap-0.5 md:gap-1 mb-1 md:mb-2 w-20 md:w-32">
-            <FoulBox label="Binaan 1" isActive={getFoulStatus('biru', 'Binaan', 1)} />
-            <FoulBox label="Binaan 2" isActive={getFoulStatus('biru', 'Binaan', 2)} />
-            <FoulBox label="Teguran 1" isActive={getFoulStatus('biru', 'Teguran', 1)} />
-            <FoulBox label="Teguran 2" isActive={getFoulStatus('biru', 'Teguran', 2)} />
-            <FoulBox label="Peringatan 1" isActive={getFoulStatus('biru', 'Peringatan', 1)} />
-            <FoulBox label="Peringatan 2" isActive={getFoulStatus('biru', 'Peringatan', 2)} />
-            <FoulBox label="Peringatan 3" isActive={getFoulStatus('biru', 'Peringatan', 3)} />
+            <FoulBox label="B1" isActive={getFoulStatus('biru', 'Binaan', 1)} />
+            <FoulBox label="B2" isActive={getFoulStatus('biru', 'Binaan', 2)} />
+            <FoulBox label="T1" isActive={getFoulStatus('biru', 'Teguran', 1)} />
+            <FoulBox label="T2" isActive={getFoulStatus('biru', 'Teguran', 2)} />
+            <FoulBox label="P1" isActive={getFoulStatus('biru', 'Peringatan', 1)} />
+            <FoulBox label="P2" isActive={getFoulStatus('biru', 'Peringatan', 2)} />
+            <FoulBox label="P3" isActive={getFoulStatus('biru', 'Peringatan', 3)} />
           </div>
           <div className="w-full h-32 md:h-64 bg-blue-600 flex items-center justify-center text-5xl md:text-8xl font-bold mb-1 md:mb-2">
             {confirmedScoreBiru}
@@ -327,7 +382,6 @@ export default function MonitoringSkorPage() {
           </div>
         </div>
 
-        {/* Center Column (Timer, Babak, Icons) */}
         <div className="flex flex-col items-center justify-center space-y-2 md:space-y-4 px-1 md:px-2">
           <div className="text-4xl md:text-7xl font-mono font-bold text-yellow-300">
             {formatTime(timerStatus.timerSeconds)}
@@ -343,20 +397,19 @@ export default function MonitoringSkorPage() {
           <KickIcon />
         </div>
 
-        {/* Pesilat Merah Side */}
         <div className="flex flex-col items-center">
           <div className="text-center mb-1 md:mb-2">
             <div className="font-bold text-sm md:text-xl text-red-300">{pesilatMerahInfo?.name || <Skeleton className="h-6 w-32 bg-gray-600" />}</div>
             <div className="text-xs md:text-base text-red-400">{pesilatMerahInfo?.contingent || <Skeleton className="h-4 w-24 bg-gray-600 mt-1" />}</div>
           </div>
            <div className="grid grid-cols-2 gap-0.5 md:gap-1 mb-1 md:mb-2 w-20 md:w-32">
-            <FoulBox label="Binaan 1" isActive={getFoulStatus('merah', 'Binaan', 1)} />
-            <FoulBox label="Binaan 2" isActive={getFoulStatus('merah', 'Binaan', 2)} />
-            <FoulBox label="Teguran 1" isActive={getFoulStatus('merah', 'Teguran', 1)} />
-            <FoulBox label="Teguran 2" isActive={getFoulStatus('merah', 'Teguran', 2)} />
-            <FoulBox label="Peringatan 1" isActive={getFoulStatus('merah', 'Peringatan', 1)} />
-            <FoulBox label="Peringatan 2" isActive={getFoulStatus('merah', 'Peringatan', 2)} />
-            <FoulBox label="Peringatan 3" isActive={getFoulStatus('merah', 'Peringatan', 3)} />
+            <FoulBox label="B1" isActive={getFoulStatus('merah', 'Binaan', 1)} />
+            <FoulBox label="B2" isActive={getFoulStatus('merah', 'Binaan', 2)} />
+            <FoulBox label="T1" isActive={getFoulStatus('merah', 'Teguran', 1)} />
+            <FoulBox label="T2" isActive={getFoulStatus('merah', 'Teguran', 2)} />
+            <FoulBox label="P1" isActive={getFoulStatus('merah', 'Peringatan', 1)} />
+            <FoulBox label="P2" isActive={getFoulStatus('merah', 'Peringatan', 2)} />
+            <FoulBox label="P3" isActive={getFoulStatus('merah', 'Peringatan', 3)} />
           </div>
           <div className="w-full h-32 md:h-64 bg-red-600 flex items-center justify-center text-5xl md:text-8xl font-bold mb-1 md:mb-2">
             {confirmedScoreMerah}
@@ -372,7 +425,6 @@ export default function MonitoringSkorPage() {
         </div>
       </div>
       
-      {/* Verification Dialog (existing) */}
       <Dialog open={isDisplayVerificationModalOpen} onOpenChange={(isOpen) => { if (!isOpen && activeDisplayVerificationRequest?.status === 'pending') return; setIsDisplayVerificationModalOpen(isOpen); }}>
          <DialogContent
             className="sm:max-w-lg md:max-w-xl bg-gray-800 border-gray-700 text-white"
@@ -380,7 +432,7 @@ export default function MonitoringSkorPage() {
             onEscapeKeyDown={(e) => {if (activeDisplayVerificationRequest?.status === 'pending') e.preventDefault();}}
           >
             <DialogHeader className="text-center">
-              <DialogTitle className="text-2xl md:text-3xl font-bold font-headline text-accent">
+              <DialogTitle className="text-2xl md:text-3xl font-bold font-headline text-yellow-300">
                 Verifikasi Juri
               </DialogTitle>
             </DialogHeader>
@@ -397,14 +449,14 @@ export default function MonitoringSkorPage() {
                 {JURI_IDS.map((juriKey, index) => {
                   const vote = activeDisplayVerificationRequest?.votes[juriKey] || null;
                   let voteText = 'Belum Vote';
-                  let voteBoxClass = "bg-gray-300 dark:bg-gray-600 text-gray-800 dark:text-gray-100";
-                  if (vote === 'merah') { voteText = 'MERAH'; voteBoxClass = "bg-red-600 text-white"; }
-                  else if (vote === 'biru') { voteText = 'BIRU'; voteBoxClass = "bg-blue-600 text-white"; }
-                  else if (vote === 'invalid') { voteText = 'INVALID'; voteBoxClass = "bg-yellow-400 text-black"; }
+                  let voteBoxColorClass = getJuriVoteDisplayBoxClass(vote);
+                  if (vote === 'merah') { voteText = 'MERAH'; }
+                  else if (vote === 'biru') { voteText = 'BIRU'; }
+                  else if (vote === 'invalid') { voteText = 'INVALID';}
                   return (
                     <div key={`vote-display-monitor-${juriKey}`} className="flex flex-col items-center space-y-1 w-full">
                       <p className="text-base md:text-lg font-bold text-gray-100">J{index + 1}</p>
-                      <div className={cn("w-full h-12 md:h-16 rounded-md flex items-center justify-center text-[10px] md:text-xs font-bold p-1 shadow-md", voteBoxClass)}>
+                      <div className={cn("w-full h-12 md:h-16 rounded-md flex items-center justify-center text-[10px] md:text-xs font-bold p-1 shadow-md", voteBoxColorClass)}>
                         {voteText}
                       </div>
                     </div>
@@ -416,7 +468,7 @@ export default function MonitoringSkorPage() {
       </Dialog>
       {isLoading && activeScheduleId && !matchDetailsLoaded && (
          <div className="absolute inset-0 bg-gray-800/50 flex flex-col items-center justify-center z-50">
-            <Loader2 className="h-12 w-12 animate-spin text-accent mb-4" />
+            <Loader2 className="h-12 w-12 animate-spin text-yellow-300 mb-4" />
             <p className="text-lg text-gray-200">Memuat Data Monitor...</p>
          </div>
       )}
@@ -433,3 +485,6 @@ export default function MonitoringSkorPage() {
     </div>
   );
 }
+
+
+    
