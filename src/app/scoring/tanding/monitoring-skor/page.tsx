@@ -4,7 +4,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription as DialogVerificationDescription } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle as RadixDialogTitle, DialogDescription as DialogVerificationDescription } from "@/components/ui/dialog"; // Renamed DialogTitle to avoid conflict
 import { ArrowLeft, Eye, Loader2, RadioTower, AlertTriangle, Sun, Moon } from 'lucide-react';
 import type { ScheduleTanding, TimerStatus, VerificationRequest, JuriVoteValue, KetuaActionLogEntry, PesilatColorIdentity, KetuaActionType, TimerMatchStatus } from '@/lib/types';
 import type { ScoreEntry as LibScoreEntryType, RoundScores as LibRoundScoresType } from '@/lib/types';
@@ -194,7 +194,7 @@ export default function MonitoringSkorPage() {
             if (latestVerification.status === 'pending') {
               setActiveDisplayVerificationRequest(latestVerification);
               setIsDisplayVerificationModalOpen(true);
-            } else {
+            } else { // If not pending (e.g., completed, cancelled), close modal
               setActiveDisplayVerificationRequest(null);
               setIsDisplayVerificationModalOpen(false);
             }
@@ -222,7 +222,7 @@ export default function MonitoringSkorPage() {
 
     loadData(activeScheduleId);
     return () => { mounted = false; unsubscribers.forEach(unsub => unsub()); };
-  }, [activeScheduleId, matchDetailsLoaded]);
+  }, [activeScheduleId, matchDetailsLoaded]); // Removed resetMatchDisplayData from deps as it's stable
 
   useEffect(() => {
     if (isLoading && (matchDetailsLoaded || activeScheduleId === null)) {
@@ -364,7 +364,7 @@ export default function MonitoringSkorPage() {
         log => log.pesilatColor === pesilatColor &&
                log.round === timerStatus.currentRound &&
                log.actionType === 'Binaan' &&
-               typeof log.originalActionType === 'undefined' 
+               (typeof log.originalActionType === 'undefined' || log.originalActionType === null)
       );
       const convertedBinaanToTeguranActions = ketuaActionsLog.filter(
         log => log.pesilatColor === pesilatColor &&
@@ -393,7 +393,7 @@ export default function MonitoringSkorPage() {
             log => log.pesilatColor === pesilatColor &&
                    log.round === timerStatus.currentRound &&
                    log.actionType === 'Teguran' &&
-                   typeof log.originalActionType === 'undefined' // Only count pure tegurans for T1/T2 display here
+                   (typeof log.originalActionType === 'undefined' || log.originalActionType === null) // Only count pure tegurans for T1/T2 display here
         ).length;
         return teguranCount >= count;
     }
@@ -535,11 +535,11 @@ export default function MonitoringSkorPage() {
           <div className="text-xs md:text-sm text-[var(--monitor-status-text)] mt-1 md:mt-2 text-center">
             {getMatchStatusTextForMonitor()}
           </div>
-          <div className="mt-4 w-full max-w-[180px] flex gap-1 md:gap-2">
-              <div className="flex-1 h-10 md:h-12 border border-[var(--monitor-border)] rounded-md flex items-center justify-center text-xs md:text-sm text-[var(--monitor-text-muted)] bg-[var(--monitor-header-section-bg)] shadow-sm">
+          <div className="mt-4 w-full max-w-[180px] flex flex-col space-y-1 md:space-y-2">
+              <div className="h-10 md:h-12 border border-[var(--monitor-border)] rounded-md flex items-center justify-center text-xs md:text-sm text-[var(--monitor-text-muted)] bg-[var(--monitor-header-section-bg)] shadow-sm">
                   Info Box 1
               </div>
-              <div className="flex-1 h-10 md:h-12 border border-[var(--monitor-border)] rounded-md flex items-center justify-center text-xs md:text-sm text-[var(--monitor-text-muted)] bg-[var(--monitor-header-section-bg)] shadow-sm">
+              <div className="h-10 md:h-12 border border-[var(--monitor-border)] rounded-md flex items-center justify-center text-xs md:text-sm text-[var(--monitor-text-muted)] bg-[var(--monitor-header-section-bg)] shadow-sm">
                   Info Box 2
               </div>
           </div>
@@ -593,11 +593,11 @@ export default function MonitoringSkorPage() {
             onPointerDownOutside={(e) => {if (activeDisplayVerificationRequest?.status === 'pending') e.preventDefault();}}
             onEscapeKeyDown={(e) => {if (activeDisplayVerificationRequest?.status === 'pending') e.preventDefault();}}
           >
-            <DialogTitle className="sr-only">Konfirmasi Verifikasi Juri</DialogTitle>
+            <RadixDialogTitle className="sr-only">Konfirmasi Verifikasi Juri</RadixDialogTitle>
             <DialogHeader className="text-center">
-              <DialogTitle className="text-2xl md:text-3xl font-bold font-headline text-[var(--monitor-dialog-title-text)]">
+              <RadixDialogTitle className="text-2xl md:text-3xl font-bold font-headline text-[var(--monitor-dialog-title-text)]">
                 Verifikasi Juri
-              </DialogTitle>
+              </RadixDialogTitle>
             </DialogHeader>
             <div className="py-4 px-2 md:px-6">
                 <div className="text-center mt-2">
