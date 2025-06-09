@@ -521,6 +521,7 @@ export default function JuriDynamicPage({ params: paramsPromise }: { params: Pro
         {/* Verification Modal */}
         <Dialog open={isVerificationModalOpen && activeVerification !== null && activeVerification.votes[juriId as keyof VerificationRequest['votes']] === null} onOpenChange={(open) => { if(!open && activeVerification) { /* Juri menutup manual, mungkin kita ingin mencatat ini atau tidak melakukan apa-apa */ setIsVerificationModalOpen(false); /* setActiveVerification(null); // Bisa jadi juri ingin buka lagi jika tak sengaja tutup */ } else { setIsVerificationModalOpen(open); }}}>
           <DialogContent className="sm:max-w-md" onPointerDownOutside={(e) => e.preventDefault()} onEscapeKeyDown={(e) => e.preventDefault()}>
+            <DialogTitle className="sr-only">Verifikasi Keputusan Juri</DialogTitle>
             <DialogHeader className="text-center">
               <DialogTitle className="text-2xl font-bold font-headline">Verifikasi Juri</DialogTitle>
               {activeVerification && (

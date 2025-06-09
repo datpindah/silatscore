@@ -252,16 +252,17 @@ export default function KetuaPertandinganPage() {
           log => log.pesilatColor === pesilatColor &&
                  log.round === dewanTimerStatus.currentRound &&
                  log.actionType === 'Binaan' &&
-                 !log.originalActionType 
+                 typeof log.originalActionType === 'undefined' // Ensure it's a "pure" Binaan
         ).length;
 
         if (binaanAsliCount < 1) { 
           actionTypeToLog = 'Binaan';
           pointsToLog = 0; 
+          // currentOriginalActionType remains undefined for pure Binaan
         } else { 
-          actionTypeToLog = 'Teguran';
+          actionTypeToLog = 'Teguran'; // Second Binaan becomes Teguran
           pointsToLog = TEGURAN_POINTS;
-          currentOriginalActionType = 'Binaan'; 
+          currentOriginalActionType = 'Binaan'; // Mark that this Teguran originated from a Binaan
         }
       } else if (actionTypeButtonPressed === 'Peringatan') {
         const peringatanCount = countActionsInRound(ketuaActionsLog, pesilatColor, 'Peringatan', dewanTimerStatus.currentRound);
@@ -584,6 +585,7 @@ export default function KetuaPertandinganPage() {
                 </Button>
               </DialogTrigger>
               <DialogContent className="sm:max-w-[425px]">
+                <DialogTitle className="sr-only">Mulai Verifikasi Juri</DialogTitle>
                 <DialogHeader>
                   <DialogTitle>Mulai Verifikasi Juri</DialogTitle>
                   <DialogDescription>
@@ -644,6 +646,7 @@ export default function KetuaPertandinganPage() {
           }
         }}>
           <DialogContent className="sm:max-w-lg" onPointerDownOutside={(e) => { if(activeVerificationDetails?.status === 'pending') e.preventDefault(); }} onEscapeKeyDown={(e) => { if(activeVerificationDetails?.status === 'pending') e.preventDefault(); }}>
+            <DialogTitle className="sr-only">Hasil Verifikasi Juri</DialogTitle>
             <DialogHeader>
               <DialogTitle className="text-2xl font-bold font-headline text-center">Hasil Verifikasi Juri</DialogTitle>
               {activeVerificationDetails && (
