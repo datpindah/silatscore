@@ -4,7 +4,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
-import { Dialog, DialogContent, DialogHeader, DialogDescription as DialogVerificationDescription } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle as RadixDialogTitle, DialogDescription as DialogVerificationDescription } from "@/components/ui/dialog";
 import { ArrowLeft, Eye, Loader2, RadioTower, AlertTriangle, Sun, Moon } from 'lucide-react';
 import type { ScheduleTanding, TimerStatus, VerificationRequest, JuriVoteValue, KetuaActionLogEntry, PesilatColorIdentity, KetuaActionType, TimerMatchStatus } from '@/lib/types';
 import type { ScoreEntry as LibScoreEntryType, RoundScores as LibRoundScoresType } from '@/lib/types';
@@ -12,7 +12,6 @@ import { db } from '@/lib/firebase';
 import { doc, onSnapshot, getDoc, collection, query, orderBy, limit, Timestamp } from 'firebase/firestore';
 import { cn } from '@/lib/utils';
 import { Skeleton } from '@/components/ui/skeleton';
-import { DialogTitle } from '@/components/ui/dialog';
 
 
 const ACTIVE_TANDING_SCHEDULE_CONFIG_PATH = 'app_settings/active_match_tanding';
@@ -467,7 +466,7 @@ export default function MonitoringSkorPage() {
           <Moon className="h-[1.2rem] w-[1.2rem]" />
         )}
       </Button>
-      <div className="bg-[var(--monitor-header-section-bg)] p-4 md:p-5 text-center">
+      <div className="bg-[var(--monitor-header-section-bg)] p-5 md:p-6 text-center">
         <div className="grid grid-cols-3 gap-1 md:gap-2 text-xs md:text-sm font-semibold">
           <div>{matchDetails?.place || <Skeleton className="h-4 w-20 inline-block bg-[var(--monitor-skeleton-bg)]" />}</div>
           <div>{matchDetails?.round || <Skeleton className="h-4 w-20 inline-block bg-[var(--monitor-skeleton-bg)]" />}</div>
@@ -610,9 +609,8 @@ export default function MonitoringSkorPage() {
             onPointerDownOutside={(e) => {if (activeDisplayVerificationRequest?.status === 'pending') e.preventDefault();}}
             onEscapeKeyDown={(e) => {if (activeDisplayVerificationRequest?.status === 'pending') e.preventDefault();}}
           >
-            <DialogTitle className="sr-only">Konfirmasi Verifikasi Juri</DialogTitle>
+            <RadixDialogTitle className="sr-only">Konfirmasi Verifikasi Juri</RadixDialogTitle>
             <DialogHeader className="text-center">
-               {/* Menggunakan RadixDialogTitle dari import, bukan DialogTitle dari ui/dialog */}
               <div className="text-2xl md:text-3xl font-bold font-headline text-[var(--monitor-dialog-title-text)]">
                 Verifikasi Juri
               </div>
@@ -664,5 +662,3 @@ export default function MonitoringSkorPage() {
     </div>
   );
 }
-
-    

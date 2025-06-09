@@ -106,7 +106,7 @@ body {
     --monitor-bg: hsl(var(--background));
     --monitor-text: hsl(var(--foreground));
     --monitor-text-muted: hsl(var(--muted-foreground));
-    --monitor-header-section-bg: hsl(var(--card));
+    --monitor-header-section-bg: hsl(205, 65%, 88%); /* Light Blue */
     
     --monitor-skeleton-bg: hsl(var(--muted));
 
@@ -168,7 +168,7 @@ body {
     --monitor-bg: theme('colors.gray.700');
     --monitor-text: theme('colors.white');
     --monitor-text-muted: theme('colors.gray.400');
-    --monitor-header-section-bg: theme('colors.gray.800');
+    --monitor-header-section-bg: hsl(210, 30%, 20%); /* Dark Blue */
 
     --monitor-skeleton-bg: theme('colors.gray.600');
 
