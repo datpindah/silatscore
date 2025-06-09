@@ -6,7 +6,7 @@ import Link from 'next/link';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription as DialogVerificationDescription } from "@/components/ui/dialog";
 import { ArrowLeft, Eye, Loader2, RadioTower, AlertTriangle } from 'lucide-react';
-import type { ScheduleTanding, TimerStatus, VerificationRequest, JuriVoteValue, KetuaActionLogEntry, PesilatColorIdentity, KetuaActionType, RoundScores, JuriMatchData as FullJuriMatchData } from '@/lib/types';
+import type { ScheduleTanding, TimerStatus, VerificationRequest, JuriVoteValue, KetuaActionLogEntry, PesilatColorIdentity, KetuaActionType, RoundScores } from '@/lib/types'; // Removed FullJuriMatchData as DisplayJuriMatchData is used locally
 import { db } from '@/lib/firebase';
 import { doc, onSnapshot, getDoc, collection, query, orderBy, limit, Timestamp } from 'firebase/firestore';
 import { cn } from '@/lib/utils';
@@ -33,7 +33,7 @@ const initialTimerStatus: TimerStatus = {
   roundDuration: 120,
 };
 
-// Simplified JuriMatchData for monitoring, full score calculation is complex here
+// Simplified JuriMatchData for monitoring display
 interface DisplayJuriMatchData {
   merah: RoundScores;
   biru: RoundScores;
@@ -200,10 +200,23 @@ export default function MonitoringSkorPage() {
             if (latestVerification.status === 'pending') {
               setActiveDisplayVerificationRequest(latestVerification);
               setIsDisplayVerificationModalOpen(true);
-            } else { setActiveDisplayVerificationRequest(null); setIsDisplayVerificationModalOpen(false); }
-          } else { setActiveDisplayVerificationRequest(null); setIsDisplayVerificationModalOpen(false); }
+            } else { 
+              // Only close if the currently displayed verification is the one that's no longer pending
+              if (activeDisplayVerificationRequest?.id === latestVerification.id) {
+                setActiveDisplayVerificationRequest(null); 
+                setIsDisplayVerificationModalOpen(false); 
+              }
+            }
+          } else { 
+            setActiveDisplayVerificationRequest(null); 
+            setIsDisplayVerificationModalOpen(false); 
+          }
         },(err) => {
-          if (mounted) console.error("[MonitoringSkor] Error fetching verifications:", err);
+          if (mounted) {
+            console.error("[MonitoringSkor] Error fetching verifications:", err);
+            setActiveDisplayVerificationRequest(null); 
+            setIsDisplayVerificationModalOpen(false);
+          }
         }));
 
       } catch (err) { 
@@ -228,7 +241,7 @@ export default function MonitoringSkorPage() {
     } else if (!activeScheduleId) {
         setIsLoading(false);
     }
-  }, [activeScheduleId, matchDetailsLoaded, error]);
+  }, [activeScheduleId, matchDetailsLoaded, error, activeDisplayVerificationRequest]);
 
 
   useEffect(() => {
@@ -305,7 +318,12 @@ export default function MonitoringSkorPage() {
 
 
   const FoulBox = ({ label, isActive }: { label: string; isActive: boolean }) => (
-    <div className={cn("text-center border border-gray-400 py-0.5 px-1 text-[10px] md:text-xs leading-tight", isActive ? "bg-yellow-400 text-black" : "bg-gray-200 text-gray-700")}>
+    <div className={cn(
+      "w-full h-5 md:h-6 flex items-center justify-center rounded-sm border border-gray-400 dark:border-gray-500 text-[9px] md:text-[10px] font-medium leading-tight",
+      isActive 
+        ? "bg-yellow-400 text-black" 
+        : "bg-gray-200 dark:bg-gray-600 text-gray-700 dark:text-gray-200"
+    )}>
       {label}
     </div>
   );
@@ -313,7 +331,8 @@ export default function MonitoringSkorPage() {
   const JuriInputIndicator = ({ juri, type, pesilatColor }: { juri: string; type: 'pukulan' | 'tendangan'; pesilatColor: PesilatColorIdentity }) => {
     const isActive = activeJuriHighlights[`${pesilatColor}-${type}-${juri}`];
     return (
-      <div className={cn("flex-1 border border-gray-400 py-1 md:py-2 text-center text-xs md:text-sm font-medium", isActive ? "bg-yellow-400 text-black" : "bg-gray-200 text-gray-700")}>
+      <div className={cn("flex-1 border border-gray-400 dark:border-gray-500 py-1 md:py-2 text-center text-xs md:text-sm font-medium rounded-sm", 
+        isActive ? "bg-yellow-400 text-black" : "bg-gray-200 dark:bg-gray-600 text-gray-700 dark:text-gray-200")}>
         {juri.toUpperCase().replace('JURI-','J')}
       </div>
     );
@@ -323,7 +342,7 @@ export default function MonitoringSkorPage() {
     if (vote === 'merah') return "bg-red-600 text-white";
     if (vote === 'biru') return "bg-blue-600 text-white";
     if (vote === 'invalid') return "bg-yellow-400 text-black";
-    return "bg-white dark:bg-gray-600 text-gray-800 dark:text-gray-100";
+    return "bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"; // Default for "Belum Vote"
   };
 
   if (isLoading && configMatchId === undefined) { 
@@ -355,7 +374,7 @@ export default function MonitoringSkorPage() {
           </div>
           
           <div className="flex w-full items-center gap-1 md:gap-2 mb-1 md:mb-2">
-            <div className="grid grid-cols-2 gap-0.5 md:gap-1 w-16 md:w-20">
+            <div className="grid grid-cols-2 gap-1 p-0.5 w-14 md:w-16">
                 <FoulBox label="B1" isActive={getFoulStatus('biru', 'Binaan', 1)} />
                 <FoulBox label="B2" isActive={getFoulStatus('biru', 'Binaan', 2)} />
                 <FoulBox label="T1" isActive={getFoulStatus('biru', 'Teguran', 1)} />
@@ -364,7 +383,7 @@ export default function MonitoringSkorPage() {
                 <FoulBox label="P2" isActive={getFoulStatus('biru', 'Peringatan', 2)} />
                 <FoulBox label="P3" isActive={getFoulStatus('biru', 'Peringatan', 3)} />
             </div>
-            <div className="flex-grow h-32 md:h-64 bg-blue-600 flex items-center justify-center text-5xl md:text-8xl font-bold">
+            <div className="flex-grow h-32 md:h-64 bg-blue-600 flex items-center justify-center text-5xl md:text-8xl font-bold rounded-md">
                 {confirmedScoreBiru}
             </div>
           </div>
@@ -402,10 +421,10 @@ export default function MonitoringSkorPage() {
           </div>
 
           <div className="flex w-full items-center gap-1 md:gap-2 mb-1 md:mb-2">
-            <div className="flex-grow h-32 md:h-64 bg-red-600 flex items-center justify-center text-5xl md:text-8xl font-bold">
+            <div className="flex-grow h-32 md:h-64 bg-red-600 flex items-center justify-center text-5xl md:text-8xl font-bold rounded-md">
                 {confirmedScoreMerah}
             </div>
-            <div className="grid grid-cols-2 gap-0.5 md:gap-1 w-16 md:w-20">
+            <div className="grid grid-cols-2 gap-1 p-0.5 w-14 md:w-16">
                 <FoulBox label="B1" isActive={getFoulStatus('merah', 'Binaan', 1)} />
                 <FoulBox label="B2" isActive={getFoulStatus('merah', 'Binaan', 2)} />
                 <FoulBox label="T1" isActive={getFoulStatus('merah', 'Teguran', 1)} />
@@ -427,7 +446,10 @@ export default function MonitoringSkorPage() {
         </div>
       </div>
       
-      <Dialog open={isDisplayVerificationModalOpen} onOpenChange={(isOpen) => { if (!isOpen && activeDisplayVerificationRequest?.status === 'pending') return; setIsDisplayVerificationModalOpen(isOpen); }}>
+      <Dialog open={isDisplayVerificationModalOpen} onOpenChange={(isOpen) => { 
+          if (!isOpen && activeDisplayVerificationRequest?.status === 'pending') return; 
+          setIsDisplayVerificationModalOpen(isOpen); 
+      }}>
          <DialogContent
             className="sm:max-w-lg md:max-w-xl bg-gray-800 border-gray-700 text-white"
             onPointerDownOutside={(e) => {if (activeDisplayVerificationRequest?.status === 'pending') e.preventDefault();}}
@@ -439,14 +461,19 @@ export default function MonitoringSkorPage() {
               </DialogTitle>
             </DialogHeader>
             <div className="py-4 px-2 md:px-6">
-                {activeDisplayVerificationRequest && (
-                    <div className="mb-6 text-center">
-                        <div className="text-lg md:text-xl font-semibold text-gray-100">
-                            {activeDisplayVerificationRequest.type === 'jatuhan' ? 'Verifikasi Jatuhan' : 'Verifikasi Pelanggaran'}
-                        </div>
-                        <div className="text-sm text-gray-300">Babak {activeDisplayVerificationRequest.round}</div>
+                <div className="mb-6">
+                  <div className="text-lg md:text-xl font-semibold mb-1 text-center md:text-left text-gray-100">
+                    Detail Verifikasi
+                  </div>
+                  {activeDisplayVerificationRequest && (
+                    <div className="text-md md:text-lg text-gray-300 text-center md:text-left">
+                      <div>
+                        {activeDisplayVerificationRequest.type === 'jatuhan' ? 'Verifikasi Jatuhan' : 'Verifikasi Pelanggaran'}
+                      </div>
+                      <div className="text-sm text-gray-400">Babak {activeDisplayVerificationRequest.round}</div>
                     </div>
-                )}
+                  )}
+                </div>
               <div className="grid grid-cols-3 gap-3 md:gap-4 items-start justify-items-center text-center">
                 {JURI_IDS.map((juriKey, index) => {
                   const vote = activeDisplayVerificationRequest?.votes[juriKey] || null;
