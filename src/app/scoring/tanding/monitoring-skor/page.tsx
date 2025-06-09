@@ -6,7 +6,8 @@ import Link from 'next/link';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription as DialogVerificationDescription } from "@/components/ui/dialog";
 import { ArrowLeft, Eye, Loader2, RadioTower, AlertTriangle, Sun, Moon } from 'lucide-react';
-import type { ScheduleTanding, TimerStatus, VerificationRequest, JuriVoteValue, KetuaActionLogEntry, PesilatColorIdentity, KetuaActionType, RoundScores as LibRoundScoresType, TimerMatchStatus, ScoreEntry as LibScoreEntryType } from '@/lib/types';
+import type { ScheduleTanding, TimerStatus, VerificationRequest, JuriVoteValue, KetuaActionLogEntry, PesilatColorIdentity, KetuaActionType, TimerMatchStatus, ScoreEntry as LibScoreEntryType } from '@/lib/types';
+import type { RoundScores as LibRoundScoresType } from '@/lib/types';
 import { db } from '@/lib/firebase';
 import { doc, onSnapshot, getDoc, collection, query, orderBy, limit, Timestamp } from 'firebase/firestore';
 import { cn } from '@/lib/utils';
@@ -41,8 +42,7 @@ interface DisplayJuriMatchData {
   lastUpdated?: Timestamp;
 }
 
-// Define ScoreEntry and CombinedScoreEntry for score calculation logic
-interface ScoreEntry extends LibScoreEntryType {} // Inherits points, timestamp
+interface ScoreEntry extends LibScoreEntryType {} 
 
 interface CombinedScoreEntry extends ScoreEntry {
   juriId: string;
@@ -238,9 +238,7 @@ export default function MonitoringSkorPage() {
 
 
   useEffect(() => {
-    // This effect calculates the scores based on confirmed keys from Dewan and Ketua's actions
     if (!activeScheduleId || Object.values(juriScoresData).every(data => data === null)) {
-        // If no active match or no Juri data yet, scores might be 0 or based only on Ketua log
         let calculatedTotalMerah = 0;
         let calculatedTotalBiru = 0;
         ketuaActionsLog.forEach(action => {
@@ -275,7 +273,6 @@ export default function MonitoringSkorPage() {
         }
     });
 
-    // Filter raw entries to get only those confirmed by Dewan 1
     const confirmedUnstruckEntries = allRawEntries.filter(e => prevSavedUnstruckKeysFromDewan.has(e.key));
     
     let calculatedTotalMerah = 0;
@@ -372,7 +369,7 @@ export default function MonitoringSkorPage() {
         log => log.pesilatColor === pesilatColor &&
                log.round === timerStatus.currentRound &&
                log.actionType === 'Binaan' &&
-               typeof log.originalActionType === 'undefined' 
+               typeof log.originalActionType === 'undefined'
       );
       const convertedBinaanToTeguranActions = ketuaActionsLog.filter(
         log => log.pesilatColor === pesilatColor &&
@@ -488,7 +485,7 @@ export default function MonitoringSkorPage() {
             <div className="text-xs md:text-base text-[var(--monitor-pesilat-biru-contingent-text)]">{pesilatBiruInfo?.contingent || <Skeleton className="h-4 w-24 bg-[var(--monitor-skeleton-bg)] mt-1" />}</div>
           </div>
 
-          <div className="flex w-full items-stretch gap-1 md:gap-2 mb-1 md:mb-2 h-48 md:h-60">
+          <div className="flex w-full items-stretch gap-1 md:gap-2 mb-1 md:mb-2 h-40 md:h-52">
              <div className="flex flex-col gap-1 p-0.5 w-14 md:w-16 h-full">
                 <div className="grid grid-cols-2 gap-1 flex-1">
                     <FoulBox label="B1" isActive={getFoulStatus('biru', 'Binaan', 1)} />
@@ -551,7 +548,7 @@ export default function MonitoringSkorPage() {
             <div className="text-xs md:text-base text-[var(--monitor-pesilat-merah-contingent-text)]">{pesilatMerahInfo?.contingent || <Skeleton className="h-4 w-24 bg-[var(--monitor-skeleton-bg)] mt-1" />}</div>
           </div>
 
-          <div className="flex w-full items-stretch gap-1 md:gap-2 mb-1 md:mb-2 h-48 md:h-60">
+          <div className="flex w-full items-stretch gap-1 md:gap-2 mb-1 md:mb-2 h-40 md:h-52">
             <div className="flex-grow h-full bg-[var(--monitor-skor-merah-bg)] flex items-center justify-center text-5xl md:text-8xl font-bold rounded-md text-[var(--monitor-skor-text)]">
                 {confirmedScoreMerah}
             </div>
@@ -592,6 +589,7 @@ export default function MonitoringSkorPage() {
             onPointerDownOutside={(e) => {if (activeDisplayVerificationRequest?.status === 'pending') e.preventDefault();}}
             onEscapeKeyDown={(e) => {if (activeDisplayVerificationRequest?.status === 'pending') e.preventDefault();}}
           >
+            <DialogTitle className="sr-only">Konfirmasi Verifikasi Juri</DialogTitle>
             <DialogHeader className="text-center">
               <DialogTitle className="text-2xl md:text-3xl font-bold font-headline text-[var(--monitor-dialog-title-text)]">
                 Verifikasi Juri

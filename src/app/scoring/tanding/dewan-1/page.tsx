@@ -1164,6 +1164,7 @@ export default function ScoringTandingDewanSatuPage() {
         {/* Verification Display Modal */}
         <Dialog open={isDisplayVerificationModalOpen} onOpenChange={(isOpen) => { if (!isOpen && activeDisplayVerificationRequest?.status === 'pending') return; setIsDisplayVerificationModalOpen(isOpen); }}>
           <DialogContent className="sm:max-w-lg md:max-w-xl" onPointerDownOutside={(e) => {if (activeDisplayVerificationRequest?.status === 'pending') e.preventDefault();}} onEscapeKeyDown={(e) => {if (activeDisplayVerificationRequest?.status === 'pending') e.preventDefault();}}>
+            <DialogTitle className="sr-only">Detail Verifikasi Juri</DialogTitle>
             <DialogHeader>
               <DialogTitle className="text-2xl md:text-3xl font-bold font-headline text-center">
                 Verifikasi Juri
@@ -1217,3 +1218,4 @@ export default function ScoringTandingDewanSatuPage() {
     </div>
   );
 }
+
