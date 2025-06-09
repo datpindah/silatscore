@@ -214,7 +214,7 @@ export default function MonitoringSkorPage() {
 
     loadData(activeScheduleId);
     return () => { mounted = false; unsubscribers.forEach(unsub => unsub()); };
-  }, [activeScheduleId, matchDetailsLoaded]); // Removed resetMatchDisplayData from dependencies
+  }, [activeScheduleId, matchDetailsLoaded]); 
 
   useEffect(() => {
     if (isLoading && (matchDetailsLoaded || activeScheduleId === null)) {
@@ -310,7 +310,7 @@ export default function MonitoringSkorPage() {
     const isActive = activeJuriHighlights[`${pesilatColor}-${type}-${juri}`];
     return (
       <div className={cn("flex-1 border py-1 md:py-2 text-center text-xs md:text-sm font-medium rounded-sm", 
-        isActive ? "bg-[var(--monitor-juri-indicator-active-bg)] text-[var(--monitor-juri-indicator-active-text)] border-[var(--monitor-juri-indicator-inactive-border)]" // Keep border consistent or make active border
+        isActive ? "bg-[var(--monitor-juri-indicator-active-bg)] text-[var(--monitor-juri-indicator-active-text)] border-[var(--monitor-juri-indicator-inactive-border)]"
                  : "bg-[var(--monitor-juri-indicator-inactive-bg)] text-[var(--monitor-juri-indicator-inactive-text)] border-[var(--monitor-juri-indicator-inactive-border)]")}>
         {juri.toUpperCase().replace('JURI-','J')}
       </div>
@@ -329,7 +329,7 @@ export default function MonitoringSkorPage() {
     if (timerStatus.matchStatus.startsWith("OngoingRound")) return `Babak ${timerStatus.currentRound} Berlangsung`;
     if (timerStatus.matchStatus.startsWith("PausedRound")) return `Babak ${timerStatus.currentRound} Jeda`;
     if (timerStatus.matchStatus.startsWith("FinishedRound")) return `Babak ${timerStatus.currentRound} Selesai`;
-    if (timerStatus.matchStatus.startsWith("PausedForVerificationRound")) return `Babak ${timerStatus.currentRound} Verifikasi`;
+    if (timerStatus.matchStatus.startsWith("PausedForVerificationRound")) return `Verifikasi Babak ${timerStatus.currentRound}`;
     if (timerStatus.matchStatus === 'MatchFinished') return "Pertandingan Selesai";
     if (timerStatus.matchStatus === 'Pending') return `Babak ${timerStatus.currentRound} Menunggu`;
     return timerStatus.matchStatus || "Status Tidak Diketahui";
@@ -376,7 +376,7 @@ export default function MonitoringSkorPage() {
             <div className="text-xs md:text-base text-[var(--monitor-pesilat-biru-contingent-text)]">{pesilatBiruInfo?.contingent || <Skeleton className="h-4 w-24 bg-[var(--monitor-skeleton-bg)] mt-1" />}</div>
           </div>
           
-          <div className="flex w-full items-stretch gap-1 md:gap-2 mb-1 md:mb-2 h-40 md:h-52">
+          <div className="flex w-full items-stretch gap-1 md:gap-2 mb-1 md:mb-2 h-48 md:h-60">
              <div className="flex flex-col gap-1 p-0.5 w-14 md:w-16 h-full">
                 <div className="grid grid-cols-2 gap-1 flex-1">
                     <FoulBox label="B1" isActive={getFoulStatus('biru', 'Binaan', 1)} />
@@ -439,7 +439,7 @@ export default function MonitoringSkorPage() {
             <div className="text-xs md:text-base text-[var(--monitor-pesilat-merah-contingent-text)]">{pesilatMerahInfo?.contingent || <Skeleton className="h-4 w-24 bg-[var(--monitor-skeleton-bg)] mt-1" />}</div>
           </div>
 
-          <div className="flex w-full items-stretch gap-1 md:gap-2 mb-1 md:mb-2 h-40 md:h-52">
+          <div className="flex w-full items-stretch gap-1 md:gap-2 mb-1 md:mb-2 h-48 md:h-60">
             <div className="flex-grow h-full bg-[var(--monitor-skor-merah-bg)] flex items-center justify-center text-5xl md:text-8xl font-bold rounded-md text-[var(--monitor-skor-text)]">
                 {confirmedScoreMerah}
             </div>
@@ -486,14 +486,12 @@ export default function MonitoringSkorPage() {
               </DialogTitle>
             </DialogHeader>
             <div className="py-4 px-2 md:px-6">
-                <DialogVerificationDescription asChild>
-                  <div className="text-center mt-2">
+                <div className="text-center mt-2">
                     <div className="text-lg font-semibold">
                       {activeDisplayVerificationRequest?.type === 'jatuhan' ? 'Verifikasi Jatuhan' : 'Verifikasi Pelanggaran'}
                     </div>
                     <div className="text-sm text-[var(--monitor-text-muted)]">Babak {activeDisplayVerificationRequest?.round}</div>
-                  </div>
-                </DialogVerificationDescription>
+                </div>
               <div className="mt-6 grid grid-cols-3 gap-3 md:gap-4 items-start justify-items-center text-center">
                 {JURI_IDS.map((juriKey, index) => {
                   const vote = activeDisplayVerificationRequest?.votes[juriKey] || null;
