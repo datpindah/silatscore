@@ -8,7 +8,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription as DialogVerificationDescription } from "@/components/ui/dialog";
 import { ArrowLeft, Eye, Loader2, RadioTower, Users, ServerCrash } from 'lucide-react';
-import type { ScheduleTanding, TimerStatus, VerificationRequest, JuriVoteValue, PesilatColorIdentity } from '@/lib/types';
+import type { ScheduleTanding, TimerStatus, TimerMatchStatus, VerificationRequest, JuriVoteValue, PesilatColorIdentity } from '@/lib/types';
 import { db } from '@/lib/firebase';
 import { doc, onSnapshot, getDoc, collection, query, orderBy, limit } from 'firebase/firestore';
 import { cn } from '@/lib/utils';
@@ -368,10 +368,10 @@ export default function MonitoringSkorPage() {
               <DialogTitle className="text-3xl font-bold font-headline text-center text-accent">Verifikasi Juri</DialogTitle>
               {activeDisplayVerificationRequest && (
                 <DialogVerificationDescription className="text-center mt-2">
-                  <p className="text-xl font-semibold text-gray-200">
+                  <div className="text-xl font-semibold text-gray-200">
                     {activeDisplayVerificationRequest.type === 'jatuhan' ? 'Verifikasi Jatuhan' : 'Verifikasi Pelanggaran'}
-                  </p>
-                  <p className="text-md text-gray-400">Babak {activeDisplayVerificationRequest.round}</p>
+                  </div>
+                  <div className="text-md text-gray-400">Babak {activeDisplayVerificationRequest.round}</div>
                 </DialogVerificationDescription>
               )}
             </DialogHeader>

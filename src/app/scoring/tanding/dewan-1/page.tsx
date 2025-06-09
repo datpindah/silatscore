@@ -1072,10 +1072,10 @@ export default function ScoringTandingDewanSatuPage() {
               <DialogTitle className="text-2xl font-bold font-headline text-center">Verifikasi Juri</DialogTitle>
               {activeDisplayVerificationRequest && (
                 <DialogVerificationDescription className="text-center mt-2">
-                  <p className="text-lg font-semibold">
+                  <div className="text-lg font-semibold">
                     {activeDisplayVerificationRequest.type === 'jatuhan' ? 'Verifikasi Jatuhan' : 'Verifikasi Pelanggaran'}
-                  </p>
-                  <p className="text-sm text-muted-foreground">Babak {activeDisplayVerificationRequest.round}</p>
+                  </div>
+                  <div className="text-sm text-muted-foreground">Babak {activeDisplayVerificationRequest.round}</div>
                 </DialogVerificationDescription>
               )}
             </DialogHeader>
