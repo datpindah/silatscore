@@ -509,7 +509,7 @@ export default function MonitoringSkorPage() {
 
           {/* Kolom Tengah Atas (Timer, Babak, Status) */}
           <div className="flex flex-col items-center justify-start space-y-2 md:space-y-3 pt-1 md:pt-2">
-             <div className="text-6xl md:text-8xl font-mono font-bold text-[var(--monitor-timer-text)] mb-2 md:mb-4">
+             <div className="text-5xl md:text-7xl font-mono font-bold text-[var(--monitor-timer-text)] mb-2 md:mb-4">
               {formatTime(timerStatus.timerSeconds)}
             </div>
             <div className="space-y-1 md:space-y-2 w-full max-w-[180px]">
