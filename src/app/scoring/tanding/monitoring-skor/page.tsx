@@ -6,7 +6,7 @@ import Link from 'next/link';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription as DialogVerificationDescription } from "@/components/ui/dialog";
 import { ArrowLeft, Eye, Loader2, RadioTower, AlertTriangle } from 'lucide-react';
-import type { ScheduleTanding, TimerStatus, VerificationRequest, JuriVoteValue, KetuaActionLogEntry, PesilatColorIdentity, KetuaActionType, RoundScores, JuriMatchData } from '@/lib/types';
+import type { ScheduleTanding, TimerStatus, VerificationRequest, JuriVoteValue, KetuaActionLogEntry, PesilatColorIdentity, KetuaActionType, RoundScores, JuriMatchData as FullJuriMatchData } from '@/lib/types';
 import { db } from '@/lib/firebase';
 import { doc, onSnapshot, getDoc, collection, query, orderBy, limit, Timestamp } from 'firebase/firestore';
 import { cn } from '@/lib/utils';
@@ -122,14 +122,12 @@ export default function MonitoringSkorPage() {
     if (configMatchId !== activeScheduleId) { 
         resetMatchDisplayData(); 
         setActiveScheduleId(configMatchId); 
-        // setIsLoading(true) will be handled by the next effect if activeScheduleId is set
     }
   }, [configMatchId, activeScheduleId, resetMatchDisplayData]);
 
   useEffect(() => {
     if (!activeScheduleId) { 
         setIsLoading(false); 
-        // Ensure error is cleared if there's no active match, or let previous error persist if it was from config loading
         if (!error?.includes("konfigurasi")) setError(null); 
         return; 
     }
@@ -152,12 +150,11 @@ export default function MonitoringSkorPage() {
           setMatchDetailsLoaded(true);
         } else { 
             setError(`Detail jadwal ID ${currentMatchId} tidak ditemukan.`); 
-            // Don't reset all data here, as other listeners might still be setting up or configMatchId might change again
             setMatchDetails(null);
             setPesilatMerahInfo(null);
             setPesilatBiruInfo(null);
-            setMatchDetailsLoaded(false); // Explicitly set to false
-            setIsLoading(false); // Stop loading if schedule details are gone
+            setMatchDetailsLoaded(false); 
+            setIsLoading(false); 
             return; 
         }
 
@@ -215,17 +212,14 @@ export default function MonitoringSkorPage() {
               setError("Gagal memuat data pertandingan."); 
           }
       } finally { 
-          // isLoading will be set to false once matchDetailsLoaded is true, or if schedule details are not found.
-          // This ensures loading state is managed correctly even with async operations for schedule details.
           if (mounted && matchDetailsLoaded) setIsLoading(false);
       }
     };
 
     loadData(activeScheduleId);
     return () => { mounted = false; unsubscribers.forEach(unsub => unsub()); };
-  }, [activeScheduleId]); // Removed resetMatchDisplayData from here as it was causing issues.
+  }, [activeScheduleId]);
 
-  // Separate effect to manage isLoading based on matchDetailsLoaded status when activeScheduleId is present
   useEffect(() => {
     if (activeScheduleId && !matchDetailsLoaded && !error?.includes("Detail jadwal ID")) {
         setIsLoading(true);
@@ -241,7 +235,7 @@ export default function MonitoringSkorPage() {
     const currentJuriData = juriScoresData;
     const prevJuriData = prevJuriScoresDataRef.current;
     
-    if (!timerStatus || !timerStatus.currentRound) return; // Ensure timerStatus and currentRound are available
+    if (!timerStatus || !timerStatus.currentRound) return;
     const roundKey = `round${timerStatus.currentRound}` as keyof RoundScores;
 
     JURI_IDS.forEach(juriId => {
@@ -266,7 +260,7 @@ export default function MonitoringSkorPage() {
               }
               highlightTimeoutsRef.current[highlightKey] = setTimeout(() => {
                 setActiveJuriHighlights(prev => ({ ...prev, [highlightKey]: false }));
-              }, 1000); // Highlight duration
+              }, 1000); 
             }
           }
         });
@@ -289,17 +283,16 @@ export default function MonitoringSkorPage() {
                 action.round === timerStatus.currentRound &&
                 action.actionType === type
     );
-    if (type === "Binaan") { // Binaan logic might differ based on how it converts to Teguran
+    if (type === "Binaan") {
        const binaanAsliCount = ketuaActionsLog.filter(
         log => log.pesilatColor === pesilatColor &&
                log.round === timerStatus.currentRound &&
-               log.actionType === 'Binaan' && // Only pure Binaan
+               log.actionType === 'Binaan' && 
                !log.originalActionType 
       ).length;
       return binaanAsliCount >= count;
     }
     if (type === "Teguran") {
-        // Count Teguran from direct Teguran OR Binaan that became Teguran
         const teguranCount = ketuaActionsLog.filter(
             log => log.pesilatColor === pesilatColor &&
                    log.round === timerStatus.currentRound &&
@@ -330,7 +323,7 @@ export default function MonitoringSkorPage() {
     if (vote === 'merah') return "bg-red-600 text-white";
     if (vote === 'biru') return "bg-blue-600 text-white";
     if (vote === 'invalid') return "bg-yellow-400 text-black";
-    return "bg-gray-200 dark:bg-gray-600 text-gray-800 dark:text-gray-100"; // Default for "Belum Vote"
+    return "bg-white dark:bg-gray-600 text-gray-800 dark:text-gray-100";
   };
 
   if (isLoading && configMatchId === undefined) { 
@@ -355,23 +348,27 @@ export default function MonitoringSkorPage() {
 
       <div className="flex-grow grid grid-cols-[1fr_auto_1fr] gap-1 md:gap-2 p-1 md:p-2 items-stretch">
         {/* Pesilat Biru Side */}
-        <div className="flex flex-col items-center">
+        <div className="flex flex-col items-center flex-1">
           <div className="text-center mb-1 md:mb-2">
             <div className="font-bold text-sm md:text-xl text-blue-300">{pesilatBiruInfo?.name || <Skeleton className="h-6 w-32 bg-gray-600" />}</div>
             <div className="text-xs md:text-base text-blue-400">{pesilatBiruInfo?.contingent || <Skeleton className="h-4 w-24 bg-gray-600 mt-1" />}</div>
           </div>
-          <div className="grid grid-cols-2 gap-0.5 md:gap-1 mb-1 md:mb-2 w-20 md:w-32">
-            <FoulBox label="B1" isActive={getFoulStatus('biru', 'Binaan', 1)} />
-            <FoulBox label="B2" isActive={getFoulStatus('biru', 'Binaan', 2)} />
-            <FoulBox label="T1" isActive={getFoulStatus('biru', 'Teguran', 1)} />
-            <FoulBox label="T2" isActive={getFoulStatus('biru', 'Teguran', 2)} />
-            <FoulBox label="P1" isActive={getFoulStatus('biru', 'Peringatan', 1)} />
-            <FoulBox label="P2" isActive={getFoulStatus('biru', 'Peringatan', 2)} />
-            <FoulBox label="P3" isActive={getFoulStatus('biru', 'Peringatan', 3)} />
+          
+          <div className="flex w-full items-center gap-1 md:gap-2 mb-1 md:mb-2">
+            <div className="grid grid-cols-2 gap-0.5 md:gap-1 w-16 md:w-20">
+                <FoulBox label="B1" isActive={getFoulStatus('biru', 'Binaan', 1)} />
+                <FoulBox label="B2" isActive={getFoulStatus('biru', 'Binaan', 2)} />
+                <FoulBox label="T1" isActive={getFoulStatus('biru', 'Teguran', 1)} />
+                <FoulBox label="T2" isActive={getFoulStatus('biru', 'Teguran', 2)} />
+                <FoulBox label="P1" isActive={getFoulStatus('biru', 'Peringatan', 1)} />
+                <FoulBox label="P2" isActive={getFoulStatus('biru', 'Peringatan', 2)} />
+                <FoulBox label="P3" isActive={getFoulStatus('biru', 'Peringatan', 3)} />
+            </div>
+            <div className="flex-grow h-32 md:h-64 bg-blue-600 flex items-center justify-center text-5xl md:text-8xl font-bold">
+                {confirmedScoreBiru}
+            </div>
           </div>
-          <div className="w-full h-32 md:h-64 bg-blue-600 flex items-center justify-center text-5xl md:text-8xl font-bold mb-1 md:mb-2">
-            {confirmedScoreBiru}
-          </div>
+
           <div className="flex flex-col gap-0.5 md:gap-1 w-full">
             <div className="flex gap-0.5 md:gap-1">
               {JURI_IDS.map(id => <JuriInputIndicator key={`biru-pukulan-${id}`} juri={id} type="pukulan" pesilatColor="biru" />)}
@@ -397,23 +394,28 @@ export default function MonitoringSkorPage() {
           <KickIcon />
         </div>
 
-        <div className="flex flex-col items-center">
+        {/* Pesilat Merah Side */}
+        <div className="flex flex-col items-center flex-1">
           <div className="text-center mb-1 md:mb-2">
             <div className="font-bold text-sm md:text-xl text-red-300">{pesilatMerahInfo?.name || <Skeleton className="h-6 w-32 bg-gray-600" />}</div>
             <div className="text-xs md:text-base text-red-400">{pesilatMerahInfo?.contingent || <Skeleton className="h-4 w-24 bg-gray-600 mt-1" />}</div>
           </div>
-           <div className="grid grid-cols-2 gap-0.5 md:gap-1 mb-1 md:mb-2 w-20 md:w-32">
-            <FoulBox label="B1" isActive={getFoulStatus('merah', 'Binaan', 1)} />
-            <FoulBox label="B2" isActive={getFoulStatus('merah', 'Binaan', 2)} />
-            <FoulBox label="T1" isActive={getFoulStatus('merah', 'Teguran', 1)} />
-            <FoulBox label="T2" isActive={getFoulStatus('merah', 'Teguran', 2)} />
-            <FoulBox label="P1" isActive={getFoulStatus('merah', 'Peringatan', 1)} />
-            <FoulBox label="P2" isActive={getFoulStatus('merah', 'Peringatan', 2)} />
-            <FoulBox label="P3" isActive={getFoulStatus('merah', 'Peringatan', 3)} />
+
+          <div className="flex w-full items-center gap-1 md:gap-2 mb-1 md:mb-2">
+            <div className="flex-grow h-32 md:h-64 bg-red-600 flex items-center justify-center text-5xl md:text-8xl font-bold">
+                {confirmedScoreMerah}
+            </div>
+            <div className="grid grid-cols-2 gap-0.5 md:gap-1 w-16 md:w-20">
+                <FoulBox label="B1" isActive={getFoulStatus('merah', 'Binaan', 1)} />
+                <FoulBox label="B2" isActive={getFoulStatus('merah', 'Binaan', 2)} />
+                <FoulBox label="T1" isActive={getFoulStatus('merah', 'Teguran', 1)} />
+                <FoulBox label="T2" isActive={getFoulStatus('merah', 'Teguran', 2)} />
+                <FoulBox label="P1" isActive={getFoulStatus('merah', 'Peringatan', 1)} />
+                <FoulBox label="P2" isActive={getFoulStatus('merah', 'Peringatan', 2)} />
+                <FoulBox label="P3" isActive={getFoulStatus('merah', 'Peringatan', 3)} />
+            </div>
           </div>
-          <div className="w-full h-32 md:h-64 bg-red-600 flex items-center justify-center text-5xl md:text-8xl font-bold mb-1 md:mb-2">
-            {confirmedScoreMerah}
-          </div>
+          
           <div className="flex flex-col gap-0.5 md:gap-1 w-full">
             <div className="flex gap-0.5 md:gap-1">
               {JURI_IDS.map(id => <JuriInputIndicator key={`merah-pukulan-${id}`} juri={id} type="pukulan" pesilatColor="merah" />)}
@@ -437,14 +439,14 @@ export default function MonitoringSkorPage() {
               </DialogTitle>
             </DialogHeader>
             <div className="py-4 px-2 md:px-6">
-              {activeDisplayVerificationRequest && (
-                <div className="mb-6 text-center">
-                  <div className="text-lg md:text-xl font-semibold text-gray-100">
-                     {activeDisplayVerificationRequest.type === 'jatuhan' ? 'Verifikasi Jatuhan' : 'Verifikasi Pelanggaran'}
-                  </div>
-                  <div className="text-sm text-gray-300">Babak {activeDisplayVerificationRequest.round}</div>
-                </div>
-              )}
+                {activeDisplayVerificationRequest && (
+                    <div className="mb-6 text-center">
+                        <div className="text-lg md:text-xl font-semibold text-gray-100">
+                            {activeDisplayVerificationRequest.type === 'jatuhan' ? 'Verifikasi Jatuhan' : 'Verifikasi Pelanggaran'}
+                        </div>
+                        <div className="text-sm text-gray-300">Babak {activeDisplayVerificationRequest.round}</div>
+                    </div>
+                )}
               <div className="grid grid-cols-3 gap-3 md:gap-4 items-start justify-items-center text-center">
                 {JURI_IDS.map((juriKey, index) => {
                   const vote = activeDisplayVerificationRequest?.votes[juriKey] || null;
@@ -485,6 +487,3 @@ export default function MonitoringSkorPage() {
     </div>
   );
 }
-
-
-    
