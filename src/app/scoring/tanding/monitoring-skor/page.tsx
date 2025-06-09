@@ -5,7 +5,7 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription as DialogVerificationDescription } from "@/components/ui/dialog";
-import { ArrowLeft, Eye, Loader2, RadioTower, AlertTriangle } from 'lucide-react';
+import { ArrowLeft, Eye, Loader2, RadioTower, AlertTriangle, Sun, Moon } from 'lucide-react';
 import type { ScheduleTanding, TimerStatus, VerificationRequest, JuriVoteValue, KetuaActionLogEntry, PesilatColorIdentity, KetuaActionType, RoundScores, TimerMatchStatus } from '@/lib/types';
 import { db } from '@/lib/firebase';
 import { doc, onSnapshot, getDoc, collection, query, orderBy, limit, Timestamp } from 'firebase/firestore';
@@ -40,6 +40,7 @@ interface DisplayJuriMatchData {
 }
 
 export default function MonitoringSkorPage() {
+  const [pageTheme, setPageTheme] = useState<'light' | 'dark'>('dark');
   const [configMatchId, setConfigMatchId] = useState<string | null | undefined>(undefined);
   const [activeScheduleId, setActiveScheduleId] = useState<string | null>(null);
   const [matchDetails, setMatchDetails] = useState<ScheduleTanding | null>(null);
@@ -213,7 +214,7 @@ export default function MonitoringSkorPage() {
 
     loadData(activeScheduleId);
     return () => { mounted = false; unsubscribers.forEach(unsub => unsub()); };
-  }, [activeScheduleId, matchDetailsLoaded]);
+  }, [activeScheduleId, matchDetailsLoaded]); // Removed resetMatchDisplayData from dependencies
 
   useEffect(() => {
     if (isLoading && (matchDetailsLoaded || activeScheduleId === null)) {
@@ -298,8 +299,8 @@ export default function MonitoringSkorPage() {
     <div className={cn(
       "w-full h-full flex items-center justify-center rounded-sm border text-[9px] md:text-[10px] font-medium leading-tight",
       isActive 
-        ? "bg-yellow-400 text-black border-yellow-500" 
-        : "bg-gray-200 dark:bg-gray-600 text-gray-700 dark:text-gray-200 border-gray-400 dark:border-gray-500"
+        ? "bg-[var(--monitor-foulbox-active-bg)] text-[var(--monitor-foulbox-active-text)] border-[var(--monitor-foulbox-active-border)]" 
+        : "bg-[var(--monitor-foulbox-inactive-bg)] text-[var(--monitor-foulbox-inactive-text)] border-[var(--monitor-foulbox-inactive-border)]"
     )}>
       {label}
     </div>
@@ -308,18 +309,19 @@ export default function MonitoringSkorPage() {
   const JuriInputIndicator = ({ juri, type, pesilatColor }: { juri: string; type: 'pukulan' | 'tendangan'; pesilatColor: PesilatColorIdentity }) => {
     const isActive = activeJuriHighlights[`${pesilatColor}-${type}-${juri}`];
     return (
-      <div className={cn("flex-1 border border-gray-400 dark:border-gray-500 py-1 md:py-2 text-center text-xs md:text-sm font-medium rounded-sm", 
-        isActive ? "bg-yellow-400 text-black" : "bg-gray-200 dark:bg-gray-600 text-gray-700 dark:text-gray-200")}>
+      <div className={cn("flex-1 border py-1 md:py-2 text-center text-xs md:text-sm font-medium rounded-sm", 
+        isActive ? "bg-[var(--monitor-juri-indicator-active-bg)] text-[var(--monitor-juri-indicator-active-text)] border-[var(--monitor-juri-indicator-inactive-border)]" // Keep border consistent or make active border
+                 : "bg-[var(--monitor-juri-indicator-inactive-bg)] text-[var(--monitor-juri-indicator-inactive-text)] border-[var(--monitor-juri-indicator-inactive-border)]")}>
         {juri.toUpperCase().replace('JURI-','J')}
       </div>
     );
   };
 
   const getJuriVoteDisplayBoxClass = (vote: JuriVoteValue): string => {
-    if (vote === 'merah') return "bg-red-600 text-white";
-    if (vote === 'biru') return "bg-blue-600 text-white";
-    if (vote === 'invalid') return "bg-yellow-400 text-black";
-    return "bg-gray-300 dark:bg-gray-700 text-gray-900 dark:text-gray-100";
+    if (vote === 'merah') return "bg-[var(--monitor-dialog-vote-merah-bg)] text-[var(--monitor-dialog-vote-merah-text)]";
+    if (vote === 'biru') return "bg-[var(--monitor-dialog-vote-biru-bg)] text-[var(--monitor-dialog-vote-biru-text)]";
+    if (vote === 'invalid') return "bg-[var(--monitor-dialog-vote-invalid-bg)] text-[var(--monitor-dialog-vote-invalid-text)]";
+    return "bg-[var(--monitor-dialog-vote-null-bg)] text-[var(--monitor-dialog-vote-null-text)]";
   };
   
   const getMatchStatusTextForMonitor = (): string => {
@@ -336,20 +338,33 @@ export default function MonitoringSkorPage() {
 
   if (isLoading && configMatchId === undefined) { 
     return (
-        <div className="flex flex-col min-h-screen bg-gray-700 text-white items-center justify-center">
-            <Loader2 className="h-16 w-16 animate-spin text-yellow-300 mb-4" />
+        <div className={cn("flex flex-col min-h-screen items-center justify-center", pageTheme === 'light' ? 'monitoring-theme-light' : 'monitoring-theme-dark', "bg-[var(--monitor-bg)] text-[var(--monitor-text)]")}>
+            <Loader2 className="h-16 w-16 animate-spin text-[var(--monitor-accent-bg)] mb-4" />
             <p className="text-xl">Memuat Konfigurasi Monitor...</p>
         </div>
     ); 
   }
 
   return (
-    <div className="flex flex-col min-h-screen bg-gray-700 text-white font-sans overflow-hidden">
-      <div className="bg-gray-800 p-2 md:p-3 text-center">
+    <div className={cn("flex flex-col min-h-screen font-sans overflow-hidden relative", pageTheme === 'light' ? 'monitoring-theme-light' : 'monitoring-theme-dark', "bg-[var(--monitor-bg)] text-[var(--monitor-text)]")}>
+      <Button
+        variant="outline"
+        size="icon"
+        onClick={() => setPageTheme(prev => prev === 'light' ? 'dark' : 'light')}
+        className="absolute top-2 right-2 z-[100] bg-[var(--monitor-dialog-bg)] text-[var(--monitor-text)] border-[var(--monitor-border)] hover:bg-[var(--monitor-neutral-bg)]"
+        aria-label={pageTheme === "dark" ? "Ganti ke mode terang" : "Ganti ke mode gelap"}
+      >
+        {pageTheme === 'dark' ? (
+          <Sun className="h-[1.2rem] w-[1.2rem]" />
+        ) : (
+          <Moon className="h-[1.2rem] w-[1.2rem]" />
+        )}
+      </Button>
+      <div className="bg-[var(--monitor-header-section-bg)] p-2 md:p-3 text-center">
         <div className="grid grid-cols-3 gap-1 md:gap-2 text-xs md:text-sm font-semibold">
-          <div>{matchDetails?.place || <Skeleton className="h-4 w-20 inline-block bg-gray-600" />}</div>
-          <div>{matchDetails?.round || <Skeleton className="h-4 w-20 inline-block bg-gray-600" />}</div>
-          <div>{matchDetails?.class || <Skeleton className="h-4 w-32 inline-block bg-gray-600" />}</div>
+          <div>{matchDetails?.place || <Skeleton className="h-4 w-20 inline-block bg-[var(--monitor-skeleton-bg)]" />}</div>
+          <div>{matchDetails?.round || <Skeleton className="h-4 w-20 inline-block bg-[var(--monitor-skeleton-bg)]" />}</div>
+          <div>{matchDetails?.class || <Skeleton className="h-4 w-32 inline-block bg-[var(--monitor-skeleton-bg)]" />}</div>
         </div>
       </div>
 
@@ -357,12 +372,12 @@ export default function MonitoringSkorPage() {
         {/* Pesilat Biru Side */}
         <div className="flex flex-col items-center flex-1">
           <div className="text-center mb-1 md:mb-2">
-            <div className="font-bold text-sm md:text-xl text-blue-300">{pesilatBiruInfo?.name || <Skeleton className="h-6 w-32 bg-gray-600" />}</div>
-            <div className="text-xs md:text-base text-blue-400">{pesilatBiruInfo?.contingent || <Skeleton className="h-4 w-24 bg-gray-600 mt-1" />}</div>
+            <div className="font-bold text-sm md:text-xl text-[var(--monitor-pesilat-biru-name-text)]">{pesilatBiruInfo?.name || <Skeleton className="h-6 w-32 bg-[var(--monitor-skeleton-bg)]" />}</div>
+            <div className="text-xs md:text-base text-[var(--monitor-pesilat-biru-contingent-text)]">{pesilatBiruInfo?.contingent || <Skeleton className="h-4 w-24 bg-[var(--monitor-skeleton-bg)] mt-1" />}</div>
           </div>
           
           <div className="flex w-full items-stretch gap-1 md:gap-2 mb-1 md:mb-2 h-40 md:h-52">
-            <div className="flex flex-col gap-1 p-0.5 w-20 md:w-28 h-full">
+             <div className="flex flex-col gap-1 p-0.5 w-14 md:w-16 h-full">
                 <div className="grid grid-cols-2 gap-1 flex-1">
                     <FoulBox label="B1" isActive={getFoulStatus('biru', 'Binaan', 1)} />
                     <FoulBox label="B2" isActive={getFoulStatus('biru', 'Binaan', 2)} />
@@ -377,7 +392,7 @@ export default function MonitoringSkorPage() {
                     <FoulBox label="P3" isActive={getFoulStatus('biru', 'Peringatan', 3)} />
                 </div>
             </div>
-            <div className="flex-grow h-full bg-blue-600 flex items-center justify-center text-5xl md:text-8xl font-bold rounded-md">
+            <div className="flex-grow h-full bg-[var(--monitor-skor-biru-bg)] flex items-center justify-center text-5xl md:text-8xl font-bold rounded-md text-[var(--monitor-skor-text)]">
                 {confirmedScoreBiru}
             </div>
           </div>
@@ -394,7 +409,7 @@ export default function MonitoringSkorPage() {
 
         {/* Central Column: Timer, Babak Indicators, Match Status */}
         <div className="flex flex-col items-center justify-start space-y-2 md:space-y-3 px-1 md:px-2 pt-2 md:pt-4">
-           <div className="text-4xl md:text-6xl font-mono font-bold text-white mb-2 md:mb-4">
+           <div className="text-4xl md:text-6xl font-mono font-bold text-[var(--monitor-timer-text)] mb-2 md:mb-4">
             {formatTime(timerStatus.timerSeconds)}
           </div>
           <div className="space-y-1 md:space-y-2 w-full max-w-[120px] md:max-w-[180px]">
@@ -404,15 +419,15 @@ export default function MonitoringSkorPage() {
                 className={cn(
                   "w-full py-1 md:py-1.5 border-2 flex items-center justify-center text-xs md:text-sm font-semibold rounded-md", 
                   timerStatus.currentRound === b 
-                    ? "bg-yellow-300 text-black border-yellow-400" 
-                    : "bg-gray-600 text-gray-200 border-gray-500"
+                    ? "bg-[var(--monitor-babak-indicator-active-bg)] text-[var(--monitor-babak-indicator-active-text)] border-[var(--monitor-babak-indicator-active-border)]" 
+                    : "bg-[var(--monitor-babak-indicator-inactive-bg)] text-[var(--monitor-babak-indicator-inactive-text)] border-[var(--monitor-babak-indicator-inactive-border)]"
                 )}
               >
                 {b === 1 ? 'I' : b === 2 ? 'II' : 'III'}
               </div>
             ))}
           </div>
-          <div className="text-xs md:text-sm text-gray-300 dark:text-gray-400 mt-1 md:mt-2 text-center">
+          <div className="text-xs md:text-sm text-[var(--monitor-status-text)] mt-1 md:mt-2 text-center">
             {getMatchStatusTextForMonitor()}
           </div>
         </div>
@@ -420,15 +435,15 @@ export default function MonitoringSkorPage() {
         {/* Pesilat Merah Side */}
         <div className="flex flex-col items-center flex-1">
           <div className="text-center mb-1 md:mb-2">
-            <div className="font-bold text-sm md:text-xl text-red-300">{pesilatMerahInfo?.name || <Skeleton className="h-6 w-32 bg-gray-600" />}</div>
-            <div className="text-xs md:text-base text-red-400">{pesilatMerahInfo?.contingent || <Skeleton className="h-4 w-24 bg-gray-600 mt-1" />}</div>
+            <div className="font-bold text-sm md:text-xl text-[var(--monitor-pesilat-merah-name-text)]">{pesilatMerahInfo?.name || <Skeleton className="h-6 w-32 bg-[var(--monitor-skeleton-bg)]" />}</div>
+            <div className="text-xs md:text-base text-[var(--monitor-pesilat-merah-contingent-text)]">{pesilatMerahInfo?.contingent || <Skeleton className="h-4 w-24 bg-[var(--monitor-skeleton-bg)] mt-1" />}</div>
           </div>
 
           <div className="flex w-full items-stretch gap-1 md:gap-2 mb-1 md:mb-2 h-40 md:h-52">
-            <div className="flex-grow h-full bg-red-600 flex items-center justify-center text-5xl md:text-8xl font-bold rounded-md">
+            <div className="flex-grow h-full bg-[var(--monitor-skor-merah-bg)] flex items-center justify-center text-5xl md:text-8xl font-bold rounded-md text-[var(--monitor-skor-text)]">
                 {confirmedScoreMerah}
             </div>
-            <div className="flex flex-col gap-1 p-0.5 w-20 md:w-28 h-full">
+             <div className="flex flex-col gap-1 p-0.5 w-14 md:w-16 h-full">
                 <div className="grid grid-cols-2 gap-1 flex-1">
                     <FoulBox label="B1" isActive={getFoulStatus('merah', 'Binaan', 1)} />
                     <FoulBox label="B2" isActive={getFoulStatus('merah', 'Binaan', 2)} />
@@ -461,27 +476,25 @@ export default function MonitoringSkorPage() {
           setIsDisplayVerificationModalOpen(isOpen); 
       }}>
          <DialogContent
-            className="sm:max-w-lg md:max-w-xl bg-gray-800 border-gray-700 text-white"
+            className={cn("sm:max-w-lg md:max-w-xl bg-[var(--monitor-dialog-bg)] border-[var(--monitor-dialog-border)] text-[var(--monitor-dialog-text)]", pageTheme === 'light' ? 'monitoring-theme-light' : 'monitoring-theme-dark')}
             onPointerDownOutside={(e) => {if (activeDisplayVerificationRequest?.status === 'pending') e.preventDefault();}}
             onEscapeKeyDown={(e) => {if (activeDisplayVerificationRequest?.status === 'pending') e.preventDefault();}}
           >
             <DialogHeader className="text-center">
-              <DialogTitle className="text-2xl md:text-3xl font-bold font-headline text-yellow-300">
+              <DialogTitle className="text-2xl md:text-3xl font-bold font-headline text-[var(--monitor-dialog-title-text)]">
                 Verifikasi Juri
               </DialogTitle>
             </DialogHeader>
             <div className="py-4 px-2 md:px-6">
-                <div className="mb-6">
-                  <DialogVerificationDescription asChild>
-                    <div className="text-center mt-2">
-                      <div className="text-lg font-semibold">
-                        {activeDisplayVerificationRequest?.type === 'jatuhan' ? 'Verifikasi Jatuhan' : 'Verifikasi Pelanggaran'}
-                      </div>
-                      <div className="text-sm text-muted-foreground">Babak {activeDisplayVerificationRequest?.round}</div>
+                <DialogVerificationDescription asChild>
+                  <div className="text-center mt-2">
+                    <div className="text-lg font-semibold">
+                      {activeDisplayVerificationRequest?.type === 'jatuhan' ? 'Verifikasi Jatuhan' : 'Verifikasi Pelanggaran'}
                     </div>
-                  </DialogVerificationDescription>
-                </div>
-              <div className="grid grid-cols-3 gap-3 md:gap-4 items-start justify-items-center text-center">
+                    <div className="text-sm text-[var(--monitor-text-muted)]">Babak {activeDisplayVerificationRequest?.round}</div>
+                  </div>
+                </DialogVerificationDescription>
+              <div className="mt-6 grid grid-cols-3 gap-3 md:gap-4 items-start justify-items-center text-center">
                 {JURI_IDS.map((juriKey, index) => {
                   const vote = activeDisplayVerificationRequest?.votes[juriKey] || null;
                   let voteText = 'Belum Vote';
@@ -491,7 +504,7 @@ export default function MonitoringSkorPage() {
                   else if (vote === 'invalid') { voteText = 'INVALID';}
                   return (
                     <div key={`vote-display-monitor-${juriKey}`} className="flex flex-col items-center space-y-1 w-full">
-                      <p className="text-base md:text-lg font-bold text-gray-100">J{index + 1}</p>
+                      <p className="text-base md:text-lg font-bold">J{index + 1}</p>
                       <div className={cn("w-full h-12 md:h-16 rounded-md flex items-center justify-center text-[10px] md:text-xs font-bold p-1 shadow-md", voteBoxColorClass)}>
                         {voteText}
                       </div>
@@ -503,17 +516,17 @@ export default function MonitoringSkorPage() {
           </DialogContent>
       </Dialog>
       {isLoading && activeScheduleId && !matchDetailsLoaded && (
-         <div className="absolute inset-0 bg-gray-800/50 flex flex-col items-center justify-center z-50">
-            <Loader2 className="h-12 w-12 animate-spin text-yellow-300 mb-4" />
-            <p className="text-lg text-gray-200">Memuat Data Monitor...</p>
+         <div className="absolute inset-0 bg-[var(--monitor-overlay-bg)] flex flex-col items-center justify-center z-50">
+            <Loader2 className="h-12 w-12 animate-spin text-[var(--monitor-overlay-accent-text)] mb-4" />
+            <p className="text-lg text-[var(--monitor-overlay-text-primary)]">Memuat Data Monitor...</p>
          </div>
       )}
        {!activeScheduleId && !isLoading && (
-         <div className="absolute inset-0 bg-gray-800/80 flex flex-col items-center justify-center z-50 p-4">
-            <AlertTriangle className="h-16 w-16 text-yellow-400 mb-4" />
-            <p className="text-xl text-center text-gray-200 mb-2">{error || "Tidak ada pertandingan yang aktif untuk dimonitor."}</p>
-            <p className="text-sm text-center text-gray-300 mb-6">Silakan aktifkan jadwal di panel admin atau tunggu pertandingan dimulai.</p>
-            <Button variant="outline" asChild className="bg-gray-700 border-gray-600 hover:bg-gray-600 text-gray-200">
+         <div className="absolute inset-0 bg-[var(--monitor-overlay-bg)] flex flex-col items-center justify-center z-50 p-4">
+            <AlertTriangle className="h-16 w-16 text-[var(--monitor-overlay-accent-text)] mb-4" />
+            <p className="text-xl text-center text-[var(--monitor-overlay-text-primary)] mb-2">{error || "Tidak ada pertandingan yang aktif untuk dimonitor."}</p>
+            <p className="text-sm text-center text-[var(--monitor-overlay-text-secondary)] mb-6">Silakan aktifkan jadwal di panel admin atau tunggu pertandingan dimulai.</p>
+            <Button variant="outline" asChild className="bg-[var(--monitor-overlay-button-bg)] border-[var(--monitor-overlay-button-border)] hover:bg-[var(--monitor-overlay-button-hover-bg)] text-[var(--monitor-overlay-button-text)]">
               <Link href="/login"><ArrowLeft className="mr-2 h-4 w-4" /> Kembali ke Login</Link>
             </Button>
          </div>
@@ -521,4 +534,3 @@ export default function MonitoringSkorPage() {
     </div>
   );
 }
-
