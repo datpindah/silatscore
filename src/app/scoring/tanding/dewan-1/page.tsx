@@ -7,10 +7,10 @@ import { Header } from '@/components/layout/Header';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription as DialogVerificationDescriptionElement } from "@/components/ui/dialog"; // Renamed to avoid conflict
-import { ArrowLeft, Play, Pause, RotateCcw, ChevronRight, CheckCircle2, RadioTower, Loader2, Vote, Settings, TimerIcon } from 'lucide-react';
+import { ArrowLeft, Play, Pause, RotateCcw, ChevronRight, CheckCircle2, RadioTower, Loader2, Vote, Settings, TimerIcon, ChevronsRight } from 'lucide-react';
 import type { ScheduleTanding, KetuaActionLogEntry, TimerStatus, TimerMatchStatus, VerificationRequest, JuriVoteValue } from '@/lib/types';
 import { db } from '@/lib/firebase';
-import { doc, onSnapshot, setDoc, getDoc, Timestamp, updateDoc, writeBatch, collection, query, orderBy, getDocs, deleteDoc, limit } from 'firebase/firestore';
+import { doc, onSnapshot, setDoc, getDoc, Timestamp, updateDoc, writeBatch, collection, query, orderBy, getDocs, deleteDoc, limit, where } from 'firebase/firestore';
 import { cn } from '@/lib/utils';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -101,6 +101,7 @@ export default function ScoringTandingDewanSatuPage() {
 
   const [activeDisplayVerificationRequest, setActiveDisplayVerificationRequest] = useState<VerificationRequest | null>(null);
   const [isDisplayVerificationModalOpen, setIsDisplayVerificationModalOpen] = useState(false);
+  const [isNavigatingNextMatch, setIsNavigatingNextMatch] = useState(false);
 
   useEffect(() => {
     if (timerStatus && timerStatus.roundDuration) {
@@ -147,6 +148,7 @@ export default function ScoringTandingDewanSatuPage() {
       setActiveDisplayVerificationRequest(null);
       setIsDisplayVerificationModalOpen(false);
       setError(null);
+      setIsNavigatingNextMatch(false);
     };
 
     if (configMatchId === undefined) { // Condition 1: configMatchId is still being fetched
@@ -937,6 +939,39 @@ export default function ScoringTandingDewanSatuPage() {
     return "bg-gray-200 dark:bg-gray-600 text-gray-800 dark:text-gray-100";
   };
 
+  const handleNextMatchNavigation = async () => {
+    if (!activeScheduleId || !matchDetails || timerStatus.matchStatus !== 'MatchFinished') {
+        alert("Pertandingan saat ini belum selesai atau detail tidak tersedia.");
+        return;
+    }
+    setIsNavigatingNextMatch(true);
+    try {
+        const currentMatchNumber = matchDetails.matchNumber;
+        const schedulesRef = collection(db, SCHEDULE_TANDING_COLLECTION);
+        const q = query(
+            schedulesRef,
+            where('matchNumber', '>', currentMatchNumber),
+            orderBy('matchNumber', 'asc'),
+            limit(1)
+        );
+        const querySnapshot = await getDocs(q);
+
+        if (querySnapshot.empty) {
+            alert("Ini adalah partai terakhir. Tidak ada partai berikutnya.");
+        } else {
+            const nextMatchDoc = querySnapshot.docs[0];
+            await setDoc(doc(db, ACTIVE_TANDING_SCHEDULE_CONFIG_PATH), { activeScheduleId: nextMatchDoc.id });
+            alert(`Berpindah ke Partai No. ${nextMatchDoc.data().matchNumber}: ${nextMatchDoc.data().pesilatMerahName} vs ${nextMatchDoc.data().pesilatBiruName}`);
+            // The page will reset due to onSnapshot listening to ACTIVE_TANDING_SCHEDULE_CONFIG_PATH
+        }
+    } catch (err) {
+        console.error("Error navigating to next match:", err);
+        alert("Gagal berpindah ke partai berikutnya.");
+    } finally {
+        setIsNavigatingNextMatch(false);
+    }
+  };
+
 
   if (isLoading && configMatchId === undefined) { 
     return (
@@ -1231,6 +1266,22 @@ export default function ScoringTandingDewanSatuPage() {
             </div>
           </DialogContent>
         </Dialog>
+        
+        {timerStatus.matchStatus === 'MatchFinished' && (
+            <Button
+                onClick={handleNextMatchNavigation}
+                disabled={isNavigatingNextMatch || isLoading}
+                className="fixed bottom-6 right-6 z-50 shadow-lg bg-green-600 hover:bg-green-700 text-white py-3 px-4 text-sm md:text-base rounded-full"
+                title="Lanjut ke Partai Berikutnya"
+            >
+                {isNavigatingNextMatch ? (
+                    <Loader2 className="mr-2 h-5 w-5 animate-spin" />
+                ) : (
+                    <ChevronsRight className="mr-2 h-5 w-5" />
+                )}
+                Partai Berikutnya
+            </Button>
+        )}
 
       </main>
     </div>
