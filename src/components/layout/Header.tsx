@@ -1,8 +1,10 @@
+
 import Link from 'next/link';
 import { AppLogo } from './AppLogo';
 import { Button } from '@/components/ui/button';
 import { Sheet, SheetContent, SheetTrigger } from '@/components/ui/sheet';
 import { Menu } from 'lucide-react';
+import { ThemeToggle } from '@/components/shared/ThemeToggle';
 
 const navItems = [
   { href: '/', label: 'Home' },
@@ -16,39 +18,41 @@ export function Header() {
       <div className="container flex h-16 max-w-screen-2xl items-center justify-between">
         <AppLogo />
         
-        <nav className="hidden md:flex gap-4 items-center">
-          {navItems.map((item) => (
-            <Button key={item.label} variant="ghost" asChild>
-              <Link href={item.href} className="text-sm font-medium text-foreground/80 hover:text-foreground">
-                {item.label}
-              </Link>
-            </Button>
-          ))}
-        </nav>
-
-        <div className="md:hidden">
-          <Sheet>
-            <SheetTrigger asChild>
-              <Button variant="outline" size="icon">
-                <Menu className="h-6 w-6" />
-                <span className="sr-only">Toggle navigation menu</span>
+        <div className="flex items-center gap-2">
+          <nav className="hidden md:flex gap-2 items-center">
+            {navItems.map((item) => (
+              <Button key={item.label} variant="ghost" asChild>
+                <Link href={item.href} className="text-sm font-medium text-foreground/80 hover:text-foreground">
+                  {item.label}
+                </Link>
               </Button>
-            </SheetTrigger>
-            <SheetContent side="right">
-              <nav className="grid gap-6 text-lg font-medium mt-8">
-                <AppLogo />
-                {navItems.map((item) => (
-                  <Link
-                    key={item.label}
-                    href={item.href}
-                    className="text-muted-foreground hover:text-foreground"
-                  >
-                    {item.label}
-                  </Link>
-                ))}
-              </nav>
-            </SheetContent>
-          </Sheet>
+            ))}
+          </nav>
+          <ThemeToggle />
+          <div className="md:hidden">
+            <Sheet>
+              <SheetTrigger asChild>
+                <Button variant="outline" size="icon">
+                  <Menu className="h-6 w-6" />
+                  <span className="sr-only">Toggle navigation menu</span>
+                </Button>
+              </SheetTrigger>
+              <SheetContent side="right">
+                <nav className="grid gap-6 text-lg font-medium mt-8">
+                  <AppLogo />
+                  {navItems.map((item) => (
+                    <Link
+                      key={item.label}
+                      href={item.href}
+                      className="text-muted-foreground hover:text-foreground"
+                    >
+                      {item.label}
+                    </Link>
+                  ))}
+                </nav>
+              </SheetContent>
+            </Sheet>
+          </div>
         </div>
       </div>
     </header>
