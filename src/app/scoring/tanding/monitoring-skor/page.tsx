@@ -49,8 +49,8 @@ export default function MonitoringSkorPage() {
   const [pesilatBiruInfo, setPesilatBiruInfo] = useState<PesilatDisplayInfo | null>(null);
 
   const [timerStatus, setTimerStatus] = useState<TimerStatus>(initialTimerStatus);
-  const [confirmedScoreMerah, setConfirmedScoreMerah] = useState(0);
-  const [confirmedScoreBiru, setConfirmedScoreBiru] = useState(0);
+  const [confirmedScoreMerah, setConfirmedScoreMerah] = useState(0); // Placeholder
+  const [confirmedScoreBiru, setConfirmedScoreBiru] = useState(0);   // Placeholder
 
   const [ketuaActionsLog, setKetuaActionsLog] = useState<KetuaActionLogEntry[]>([]);
   const [juriScoresData, setJuriScoresData] = useState<Record<string, DisplayJuriMatchData | null>>({
@@ -151,7 +151,6 @@ export default function MonitoringSkorPage() {
             const data = docSnap.data();
             if (data?.timer_status) setTimerStatus(data.timer_status as TimerStatus);
             // TODO: Implement score calculation similar to Dewan 1 if needed for confirmed scores
-            // For now, confirmed scores are placeholders.
           } else {
             setTimerStatus(initialTimerStatus);
             setConfirmedScoreMerah(0); setConfirmedScoreBiru(0);
@@ -184,7 +183,7 @@ export default function MonitoringSkorPage() {
             if (latestVerification.status === 'pending') {
               setActiveDisplayVerificationRequest(latestVerification);
               setIsDisplayVerificationModalOpen(true);
-            } else {
+            } else { // If status is completed or cancelled
               setActiveDisplayVerificationRequest(null);
               setIsDisplayVerificationModalOpen(false);
             }
@@ -212,7 +211,7 @@ export default function MonitoringSkorPage() {
 
     loadData(activeScheduleId);
     return () => { mounted = false; unsubscribers.forEach(unsub => unsub()); };
-  }, [activeScheduleId, matchDetailsLoaded]);
+  }, [activeScheduleId, matchDetailsLoaded]); // Removed resetMatchDisplayData from deps as it can cause loops if not careful
 
   useEffect(() => {
     if (isLoading && (matchDetailsLoaded || activeScheduleId === null)) {
@@ -266,7 +265,7 @@ export default function MonitoringSkorPage() {
     return `${minutes.toString().padStart(2, '0')}:${remainingSeconds.toString().padStart(2, '0')}`;
   };
 
-  const getFoulStatus = (pesilatColor: PesilatColorIdentity, type: KetuaActionType, count: number): boolean => {
+ const getFoulStatus = (pesilatColor: PesilatColorIdentity, type: KetuaActionType, count: number): boolean => {
     if (!timerStatus || !timerStatus.currentRound) return false;
     
     if (type === "Binaan") {
@@ -274,7 +273,7 @@ export default function MonitoringSkorPage() {
         log => log.pesilatColor === pesilatColor &&
                log.round === timerStatus.currentRound &&
                log.actionType === 'Binaan' &&
-               !log.originalActionType
+               typeof log.originalActionType === 'undefined' // More explicit check
       );
       const convertedBinaanToTeguranActions = ketuaActionsLog.filter(
         log => log.pesilatColor === pesilatColor &&
@@ -298,7 +297,7 @@ export default function MonitoringSkorPage() {
                 action.actionType === type
     );
     
-    if (type === "Teguran") { // This will count Teguran that were originally Binaan, and direct Teguran
+    if (type === "Teguran") {
         const teguranCount = ketuaActionsLog.filter(
             log => log.pesilatColor === pesilatColor &&
                    log.round === timerStatus.currentRound &&
@@ -546,3 +545,5 @@ export default function MonitoringSkorPage() {
     </div>
   );
 }
+
+    
