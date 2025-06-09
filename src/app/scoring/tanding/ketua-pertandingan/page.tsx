@@ -242,27 +242,26 @@ export default function KetuaPertandinganPage() {
     try {
       let pointsToLog = 0;
       let actionTypeToLog: KetuaActionType = actionTypeButtonPressed;
-      let originalActionTypeForLog: KetuaActionType | undefined = undefined;
+      let currentOriginalActionType: KetuaActionType | undefined = undefined; 
 
       if (actionTypeButtonPressed === 'Teguran') {
         actionTypeToLog = 'Teguran';
         pointsToLog = TEGURAN_POINTS; 
       } else if (actionTypeButtonPressed === 'Binaan') {
-        originalActionTypeForLog = 'Binaan';
-        // Count only pure 'Binaan' actions, not those converted to 'Teguran' but originated from 'Binaan'
         const binaanAsliCount = ketuaActionsLog.filter(
           log => log.pesilatColor === pesilatColor &&
                  log.round === dewanTimerStatus.currentRound &&
                  log.actionType === 'Binaan' &&
-                 !log.originalActionType // Ensure it's a pure Binaan, not a converted one
+                 !log.originalActionType 
         ).length;
 
-        if (binaanAsliCount < 1) { // Binaan pertama di babak ini
+        if (binaanAsliCount < 1) { 
           actionTypeToLog = 'Binaan';
-          pointsToLog = 0; // Binaan murni pertama tidak ada poin
-        } else { // Binaan kedua (atau lebih, yang seharusnya tidak terjadi jika logika tombol dijaga) menjadi Teguran
+          pointsToLog = 0; 
+        } else { 
           actionTypeToLog = 'Teguran';
           pointsToLog = TEGURAN_POINTS;
+          currentOriginalActionType = 'Binaan'; 
         }
       } else if (actionTypeButtonPressed === 'Peringatan') {
         const peringatanCount = countActionsInRound(ketuaActionsLog, pesilatColor, 'Peringatan', dewanTimerStatus.currentRound);
@@ -279,7 +278,7 @@ export default function KetuaPertandinganPage() {
         round: dewanTimerStatus.currentRound,
         timestamp: Timestamp.now(),
         points: pointsToLog,
-        ...(originalActionTypeForLog && { originalActionType: originalActionTypeForLog }),
+        ...(currentOriginalActionType && { originalActionType: currentOriginalActionType }),
       };
 
       await addDoc(collection(db, MATCHES_TANDING_COLLECTION, activeMatchId, OFFICIAL_ACTIONS_SUBCOLLECTION), actionData);
@@ -361,7 +360,6 @@ export default function KetuaPertandinganPage() {
       
       const batch = writeBatch(db);
       
-      // Cancel any existing pending verifications
       const verificationsRef = collection(db, MATCHES_TANDING_COLLECTION, activeMatchId, VERIFICATIONS_SUBCOLLECTION);
       const qPending = query(verificationsRef, where("status", "==", "pending"));
       const pendingSnapshot = await getDocs(qPending);
@@ -369,7 +367,6 @@ export default function KetuaPertandinganPage() {
         batch.update(docSnap.ref, { status: 'cancelled' }); 
       });
       
-      // Pause the timer
       const matchDocRef = doc(db, MATCHES_TANDING_COLLECTION, activeMatchId);
       const currentTimerStatusForPause: TimerMatchStatus = `PausedForVerificationRound${dewanTimerStatus.currentRound}`;
       batch.update(matchDocRef, {
@@ -377,16 +374,14 @@ export default function KetuaPertandinganPage() {
           "timer_status.matchStatus": currentTimerStatusForPause
       });
       
-      // Add new verification request
       const newVerificationRef = doc(collection(db, MATCHES_TANDING_COLLECTION, activeMatchId, VERIFICATIONS_SUBCOLLECTION));
       batch.set(newVerificationRef, verificationData);
 
       await batch.commit();
 
       alert(`Verifikasi untuk ${selectedVerificationTypeForCreation === 'jatuhan' ? 'Jatuhan' : 'Pelanggaran'} telah dimulai. Timer pertandingan dijeda.`);
-      setIsVerificationCreationDialogOpen(false); // Close creation dialog
+      setIsVerificationCreationDialogOpen(false); 
       setSelectedVerificationTypeForCreation('');
-      // The useEffect listening to verifications will automatically open the results dialog
     } catch (err) {
       console.error("Error creating verification:", err);
       setError(err instanceof Error ? `Gagal memulai verifikasi: ${err.message}` : "Gagal memulai verifikasi.");
@@ -428,7 +423,6 @@ export default function KetuaPertandinganPage() {
       await batch.commit();
 
       alert(`Verifikasi ${activeVerificationDetails.type} dikonfirmasi dengan hasil: ${ketuaSelectedDecision}.${pointsAwardedMessage}`);
-      // Dialog will close automatically because activeVerificationDetails.status is no longer 'pending'
       setKetuaSelectedDecision(null);
     } catch (err) {
       console.error("Error confirming verification:", err);
@@ -448,7 +442,6 @@ export default function KetuaPertandinganPage() {
       const verificationDocRef = doc(db, MATCHES_TANDING_COLLECTION, activeMatchId, VERIFICATIONS_SUBCOLLECTION, activeVerificationDetails.id);
       await updateDoc(verificationDocRef, { status: 'cancelled' });
       alert(`Verifikasi ${activeVerificationDetails.type} telah dibatalkan.`);
-      // Dialog will close automatically
       setKetuaSelectedDecision(null);
     } catch (err) {
        console.error("Error cancelling verification:", err);
@@ -467,7 +460,7 @@ export default function KetuaPertandinganPage() {
     if (vote === 'merah') return "bg-red-500";
     if (vote === 'biru') return "bg-blue-500";
     if (vote === 'invalid') return "bg-yellow-400";
-    return "bg-white dark:bg-gray-700"; // Default white for "belum vote"
+    return "bg-white dark:bg-gray-700"; 
   };
 
 
@@ -641,7 +634,7 @@ export default function KetuaPertandinganPage() {
         {error && <div className="text-red-500 text-center mt-4 p-2 bg-red-100 border border-red-500 rounded-md">Error: {error}</div>}
 
         <Dialog open={isVoteResultModalOpen && !!activeVerificationDetails && activeVerificationDetails.status === 'pending'} onOpenChange={(isOpen) => {
-          if (!isOpen) { // Prevent closing via overlay click or escape if verification is pending
+          if (!isOpen) { 
             if (activeVerificationDetails && activeVerificationDetails.status === 'pending') {
                 return; 
             }
@@ -666,7 +659,7 @@ export default function KetuaPertandinganPage() {
                 {(['juri-1', 'juri-2', 'juri-3'] as const).map((juriKey, index) => (
                   <div key={juriKey} className="flex flex-col items-center space-y-1">
                     <div className={cn("w-16 h-16 rounded-md border-2 border-gray-400 flex items-center justify-center", getJuriVoteBoxClass(activeVerificationDetails?.votes[juriKey] || null))}>
-                       {/* Visual only */}
+                       
                     </div>
                     <p className="text-xs font-medium">Juri {index + 1}</p>
                   </div>
@@ -716,11 +709,6 @@ export default function KetuaPertandinganPage() {
                 Konfirmasi Keputusan
               </Button>
             </DialogFooter>
-             {/* Remove DialogClose if we want to strictly control closing via logic
-             <DialogClose asChild>
-                <Button variant="ghost" className="absolute top-4 right-4" onClick={() => setIsVoteResultModalOpen(false)}>X</Button>
-            </DialogClose> 
-            */}
           </DialogContent>
         </Dialog>
 
