@@ -348,16 +348,6 @@ export default function JuriDynamicPage({ params: paramsPromise }: { params: Pro
     }
   };
 
-
-  const calculateTotalScoreForPesilatDisplay = (roundScores: RoundScores): number => {
-    if (!roundScores) return 0;
-    return Object.values(roundScores).reduce((total, roundDataArray) =>
-      total + (roundDataArray?.reduce((sum, scoreEntry) => sum + scoreEntry.points, 0) || 0), 0);
-  };
-
-  const totalMerahDisplay = calculateTotalScoreForPesilatDisplay(scoresData.merah);
-  const totalBiruDisplay = calculateTotalScoreForPesilatDisplay(scoresData.biru);
-
   const renderRoundScoresDisplay = (roundData: ScoreEntry[] | undefined) => {
     if (!roundData || roundData.length === 0) return '-';
     return roundData.map((entry, index) => {
@@ -481,17 +471,12 @@ export default function JuriDynamicPage({ params: paramsPromise }: { params: Pro
                 </div>
               ))}
             </div>
-
-            <div className="flex justify-between mt-4 text-xl font-bold">
-              <div className="text-red-600">Total (Merah): {activeMatchId && matchDetailsLoaded ? totalMerahDisplay : (((isLoading && activeMatchId) || (!activeMatchId && configMatchId === undefined)) ? "..." : 0)}</div>
-              <div className="text-blue-600">Total (Biru): {activeMatchId && matchDetailsLoaded ? totalBiruDisplay : (((isLoading && activeMatchId) || (!activeMatchId && configMatchId === undefined)) ? "..." : 0)}</div>
-            </div>
           </CardContent>
         </Card>
 
         <div className="grid grid-cols-2 gap-4 md:gap-8">
           <div className="space-y-3">
-            <h3 className="text-center text-xl font-semibold text-red-600">{(activeMatchId && matchDetailsLoaded) ? (pesilatMerah?.name || 'PESILAT MERAH') : 'PESILAT MERAH'}</h3>
+            {/* Pesilat Merah Name removed from here */}
             <Button onClick={() => handleScore('merah', 1)} className="w-full bg-red-500 hover:bg-red-600 text-white text-lg py-6 h-auto disabled:opacity-70" disabled={isInputDisabled} aria-label="Pukulan Merah (+1)">
               <Target className="mr-2 h-5 w-5" /> Pukulan (+1)
             </Button>
@@ -504,7 +489,7 @@ export default function JuriDynamicPage({ params: paramsPromise }: { params: Pro
           </div>
 
           <div className="space-y-3">
-            <h3 className="text-center text-xl font-semibold text-blue-600">{(activeMatchId && matchDetailsLoaded) ? (pesilatBiru?.name || 'PESILAT BIRU') : 'PESILAT BIRU'}</h3>
+            {/* Pesilat Biru Name removed from here */}
             <Button onClick={() => handleScore('biru', 1)} className="w-full bg-blue-500 hover:bg-blue-600 text-white text-lg py-6 h-auto disabled:opacity-70" disabled={isInputDisabled} aria-label="Pukulan Biru (+1)">
               <Target className="mr-2 h-5 w-5" /> Pukulan (+1)
             </Button>
@@ -564,3 +549,6 @@ export default function JuriDynamicPage({ params: paramsPromise }: { params: Pro
     </div>
   );
 }
+
+
+    
