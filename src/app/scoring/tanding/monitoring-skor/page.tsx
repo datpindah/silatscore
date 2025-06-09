@@ -40,7 +40,7 @@ interface DisplayJuriMatchData {
 }
 
 export default function MonitoringSkorPage() {
-  const [pageTheme, setPageTheme] = useState<'light' | 'dark'>('dark');
+  const [pageTheme, setPageTheme] = useState<'light' | 'dark'>('light');
   const [configMatchId, setConfigMatchId] = useState<string | null | undefined>(undefined);
   const [activeScheduleId, setActiveScheduleId] = useState<string | null>(null);
   const [matchDetails, setMatchDetails] = useState<ScheduleTanding | null>(null);
@@ -49,15 +49,15 @@ export default function MonitoringSkorPage() {
   const [pesilatBiruInfo, setPesilatBiruInfo] = useState<PesilatDisplayInfo | null>(null);
 
   const [timerStatus, setTimerStatus] = useState<TimerStatus>(initialTimerStatus);
-  const [confirmedScoreMerah, setConfirmedScoreMerah] = useState(0); 
-  const [confirmedScoreBiru, setConfirmedScoreBiru] = useState(0); 
+  const [confirmedScoreMerah, setConfirmedScoreMerah] = useState(0);
+  const [confirmedScoreBiru, setConfirmedScoreBiru] = useState(0);
 
   const [ketuaActionsLog, setKetuaActionsLog] = useState<KetuaActionLogEntry[]>([]);
   const [juriScoresData, setJuriScoresData] = useState<Record<string, DisplayJuriMatchData | null>>({
     'juri-1': null, 'juri-2': null, 'juri-3': null
   });
   const prevJuriScoresDataRef = useRef<Record<string, DisplayJuriMatchData | null>>(juriScoresData);
-  
+
   const [activeJuriHighlights, setActiveJuriHighlights] = useState<Record<string, boolean>>({});
   const highlightTimeoutsRef = useRef<Record<string, NodeJS.Timeout>>({});
 
@@ -105,17 +105,17 @@ export default function MonitoringSkorPage() {
       if (activeScheduleId !== null) { resetMatchDisplayData(); setActiveScheduleId(null); }
       setIsLoading(false); setError("Tidak ada jadwal pertandingan yang aktif."); return;
     }
-    if (configMatchId !== activeScheduleId) { 
-        resetMatchDisplayData(); 
-        setActiveScheduleId(configMatchId); 
+    if (configMatchId !== activeScheduleId) {
+        resetMatchDisplayData();
+        setActiveScheduleId(configMatchId);
     }
   }, [configMatchId, activeScheduleId, resetMatchDisplayData]);
 
   useEffect(() => {
-    if (!activeScheduleId) { 
-        setIsLoading(false); 
-        if (!error?.includes("konfigurasi")) setError(null); 
-        return; 
+    if (!activeScheduleId) {
+        setIsLoading(false);
+        if (!error?.includes("konfigurasi")) setError(null);
+        return;
     }
 
     setIsLoading(true);
@@ -134,14 +134,14 @@ export default function MonitoringSkorPage() {
           setPesilatMerahInfo({ name: data.pesilatMerahName, contingent: data.pesilatMerahContingent });
           setPesilatBiruInfo({ name: data.pesilatBiruName, contingent: data.pesilatBiruContingent });
           setMatchDetailsLoaded(true);
-        } else { 
-            setError(`Detail jadwal ID ${currentMatchId} tidak ditemukan.`); 
+        } else {
+            setError(`Detail jadwal ID ${currentMatchId} tidak ditemukan.`);
             setMatchDetails(null);
             setPesilatMerahInfo(null);
             setPesilatBiruInfo(null);
-            setMatchDetailsLoaded(false); 
-            setIsLoading(false); 
-            return; 
+            setMatchDetailsLoaded(false);
+            setIsLoading(false);
+            return;
         }
 
         const matchDocRef = doc(db, MATCHES_TANDING_COLLECTION, currentMatchId);
@@ -152,8 +152,8 @@ export default function MonitoringSkorPage() {
             if (data?.timer_status) setTimerStatus(data.timer_status as TimerStatus);
             // TODO: Implement score calculation similar to Dewan 1 if needed for confirmed scores
             // For now, confirmed scores are placeholders.
-          } else { 
-            setTimerStatus(initialTimerStatus); 
+          } else {
+            setTimerStatus(initialTimerStatus);
             setConfirmedScoreMerah(0); setConfirmedScoreBiru(0);
           }
         }, (err) => {
@@ -166,7 +166,7 @@ export default function MonitoringSkorPage() {
         }, (err) => {
            if (mounted) console.error("[MonitoringSkor] Error fetching official actions:", err);
         }));
-        
+
         JURI_IDS.forEach(juriId => {
           unsubscribers.push(onSnapshot(doc(matchDocRef, JURI_SCORES_SUBCOLLECTION, juriId), (juriDocSnap) => {
             if (!mounted) return;
@@ -184,37 +184,38 @@ export default function MonitoringSkorPage() {
             if (latestVerification.status === 'pending') {
               setActiveDisplayVerificationRequest(latestVerification);
               setIsDisplayVerificationModalOpen(true);
-            } else { 
-              if (activeDisplayVerificationRequest?.id === latestVerification.id) {
-                setActiveDisplayVerificationRequest(null); 
-                setIsDisplayVerificationModalOpen(false); 
-              }
+            } else {
+              // If the latest verification is NOT pending (completed, cancelled),
+              // then NO verification modal should be open.
+              setActiveDisplayVerificationRequest(null);
+              setIsDisplayVerificationModalOpen(false);
             }
-          } else { 
-            setActiveDisplayVerificationRequest(null); 
-            setIsDisplayVerificationModalOpen(false); 
+          } else {
+            // No verifications found
+            setActiveDisplayVerificationRequest(null);
+            setIsDisplayVerificationModalOpen(false);
           }
         },(err) => {
           if (mounted) {
             console.error("[MonitoringSkor] Error fetching verifications:", err);
-            setActiveDisplayVerificationRequest(null); 
+            setActiveDisplayVerificationRequest(null);
             setIsDisplayVerificationModalOpen(false);
           }
         }));
 
-      } catch (err) { 
-          if (mounted) { 
-              console.error("[MonitoringSkor] Error in loadData:", err); 
-              setError("Gagal memuat data pertandingan."); 
+      } catch (err) {
+          if (mounted) {
+              console.error("[MonitoringSkor] Error in loadData:", err);
+              setError("Gagal memuat data pertandingan.");
           }
-      } finally { 
+      } finally {
           if (mounted && matchDetailsLoaded) setIsLoading(false);
       }
     };
 
     loadData(activeScheduleId);
     return () => { mounted = false; unsubscribers.forEach(unsub => unsub()); };
-  }, [activeScheduleId, matchDetailsLoaded]); 
+  }, [activeScheduleId, matchDetailsLoaded]);
 
   useEffect(() => {
     if (isLoading && (matchDetailsLoaded || activeScheduleId === null)) {
@@ -226,7 +227,7 @@ export default function MonitoringSkorPage() {
   useEffect(() => {
     const currentJuriData = juriScoresData;
     const prevJuriData = prevJuriScoresDataRef.current;
-    
+
     if (!timerStatus || !timerStatus.currentRound) return;
     const roundKey = `round${timerStatus.currentRound}` as keyof RoundScores;
 
@@ -244,15 +245,15 @@ export default function MonitoringSkorPage() {
             if (newEntry) {
               const type = newEntry.points === 1 ? 'pukulan' : 'tendangan';
               const highlightKey = `${color}-${type}-${juriId}`;
-              
+
               setActiveJuriHighlights(prev => ({ ...prev, [highlightKey]: true }));
-              
+
               if (highlightTimeoutsRef.current[highlightKey]) {
                 clearTimeout(highlightTimeoutsRef.current[highlightKey]);
               }
               highlightTimeoutsRef.current[highlightKey] = setTimeout(() => {
                 setActiveJuriHighlights(prev => ({ ...prev, [highlightKey]: false }));
-              }, 1000); 
+              }, 1000);
             }
           }
         });
@@ -267,11 +268,11 @@ export default function MonitoringSkorPage() {
     const remainingSeconds = seconds % 60;
     return `${minutes.toString().padStart(2, '0')}:${remainingSeconds.toString().padStart(2, '0')}`;
   };
-  
+
   const getFoulStatus = (pesilatColor: PesilatColorIdentity, type: KetuaActionType, count: number): boolean => {
     if (!timerStatus || !timerStatus.currentRound) return false;
     const actionsInRound = ketuaActionsLog.filter(
-      action => action.pesilatColor === pesilatColor && 
+      action => action.pesilatColor === pesilatColor &&
                 action.round === timerStatus.currentRound &&
                 action.actionType === type
     );
@@ -279,8 +280,8 @@ export default function MonitoringSkorPage() {
        const binaanAsliCount = ketuaActionsLog.filter(
         log => log.pesilatColor === pesilatColor &&
                log.round === timerStatus.currentRound &&
-               log.actionType === 'Binaan' && 
-               !log.originalActionType 
+               log.actionType === 'Binaan' &&
+               !log.originalActionType
       ).length;
       return binaanAsliCount >= count;
     }
@@ -298,8 +299,8 @@ export default function MonitoringSkorPage() {
   const FoulBox = ({ label, isActive }: { label: string; isActive: boolean }) => (
     <div className={cn(
       "w-full h-full flex items-center justify-center rounded-sm border text-[9px] md:text-[10px] font-medium leading-tight",
-      isActive 
-        ? "bg-[var(--monitor-foulbox-active-bg)] text-[var(--monitor-foulbox-active-text)] border-[var(--monitor-foulbox-active-border)]" 
+      isActive
+        ? "bg-[var(--monitor-foulbox-active-bg)] text-[var(--monitor-foulbox-active-text)] border-[var(--monitor-foulbox-active-border)]"
         : "bg-[var(--monitor-foulbox-inactive-bg)] text-[var(--monitor-foulbox-inactive-text)] border-[var(--monitor-foulbox-inactive-border)] dark:bg-gray-600 dark:text-gray-200 dark:border-gray-500"
     )}>
       {label}
@@ -309,7 +310,7 @@ export default function MonitoringSkorPage() {
   const JuriInputIndicator = ({ juri, type, pesilatColor }: { juri: string; type: 'pukulan' | 'tendangan'; pesilatColor: PesilatColorIdentity }) => {
     const isActive = activeJuriHighlights[`${pesilatColor}-${type}-${juri}`];
     return (
-      <div className={cn("flex-1 border py-1 md:py-2 text-center text-xs md:text-sm font-medium rounded-sm dark:border-gray-500", 
+      <div className={cn("flex-1 border py-1 md:py-2 text-center text-xs md:text-sm font-medium rounded-sm dark:border-gray-500",
         isActive ? "bg-[var(--monitor-juri-indicator-active-bg)] text-[var(--monitor-juri-indicator-active-text)] border-[var(--monitor-juri-indicator-inactive-border)]"
                  : "bg-[var(--monitor-juri-indicator-inactive-bg)] text-[var(--monitor-juri-indicator-inactive-text)] border-[var(--monitor-juri-indicator-inactive-border)]")}>
         {juri.toUpperCase().replace('JURI-','J')}
@@ -323,7 +324,7 @@ export default function MonitoringSkorPage() {
     if (vote === 'invalid') return "bg-[var(--monitor-dialog-vote-invalid-bg)] text-[var(--monitor-dialog-vote-invalid-text)]";
     return "bg-[var(--monitor-dialog-vote-null-bg)] text-[var(--monitor-dialog-vote-null-text)]";
   };
-  
+
   const getMatchStatusTextForMonitor = (): string => {
     if (!timerStatus) return "Memuat status...";
     if (timerStatus.matchStatus.startsWith("OngoingRound")) return `Babak ${timerStatus.currentRound} Berlangsung`;
@@ -336,13 +337,13 @@ export default function MonitoringSkorPage() {
   };
 
 
-  if (isLoading && configMatchId === undefined) { 
+  if (isLoading && configMatchId === undefined) {
     return (
         <div className={cn("flex flex-col min-h-screen items-center justify-center", pageTheme === 'light' ? 'monitoring-theme-light' : 'monitoring-theme-dark', "bg-[var(--monitor-bg)] text-[var(--monitor-text)]")}>
             <Loader2 className="h-16 w-16 animate-spin text-[var(--monitor-overlay-accent-text)] mb-4" />
             <p className="text-xl">Memuat Konfigurasi Monitor...</p>
         </div>
-    ); 
+    );
   }
 
   return (
@@ -360,7 +361,7 @@ export default function MonitoringSkorPage() {
           <Moon className="h-[1.2rem] w-[1.2rem]" />
         )}
       </Button>
-      <div className="bg-[var(--monitor-header-section-bg)] p-4 md:p-5 text-center"> {/* Increased padding */}
+      <div className="bg-[var(--monitor-header-section-bg)] p-4 md:p-5 text-center">
         <div className="grid grid-cols-3 gap-1 md:gap-2 text-xs md:text-sm font-semibold">
           <div>{matchDetails?.place || <Skeleton className="h-4 w-20 inline-block bg-[var(--monitor-skeleton-bg)]" />}</div>
           <div>{matchDetails?.round || <Skeleton className="h-4 w-20 inline-block bg-[var(--monitor-skeleton-bg)]" />}</div>
@@ -375,9 +376,9 @@ export default function MonitoringSkorPage() {
             <div className="font-bold text-sm md:text-xl text-[var(--monitor-pesilat-biru-name-text)]">{pesilatBiruInfo?.name || <Skeleton className="h-6 w-32 bg-[var(--monitor-skeleton-bg)]" />}</div>
             <div className="text-xs md:text-base text-[var(--monitor-pesilat-biru-contingent-text)]">{pesilatBiruInfo?.contingent || <Skeleton className="h-4 w-24 bg-[var(--monitor-skeleton-bg)] mt-1" />}</div>
           </div>
-          
-          <div className="flex w-full items-stretch gap-1 md:gap-2 mb-1 md:mb-2 h-40 md:h-52"> {/* Increased height */}
-             <div className="flex flex-col gap-1 p-0.5 w-20 md:w-28 h-full"> {/* Adjusted width for FoulBoxes */}
+
+          <div className="flex w-full items-stretch gap-1 md:gap-2 mb-1 md:mb-2 h-48 md:h-60">
+             <div className="flex flex-col gap-1 p-0.5 w-14 md:w-16 h-full">
                 <div className="grid grid-cols-2 gap-1 flex-1">
                     <FoulBox label="B1" isActive={getFoulStatus('biru', 'Binaan', 1)} />
                     <FoulBox label="B2" isActive={getFoulStatus('biru', 'Binaan', 2)} />
@@ -414,12 +415,12 @@ export default function MonitoringSkorPage() {
           </div>
           <div className="space-y-1 md:space-y-2 w-full max-w-[120px] md:max-w-[180px]">
             {[1, 2, 3].map(b => (
-              <div 
-                key={`babak-indicator-${b}`} 
+              <div
+                key={`babak-indicator-${b}`}
                 className={cn(
-                  "w-full py-1 md:py-1.5 border-2 flex items-center justify-center text-xs md:text-sm font-semibold rounded-md", 
-                  timerStatus.currentRound === b 
-                    ? "bg-[var(--monitor-babak-indicator-active-bg)] text-[var(--monitor-babak-indicator-active-text)] border-[var(--monitor-babak-indicator-active-border)]" 
+                  "w-full py-1 md:py-1.5 border-2 flex items-center justify-center text-xs md:text-sm font-semibold rounded-md",
+                  timerStatus.currentRound === b
+                    ? "bg-[var(--monitor-babak-indicator-active-bg)] text-[var(--monitor-babak-indicator-active-text)] border-[var(--monitor-babak-indicator-active-border)]"
                     : "bg-[var(--monitor-babak-indicator-inactive-bg)] text-[var(--monitor-babak-indicator-inactive-text)] border-[var(--monitor-babak-indicator-inactive-border)]"
                 )}
               >
@@ -439,11 +440,11 @@ export default function MonitoringSkorPage() {
             <div className="text-xs md:text-base text-[var(--monitor-pesilat-merah-contingent-text)]">{pesilatMerahInfo?.contingent || <Skeleton className="h-4 w-24 bg-[var(--monitor-skeleton-bg)] mt-1" />}</div>
           </div>
 
-          <div className="flex w-full items-stretch gap-1 md:gap-2 mb-1 md:mb-2 h-40 md:h-52"> {/* Increased height */}
+          <div className="flex w-full items-stretch gap-1 md:gap-2 mb-1 md:mb-2 h-48 md:h-60">
             <div className="flex-grow h-full bg-[var(--monitor-skor-merah-bg)] flex items-center justify-center text-5xl md:text-8xl font-bold rounded-md text-[var(--monitor-skor-text)]">
                 {confirmedScoreMerah}
             </div>
-             <div className="flex flex-col gap-1 p-0.5 w-20 md:w-28 h-full"> {/* Adjusted width for FoulBoxes */}
+             <div className="flex flex-col gap-1 p-0.5 w-14 md:w-16 h-full">
                 <div className="grid grid-cols-2 gap-1 flex-1">
                     <FoulBox label="B1" isActive={getFoulStatus('merah', 'Binaan', 1)} />
                     <FoulBox label="B2" isActive={getFoulStatus('merah', 'Binaan', 2)} />
@@ -459,7 +460,7 @@ export default function MonitoringSkorPage() {
                 </div>
             </div>
           </div>
-          
+
           <div className="flex flex-col gap-0.5 md:gap-1 w-full">
             <div className="flex gap-0.5 md:gap-1">
               {JURI_IDS.map(id => <JuriInputIndicator key={`merah-pukulan-${id}`} juri={id} type="pukulan" pesilatColor="merah" />)}
@@ -470,10 +471,10 @@ export default function MonitoringSkorPage() {
           </div>
         </div>
       </div>
-      
-      <Dialog open={isDisplayVerificationModalOpen} onOpenChange={(isOpen) => { 
-          if (!isOpen && activeDisplayVerificationRequest?.status === 'pending') return; 
-          setIsDisplayVerificationModalOpen(isOpen); 
+
+      <Dialog open={isDisplayVerificationModalOpen} onOpenChange={(isOpen) => {
+          if (!isOpen && activeDisplayVerificationRequest?.status === 'pending') return;
+          setIsDisplayVerificationModalOpen(isOpen);
       }}>
          <DialogContent
             className={cn("sm:max-w-lg md:max-w-xl bg-[var(--monitor-dialog-bg)] border-[var(--monitor-dialog-border)] text-[var(--monitor-dialog-text)]", pageTheme === 'light' ? 'monitoring-theme-light' : 'monitoring-theme-dark')}
@@ -532,4 +533,3 @@ export default function MonitoringSkorPage() {
     </div>
   );
 }
-
