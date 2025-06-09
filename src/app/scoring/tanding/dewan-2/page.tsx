@@ -3,7 +3,7 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { ArrowLeft, Loader2, Shield, Swords } from 'lucide-react';
-import type { ScheduleTanding, TimerStatus, KetuaActionLogEntry, PesilatColorIdentity } from '@/lib/types';
+import type { ScheduleTanding, TimerStatus, KetuaActionLogEntry, PesilatColorIdentity, JuriMatchData as LibJuriMatchData, RoundScores as LibRoundScoresType, KetuaActionType } from '@/lib/types';
 import { db } from '@/lib/firebase';
 import { doc, onSnapshot, getDoc, collection, query, orderBy, Timestamp } from 'firebase/firestore';
 import { cn } from '@/lib/utils';
@@ -23,22 +23,10 @@ interface PesilatDisplayInfo {
   contingent: string;
 }
 
-interface ScoreEntry {
-  points: 1 | 2;
-  timestamp: Timestamp;
-}
+// Renaming to avoid conflict with lib type if it was also named JuriMatchData
+interface JuriMatchDataForPage extends LibJuriMatchData {}
+interface RoundScoresForPage extends LibRoundScoresType {}
 
-interface RoundScores {
-  round1: ScoreEntry[];
-  round2: ScoreEntry[];
-  round3: ScoreEntry[];
-}
-
-interface JuriMatchData {
-  merah: RoundScores;
-  biru: RoundScores;
-  lastUpdated?: Timestamp;
-}
 
 const initialTimerStatus: TimerStatus = {
   currentRound: 1,
@@ -48,7 +36,7 @@ const initialTimerStatus: TimerStatus = {
   roundDuration: 120,
 };
 
-const initialJuriData = (): JuriMatchData => ({
+const initialJuriData = (): JuriMatchDataForPage => ({
   merah: { round1: [], round2: [], round3: [] },
   biru: { round1: [], round2: [], round3: [] },
 });
@@ -59,6 +47,53 @@ const PlaceholderLogo = ({ className }: { className?: string }) => (
     LOGO
   </div>
 );
+
+const calculateJuriScoreForRound = (
+    juriId: string,
+    pesilatColor: PesilatColorIdentity,
+    round: 1 | 2 | 3,
+    currentJuriScoresData: Record<string, JuriMatchDataForPage | null>
+): number => {
+  const juriData = currentJuriScoresData[juriId];
+  if (!juriData) return 0;
+  const roundKey = `round${round}` as keyof RoundScoresForPage;
+  const scores = juriData[pesilatColor]?.[roundKey] || [];
+  return scores.reduce((sum, entry) => sum + entry.points, 0);
+};
+
+const calculateKetuaActionForRound = (
+    pesilatColor: PesilatColorIdentity,
+    actionType: 'Jatuhan' | 'Hukuman',
+    round: 1 | 2 | 3,
+    currentKetuaActionsLog: KetuaActionLogEntry[]
+): number => {
+  let totalPoints = 0;
+  currentKetuaActionsLog.forEach(action => {
+    if (action.pesilatColor === pesilatColor && action.round === round) {
+      if (actionType === 'Jatuhan' && action.actionType === 'Jatuhan') {
+        totalPoints += action.points;
+      } else if (actionType === 'Hukuman' && (action.actionType === 'Teguran' || action.actionType === 'Peringatan')) {
+        totalPoints += action.points;
+      }
+    }
+  });
+  return totalPoints;
+};
+
+const calculateRoundTotalScore = (
+    color: PesilatColorIdentity,
+    currentRoundNum: 1 | 2 | 3,
+    currentJuriScoresData: Record<string, JuriMatchDataForPage | null>,
+    currentKetuaActionsLog: KetuaActionLogEntry[]
+) : number => {
+  const j1Score = calculateJuriScoreForRound('juri-1', color, currentRoundNum, currentJuriScoresData);
+  const j2Score = calculateJuriScoreForRound('juri-2', color, currentRoundNum, currentJuriScoresData);
+  const j3Score = calculateJuriScoreForRound('juri-3', color, currentRoundNum, currentJuriScoresData);
+  const totalNilaiJuri = j1Score + j2Score + j3Score;
+  const jatuhan = calculateKetuaActionForRound(color, 'Jatuhan', currentRoundNum, currentKetuaActionsLog);
+  const hukuman = calculateKetuaActionForRound(color, 'Hukuman', currentRoundNum, currentKetuaActionsLog);
+  return totalNilaiJuri + jatuhan + hukuman;
+}
 
 
 export default function DewanDuaPage() {
@@ -74,7 +109,7 @@ export default function DewanDuaPage() {
   const [confirmedScoreBiru, setConfirmedScoreBiru] = useState(0);   // Overall confirmed score
 
   const [ketuaActionsLog, setKetuaActionsLog] = useState<KetuaActionLogEntry[]>([]);
-  const [juriScores, setJuriScores] = useState<Record<string, JuriMatchData | null>>({
+  const [juriScores, setJuriScores] = useState<Record<string, JuriMatchDataForPage | null>>({
     'juri-1': initialJuriData(),
     'juri-2': initialJuriData(),
     'juri-3': initialJuriData(),
@@ -158,9 +193,11 @@ export default function DewanDuaPage() {
           if (docSnap.exists()) {
             const data = docSnap.data();
             if (data?.timer_status) setTimerStatus(data.timer_status as TimerStatus);
-            // For overall scores, we need to implement the full calculation logic or read from a confirmed field
-            // This part can be enhanced later. For now, the top scores will be 0 or need a dedicated source.
-            // A more robust solution would be to have Dewan 1 write confirmed scores to the matchDoc.
+            // Read confirmed scores from Dewan 1 (or calculate if necessary, but Dewan 1 is source of truth)
+            // For now, this assumes Dewan 1 writes the confirmed scores to matchDoc.
+            // If not, this part needs to mirror Dewan 1's score calculation logic.
+            // setConfirmedScoreMerah(data?.confirmed_score_merah || 0);
+            // setConfirmedScoreBiru(data?.confirmed_score_biru || 0);
           } else {
             setTimerStatus(initialTimerStatus);
             setConfirmedScoreMerah(0); setConfirmedScoreBiru(0);
@@ -175,20 +212,20 @@ export default function DewanDuaPage() {
         JURI_IDS.forEach(juriId => {
           unsubscribers.push(onSnapshot(doc(matchDocRef, JURI_SCORES_SUBCOLLECTION, juriId), (juriDocSnap) => {
             if (!mounted) return;
-            setJuriScores(prev => ({ ...prev, [juriId]: juriDocSnap.exists() ? juriDocSnap.data() as JuriMatchData : initialJuriData() }));
+            setJuriScores(prev => ({ ...prev, [juriId]: juriDocSnap.exists() ? juriDocSnap.data() as JuriMatchDataForPage : initialJuriData() }));
           }, (err) => console.error(`[Dewan2] Error fetching scores for ${juriId}:`, err)));
         });
 
       } catch (err) {
         if (mounted) { console.error("[Dewan2] Error in loadData:", err); setError("Gagal memuat data pertandingan."); }
       } finally {
-        if (mounted && matchDetailsLoaded) setIsLoading(false); // Only stop loading if details are actually loaded
+        if (mounted && matchDetailsLoaded) setIsLoading(false); 
       }
     };
 
     loadData(activeScheduleId);
     return () => { mounted = false; unsubscribers.forEach(unsub => unsub()); };
-  }, [activeScheduleId, matchDetailsLoaded]); // matchDetailsLoaded dependency helps re-trigger loading if it failed
+  }, [activeScheduleId, matchDetailsLoaded]); 
 
  useEffect(() => {
     if (isLoading && (matchDetailsLoaded || activeScheduleId === null)) {
@@ -201,28 +238,6 @@ export default function DewanDuaPage() {
     const minutes = Math.floor(seconds / 60);
     const remainingSeconds = seconds % 60;
     return `${minutes.toString().padStart(2, '0')}:${remainingSeconds.toString().padStart(2, '0')}`;
-  };
-
-  const calculateJuriScoreForRound = (juriId: string, pesilatColor: PesilatColorIdentity, round: 1 | 2 | 3): number => {
-    const juriData = juriScores[juriId];
-    if (!juriData) return 0;
-    const roundKey = `round${round}` as keyof RoundScores;
-    const scores = juriData[pesilatColor]?.[roundKey] || [];
-    return scores.reduce((sum, entry) => sum + entry.points, 0);
-  };
-
-  const calculateKetuaActionForRound = (pesilatColor: PesilatColorIdentity, actionType: 'Jatuhan' | 'Hukuman', round: 1 | 2 | 3): number => {
-    let totalPoints = 0;
-    ketuaActionsLog.forEach(action => {
-      if (action.pesilatColor === pesilatColor && action.round === round) {
-        if (actionType === 'Jatuhan' && action.actionType === 'Jatuhan') {
-          totalPoints += action.points;
-        } else if (actionType === 'Hukuman' && (action.actionType === 'Teguran' || action.actionType === 'Peringatan')) {
-          totalPoints += action.points; // Hukuman points are already negative
-        }
-      }
-    });
-    return totalPoints;
   };
   
   const getRomanRound = (round: number): string => {
@@ -242,59 +257,17 @@ export default function DewanDuaPage() {
     <td className="border border-black px-2 py-1 md:px-3 md:py-2 text-left text-xs md:text-sm h-10 md:h-12">{children}</td>
   );
 
-  const renderTableRows = (color: PesilatColorIdentity) => {
-    const currentRound = timerStatus.currentRound;
-    const j1Score = calculateJuriScoreForRound('juri-1', color, currentRound);
-    const j2Score = calculateJuriScoreForRound('juri-2', color, currentRound);
-    const j3Score = calculateJuriScoreForRound('juri-3', color, currentRound);
-    const totalNilaiJuri = j1Score + j2Score + j3Score;
-    const jatuhan = calculateKetuaActionForRound(color, 'Jatuhan', currentRound);
-    const hukuman = calculateKetuaActionForRound(color, 'Hukuman', currentRound);
-
-    return (
-      <>
-        <tr>
-          <LabelCell>Juri 1</LabelCell>
-          <ScoreCell value={j1Score} isLoadingValue={isLoading} />
-        </tr>
-        <tr>
-          <LabelCell>Juri 2</LabelCell>
-          <ScoreCell value={j2Score} isLoadingValue={isLoading} />
-        </tr>
-        <tr>
-          <LabelCell>Juri 3</LabelCell>
-          <ScoreCell value={j3Score} isLoadingValue={isLoading} />
-        </tr>
-        <tr>
-          <LabelCell><span className="font-semibold">Total Nilai Juri</span></LabelCell>
-          <ScoreCell value={totalNilaiJuri} isLoadingValue={isLoading} />
-        </tr>
-        <tr>
-          <LabelCell>Jatuhan</LabelCell>
-          <ScoreCell value={jatuhan} isLoadingValue={isLoading} />
-        </tr>
-        <tr>
-          <LabelCell>Hukuman</LabelCell>
-          <ScoreCell value={hukuman} isLoadingValue={isLoading} />
-        </tr>
-      </>
-    );
-  };
-  
-  const calculateRoundTotalScore = (color: PesilatColorIdentity) : number => {
-    const currentRound = timerStatus.currentRound;
-    const j1Score = calculateJuriScoreForRound('juri-1', color, currentRound);
-    const j2Score = calculateJuriScoreForRound('juri-2', color, currentRound);
-    const j3Score = calculateJuriScoreForRound('juri-3', color, currentRound);
-    const totalNilaiJuri = j1Score + j2Score + j3Score; // This is raw sum, Dewan 1 "Nilai" would be confirmed
-    const jatuhan = calculateKetuaActionForRound(color, 'Jatuhan', currentRound);
-    const hukuman = calculateKetuaActionForRound(color, 'Hukuman', currentRound);
-    return totalNilaiJuri + jatuhan + hukuman;
-  }
+  const tableRowDefinitions = [
+    { type: 'Juri 1', juriId: 'juri-1' as const },
+    { type: 'Juri 2', juriId: 'juri-2' as const },
+    { type: 'Juri 3', juriId: 'juri-3' as const },
+    { type: 'Total Nilai Juri' },
+    { type: 'Jatuhan' },
+    { type: 'Hukuman' },
+  ];
 
   return (
     <div className="flex flex-col min-h-screen bg-blue-100 dark:bg-gray-900 text-gray-800 dark:text-gray-200">
-      {/* Custom Header */}
       <div className="bg-blue-700 text-white p-3 md:p-4">
         <div className="container mx-auto flex items-center justify-between">
           <PlaceholderLogo />
@@ -310,21 +283,11 @@ export default function DewanDuaPage() {
         </div>
       </div>
 
-      {/* Pesilat Info, Timer, Overall Scores */}
       <div className="container mx-auto px-2 md:px-4 py-3 md:py-6">
         <div className="grid grid-cols-3 items-center text-center mb-4 md:mb-8">
           <div className="text-left">
-            {isLoading && !pesilatMerahInfo ? (
-              <>
-                <Skeleton className="h-5 w-32 bg-gray-300 dark:bg-gray-700" />
-                <Skeleton className="h-6 w-40 mt-1 bg-gray-300 dark:bg-gray-700" />
-              </>
-            ) : (
-              <>
-                <div className="text-sm md:text-base font-semibold text-red-600">KONTINGEN {pesilatMerahInfo?.contingent.toUpperCase()}</div>
-                <div className="text-lg md:text-2xl font-bold text-red-600">{pesilatMerahInfo?.name.toUpperCase()}</div>
-              </>
-            )}
+            <div className="text-sm md:text-base font-semibold text-red-600">KONTINGEN {pesilatMerahInfo?.contingent.toUpperCase() || (isLoading ? <Skeleton className="h-5 w-24 bg-gray-300 dark:bg-gray-700" /> : '-')}</div>
+            <div className="text-lg md:text-2xl font-bold text-red-600">{pesilatMerahInfo?.name.toUpperCase() || (isLoading ? <Skeleton className="h-6 w-32 bg-gray-300 dark:bg-gray-700" /> : 'PESILAT MERAH')}</div>
             <p className="text-3xl md:text-5xl font-bold text-red-600 mt-1">{confirmedScoreMerah}</p>
           </div>
           
@@ -333,24 +296,14 @@ export default function DewanDuaPage() {
           </div>
 
           <div className="text-right">
-             {isLoading && !pesilatBiruInfo ? (
-              <>
-                <Skeleton className="h-5 w-32 ml-auto bg-gray-300 dark:bg-gray-700" />
-                <Skeleton className="h-6 w-40 mt-1 ml-auto bg-gray-300 dark:bg-gray-700" />
-              </>
-            ) : (
-              <>
-                <div className="text-sm md:text-base font-semibold text-blue-600">KONTINGEN {pesilatBiruInfo?.contingent.toUpperCase()}</div>
-                <div className="text-lg md:text-2xl font-bold text-blue-600">{pesilatBiruInfo?.name.toUpperCase()}</div>
-              </>
-            )}
+             <div className="text-sm md:text-base font-semibold text-blue-600">KONTINGEN {pesilatBiruInfo?.contingent.toUpperCase() || (isLoading ? <Skeleton className="h-5 w-24 ml-auto bg-gray-300 dark:bg-gray-700" /> : '-')}</div>
+             <div className="text-lg md:text-2xl font-bold text-blue-600">{pesilatBiruInfo?.name.toUpperCase() || (isLoading ? <Skeleton className="h-6 w-32 ml-auto bg-gray-300 dark:bg-gray-700" /> : 'PESILAT BIRU')}</div>
             <p className="text-3xl md:text-5xl font-bold text-blue-600 mt-1">{confirmedScoreBiru}</p>
           </div>
         </div>
 
         {error && <p className="text-center text-red-500 bg-red-100 p-3 rounded-md mb-4">{error}</p>}
 
-        {/* Main Score Table */}
         <div className="overflow-x-auto shadow-lg rounded-md">
           <table className="w-full border-collapse border border-black bg-white dark:bg-gray-800">
             <thead>
@@ -371,26 +324,55 @@ export default function DewanDuaPage() {
               </tr>
             </thead>
             <tbody>
-              <tr>
-                <td className="border border-black text-center align-middle text-xl md:text-3xl font-bold p-1 md:p-2 h-full" rowSpan={6}>
-                  {isLoading ? <Skeleton className="h-10 w-10 mx-auto bg-gray-400" /> : calculateRoundTotalScore('merah')}
-                </td>
-                {renderTableRows('merah').props.children.slice(0,2)} 
-                <td className="border border-black text-center align-middle text-3xl md:text-5xl font-bold p-1 md:p-2" rowSpan={6}>
-                  {isLoading ? <Skeleton className="h-10 w-8 mx-auto bg-gray-400" /> : getRomanRound(timerStatus.currentRound)}
-                </td>
-                 {renderTableRows('biru').props.children.slice(0,2)}
-                <td className="border border-black text-center align-middle text-xl md:text-3xl font-bold p-1 md:p-2 h-full" rowSpan={6}>
-                  {isLoading ? <Skeleton className="h-10 w-10 mx-auto bg-gray-400" /> : calculateRoundTotalScore('biru')}
-                </td>
-              </tr>
-              {/* Juri 2 through Hukuman rows */}
-              {Array.from({ length: 5 }).map((_, i) => (
-                <tr key={`detail-row-${i}`}>
-                  {renderTableRows('merah').props.children.slice(2 + i*2, 4 + i*2)}
-                  {renderTableRows('biru').props.children.slice(2 + i*2, 4 + i*2)}
-                </tr>
-              ))}
+              {tableRowDefinitions.map((rowData, index) => {
+                const currentRoundForCalc = timerStatus.currentRound;
+                let merahLabelText: React.ReactNode = rowData.type;
+                let biruLabelText: React.ReactNode = rowData.type;
+                let merahScoreValue: number;
+                let biruScoreValue: number;
+
+                if (rowData.juriId) {
+                  merahScoreValue = calculateJuriScoreForRound(rowData.juriId, 'merah', currentRoundForCalc, juriScores);
+                  biruScoreValue = calculateJuriScoreForRound(rowData.juriId, 'biru', currentRoundForCalc, juriScores);
+                } else if (rowData.type === 'Total Nilai Juri') {
+                  merahLabelText = <span className="font-semibold">Total Nilai Juri</span>;
+                  biruLabelText = <span className="font-semibold">Total Nilai Juri</span>;
+                  merahScoreValue = JURI_IDS.reduce((sum, id) => sum + calculateJuriScoreForRound(id, 'merah', currentRoundForCalc, juriScores), 0);
+                  biruScoreValue = JURI_IDS.reduce((sum, id) => sum + calculateJuriScoreForRound(id, 'biru', currentRoundForCalc, juriScores), 0);
+                } else if (rowData.type === 'Jatuhan') {
+                  merahScoreValue = calculateKetuaActionForRound('merah', 'Jatuhan', currentRoundForCalc, ketuaActionsLog);
+                  biruScoreValue = calculateKetuaActionForRound('biru', 'Jatuhan', currentRoundForCalc, ketuaActionsLog);
+                } else { // Hukuman
+                  merahScoreValue = calculateKetuaActionForRound('merah', 'Hukuman', currentRoundForCalc, ketuaActionsLog);
+                  biruScoreValue = calculateKetuaActionForRound('biru', 'Hukuman', currentRoundForCalc, ketuaActionsLog);
+                }
+                
+                const showLoadingSkeleton = isLoading || !matchDetailsLoaded;
+
+                return (
+                  <tr key={rowData.type}>
+                    {index === 0 && (
+                      <td className="border border-black text-center align-middle text-xl md:text-3xl font-bold p-1 md:p-2 h-full" rowSpan={tableRowDefinitions.length}>
+                        {showLoadingSkeleton ? <Skeleton className="h-10 w-10 mx-auto bg-gray-400" /> : calculateRoundTotalScore('merah', currentRoundForCalc, juriScores, ketuaActionsLog)}
+                      </td>
+                    )}
+                    <LabelCell>{merahLabelText}</LabelCell>
+                    <ScoreCell value={merahScoreValue} isLoadingValue={showLoadingSkeleton} />
+                    {index === 0 && (
+                      <td className="border border-black text-center align-middle text-3xl md:text-5xl font-bold p-1 md:p-2" rowSpan={tableRowDefinitions.length}>
+                        {showLoadingSkeleton ? <Skeleton className="h-10 w-8 mx-auto bg-gray-400" /> : getRomanRound(timerStatus.currentRound)}
+                      </td>
+                    )}
+                    <LabelCell>{biruLabelText}</LabelCell>
+                    <ScoreCell value={biruScoreValue} isLoadingValue={showLoadingSkeleton} />
+                    {index === 0 && (
+                      <td className="border border-black text-center align-middle text-xl md:text-3xl font-bold p-1 md:p-2 h-full" rowSpan={tableRowDefinitions.length}>
+                        {showLoadingSkeleton ? <Skeleton className="h-10 w-10 mx-auto bg-gray-400" /> : calculateRoundTotalScore('biru', currentRoundForCalc, juriScores, ketuaActionsLog)}
+                      </td>
+                    )}
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         </div>
@@ -403,3 +385,5 @@ export default function DewanDuaPage() {
     </div>
   );
 }
+
+    
