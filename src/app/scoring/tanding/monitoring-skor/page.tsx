@@ -467,7 +467,7 @@ export default function MonitoringSkorPage() {
         )}
       </Button>
       <div className="bg-[var(--monitor-header-section-bg)] p-5 md:p-6 text-center">
-        <div className="grid grid-cols-3 gap-1 md:gap-2 text-sm md:text-base font-semibold">
+        <div className="grid grid-cols-3 gap-1 md:gap-2 text-base md:text-lg font-semibold">
           <div>{matchDetails?.place || <Skeleton className="h-4 w-20 inline-block bg-[var(--monitor-skeleton-bg)]" />}</div>
           <div>{matchDetails?.round || <Skeleton className="h-4 w-20 inline-block bg-[var(--monitor-skeleton-bg)]" />}</div>
           <div>{matchDetails?.class || <Skeleton className="h-4 w-32 inline-block bg-[var(--monitor-skeleton-bg)]" />}</div>
@@ -508,7 +508,7 @@ export default function MonitoringSkorPage() {
           </div>
 
           {/* Kolom Tengah Atas (Timer, Babak, Status) */}
-          <div className="flex flex-col items-center justify-start space-y-2 md:space-y-3 pt-2 md:pt-4">
+          <div className="flex flex-col items-center justify-start space-y-2 md:space-y-3 pt-1 md:pt-2">
              <div className="text-6xl md:text-8xl font-mono font-bold text-[var(--monitor-timer-text)] mb-2 md:mb-4">
               {formatTime(timerStatus.timerSeconds)}
             </div>
