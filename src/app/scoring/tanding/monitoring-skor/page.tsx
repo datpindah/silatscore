@@ -6,7 +6,7 @@ import Link from 'next/link';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription as DialogVerificationDescription } from "@/components/ui/dialog";
 import { ArrowLeft, Eye, Loader2, RadioTower, AlertTriangle, Sun, Moon } from 'lucide-react';
-import type { ScheduleTanding, TimerStatus, VerificationRequest, JuriVoteValue, KetuaActionLogEntry, PesilatColorIdentity, KetuaActionType, RoundScores, TimerMatchStatus } from '@/lib/types';
+import type { ScheduleTanding, TimerStatus, VerificationRequest, JuriVoteValue, KetuaActionLogEntry, PesilatColorIdentity, KetuaActionType, RoundScores as LibRoundScoresType, TimerMatchStatus, ScoreEntry as LibScoreEntryType } from '@/lib/types';
 import { db } from '@/lib/firebase';
 import { doc, onSnapshot, getDoc, collection, query, orderBy, limit, Timestamp } from 'firebase/firestore';
 import { cn } from '@/lib/utils';
@@ -19,6 +19,8 @@ const VERIFICATIONS_SUBCOLLECTION = 'verifications';
 const OFFICIAL_ACTIONS_SUBCOLLECTION = 'official_actions';
 const JURI_SCORES_SUBCOLLECTION = 'juri_scores';
 const JURI_IDS = ['juri-1', 'juri-2', 'juri-3'] as const;
+const JURI_INPUT_VALIDITY_WINDOW_MS = 2000;
+
 
 interface PesilatDisplayInfo {
   name: string;
@@ -34,10 +36,21 @@ const initialTimerStatus: TimerStatus = {
 };
 
 interface DisplayJuriMatchData {
-  merah: RoundScores;
-  biru: RoundScores;
+  merah: LibRoundScoresType;
+  biru: LibRoundScoresType;
   lastUpdated?: Timestamp;
 }
+
+// Define ScoreEntry and CombinedScoreEntry for score calculation logic
+interface ScoreEntry extends LibScoreEntryType {} // Inherits points, timestamp
+
+interface CombinedScoreEntry extends ScoreEntry {
+  juriId: string;
+  key: string;
+  round: keyof LibRoundScoresType;
+  color: 'merah' | 'biru';
+}
+
 
 export default function MonitoringSkorPage() {
   const [pageTheme, setPageTheme] = useState<'light' | 'dark'>('light');
@@ -49,8 +62,10 @@ export default function MonitoringSkorPage() {
   const [pesilatBiruInfo, setPesilatBiruInfo] = useState<PesilatDisplayInfo | null>(null);
 
   const [timerStatus, setTimerStatus] = useState<TimerStatus>(initialTimerStatus);
-  const [confirmedScoreMerah, setConfirmedScoreMerah] = useState(0); // Placeholder
-  const [confirmedScoreBiru, setConfirmedScoreBiru] = useState(0);   // Placeholder
+  const [confirmedScoreMerah, setConfirmedScoreMerah] = useState(0);
+  const [confirmedScoreBiru, setConfirmedScoreBiru] = useState(0);
+  const [prevSavedUnstruckKeysFromDewan, setPrevSavedUnstruckKeysFromDewan] = useState<Set<string>>(new Set());
+
 
   const [ketuaActionsLog, setKetuaActionsLog] = useState<KetuaActionLogEntry[]>([]);
   const [juriScoresData, setJuriScoresData] = useState<Record<string, DisplayJuriMatchData | null>>({
@@ -76,6 +91,7 @@ export default function MonitoringSkorPage() {
     setTimerStatus(initialTimerStatus);
     setConfirmedScoreMerah(0);
     setConfirmedScoreBiru(0);
+    setPrevSavedUnstruckKeysFromDewan(new Set());
     setKetuaActionsLog([]);
     setJuriScoresData({'juri-1': null, 'juri-2': null, 'juri-3': null});
     prevJuriScoresDataRef.current = {'juri-1': null, 'juri-2': null, 'juri-3': null};
@@ -150,9 +166,10 @@ export default function MonitoringSkorPage() {
           if (docSnap.exists()) {
             const data = docSnap.data();
             if (data?.timer_status) setTimerStatus(data.timer_status as TimerStatus);
-            // TODO: Implement score calculation similar to Dewan 1 if needed for confirmed scores
+            setPrevSavedUnstruckKeysFromDewan(new Set(data?.confirmed_unstruck_keys_log as string[] || []));
           } else {
             setTimerStatus(initialTimerStatus);
+            setPrevSavedUnstruckKeysFromDewan(new Set());
             setConfirmedScoreMerah(0); setConfirmedScoreBiru(0);
           }
         }, (err) => {
@@ -183,7 +200,7 @@ export default function MonitoringSkorPage() {
             if (latestVerification.status === 'pending') {
               setActiveDisplayVerificationRequest(latestVerification);
               setIsDisplayVerificationModalOpen(true);
-            } else { // If status is completed or cancelled
+            } else {
               setActiveDisplayVerificationRequest(null);
               setIsDisplayVerificationModalOpen(false);
             }
@@ -211,7 +228,7 @@ export default function MonitoringSkorPage() {
 
     loadData(activeScheduleId);
     return () => { mounted = false; unsubscribers.forEach(unsub => unsub()); };
-  }, [activeScheduleId, matchDetailsLoaded]); // Removed resetMatchDisplayData from deps as it can cause loops if not careful
+  }, [activeScheduleId, matchDetailsLoaded]);
 
   useEffect(() => {
     if (isLoading && (matchDetailsLoaded || activeScheduleId === null)) {
@@ -221,11 +238,93 @@ export default function MonitoringSkorPage() {
 
 
   useEffect(() => {
+    // This effect calculates the scores based on confirmed keys from Dewan and Ketua's actions
+    if (!activeScheduleId || Object.values(juriScoresData).every(data => data === null)) {
+        // If no active match or no Juri data yet, scores might be 0 or based only on Ketua log
+        let calculatedTotalMerah = 0;
+        let calculatedTotalBiru = 0;
+        ketuaActionsLog.forEach(action => {
+            if (action.pesilatColor === 'merah') calculatedTotalMerah += action.points;
+            else if (action.pesilatColor === 'biru') calculatedTotalBiru += action.points;
+        });
+        setConfirmedScoreMerah(calculatedTotalMerah);
+        setConfirmedScoreBiru(calculatedTotalBiru);
+        return;
+    }
+
+    const allRawEntries: CombinedScoreEntry[] = [];
+    JURI_IDS.forEach(juriId => {
+        const juriData = juriScoresData[juriId];
+        if (juriData) {
+            (['merah', 'biru'] as const).forEach(pesilatColor => {
+                (['round1', 'round2', 'round3'] as const).forEach(roundKey => {
+                    juriData[pesilatColor]?.[roundKey]?.forEach(entry => {
+                        if (entry && entry.timestamp && typeof entry.timestamp.toMillis === 'function') {
+                            const entryKey = `${juriId}_${entry.timestamp.toMillis()}_${entry.points}`;
+                            allRawEntries.push({
+                                ...entry,
+                                juriId: juriId,
+                                key: entryKey,
+                                round: roundKey,
+                                color: pesilatColor
+                            });
+                        }
+                    });
+                });
+            });
+        }
+    });
+
+    // Filter raw entries to get only those confirmed by Dewan 1
+    const confirmedUnstruckEntries = allRawEntries.filter(e => prevSavedUnstruckKeysFromDewan.has(e.key));
+    
+    let calculatedTotalMerah = 0;
+    let calculatedTotalBiru = 0;
+    const scoredPairKeys = new Set<string>();
+
+    for (let i = 0; i < confirmedUnstruckEntries.length; i++) {
+        const e1 = confirmedUnstruckEntries[i];
+        if (scoredPairKeys.has(e1.key)) continue;
+
+        const agreeingPartners = [e1];
+        for (let j = i + 1; j < confirmedUnstruckEntries.length; j++) {
+            const e2 = confirmedUnstruckEntries[j];
+            if (scoredPairKeys.has(e2.key)) continue;
+
+            if (e1.juriId !== e2.juriId &&
+                e1.round === e2.round &&
+                e1.color === e2.color &&
+                e1.points === e2.points &&
+                Math.abs(e1.timestamp.toMillis() - e2.timestamp.toMillis()) <= JURI_INPUT_VALIDITY_WINDOW_MS) {
+                agreeingPartners.push(e2);
+            }
+        }
+
+        if (agreeingPartners.length >= 2) {
+            const points = e1.points;
+            if (e1.color === 'merah') calculatedTotalMerah += points;
+            else calculatedTotalBiru += points;
+            agreeingPartners.forEach(p => scoredPairKeys.add(p.key));
+        }
+    }
+
+    ketuaActionsLog.forEach(action => {
+        if (action.pesilatColor === 'merah') calculatedTotalMerah += action.points;
+        else if (action.pesilatColor === 'biru') calculatedTotalBiru += action.points;
+    });
+
+    setConfirmedScoreMerah(calculatedTotalMerah);
+    setConfirmedScoreBiru(calculatedTotalBiru);
+
+}, [juriScoresData, prevSavedUnstruckKeysFromDewan, ketuaActionsLog, activeScheduleId]);
+
+
+  useEffect(() => {
     const currentJuriData = juriScoresData;
     const prevJuriData = prevJuriScoresDataRef.current;
 
     if (!timerStatus || !timerStatus.currentRound) return;
-    const roundKey = `round${timerStatus.currentRound}` as keyof RoundScores;
+    const roundKey = `round${timerStatus.currentRound}` as keyof LibRoundScoresType;
 
     JURI_IDS.forEach(juriId => {
       const currentScores = currentJuriData[juriId];
@@ -273,7 +372,7 @@ export default function MonitoringSkorPage() {
         log => log.pesilatColor === pesilatColor &&
                log.round === timerStatus.currentRound &&
                log.actionType === 'Binaan' &&
-               typeof log.originalActionType === 'undefined' // More explicit check
+               typeof log.originalActionType === 'undefined' 
       );
       const convertedBinaanToTeguranActions = ketuaActionsLog.filter(
         log => log.pesilatColor === pesilatColor &&
@@ -282,10 +381,10 @@ export default function MonitoringSkorPage() {
                log.originalActionType === 'Binaan'
       );
 
-      if (count === 1) { // For B1 indicator
+      if (count === 1) { 
         return pureBinaanActions.length >= 1;
       }
-      if (count === 2) { // For B2 indicator
+      if (count === 2) { 
         return pureBinaanActions.length >= 1 && convertedBinaanToTeguranActions.length >= 1;
       }
       return false;
@@ -546,4 +645,3 @@ export default function MonitoringSkorPage() {
   );
 }
 
-    
