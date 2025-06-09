@@ -6,7 +6,7 @@ import Link from 'next/link';
 import { Header } from '@/components/layout/Header';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription as DialogVerificationDescription } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription as DialogVerificationDescriptionElement } from "@/components/ui/dialog"; // Renamed to avoid conflict
 import { ArrowLeft, Eye, Loader2, RadioTower, Users, ServerCrash } from 'lucide-react';
 import type { ScheduleTanding, TimerStatus, TimerMatchStatus, VerificationRequest, JuriVoteValue, PesilatColorIdentity } from '@/lib/types';
 import { db } from '@/lib/firebase';
@@ -212,12 +212,12 @@ export default function MonitoringSkorPage() {
     if (timerStatus.matchStatus === 'Pending') return `Babak ${timerStatus.currentRound} Menunggu`;
     return "Status Tidak Diketahui";
   };
-  
+
   const getJuriVoteDisplayBoxClass = (vote: JuriVoteValue): string => {
-    if (vote === 'merah') return "bg-red-500 text-white";
-    if (vote === 'biru') return "bg-blue-500 text-white";
+    if (vote === 'merah') return "bg-red-600 text-white";
+    if (vote === 'biru') return "bg-blue-600 text-white";
     if (vote === 'invalid') return "bg-yellow-400 text-black";
-    return "bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600"; 
+    return "bg-gray-200 dark:bg-gray-600 text-gray-800 dark:text-gray-100"; // Adjusted default
   };
 
   if (isLoading && configMatchId === undefined) {
@@ -258,7 +258,7 @@ export default function MonitoringSkorPage() {
       </div>
     );
   }
-  
+
   if (isLoading && activeScheduleId) {
      return (
       <div className="flex flex-col min-h-screen">
@@ -311,7 +311,7 @@ export default function MonitoringSkorPage() {
               </CardHeader>
               <CardContent className="flex-grow flex items-center justify-center p-1 md:p-2">
                 {/* TODO: Fetch and display actual score */}
-                <span className="text-6xl md:text-9xl font-bold">{confirmedScoreBiru}</span> 
+                <span className="text-6xl md:text-9xl font-bold">{confirmedScoreBiru}</span>
               </CardContent>
             </Card>
           </div>
@@ -319,20 +319,20 @@ export default function MonitoringSkorPage() {
           <div className="col-span-2 flex flex-col items-center justify-center space-y-2 md:space-y-3">
             <div className={cn(
                 "text-4xl md:text-6xl font-mono font-bold",
-                timerStatus.matchStatus.startsWith('PausedForVerification') ? "text-orange-400" : "text-gray-100"
+                timerStatus.matchStatus.startsWith('PausedForVerificationRound') ? "text-orange-400" : "text-gray-100"
             )}>{formatTime(timerStatus.timerSeconds)}</div>
             <div className="text-center w-full space-y-1">
                 {[1, 2, 3].map((round) => (
-                    <div key={`round-indicator-${round}`} 
+                    <div key={`round-indicator-${round}`}
                          className={cn("py-1 px-2 rounded-md text-sm md:text-base font-semibold w-full",
-                                      timerStatus.currentRound === round && !timerStatus.matchStatus.startsWith('PausedForVerification') ? 'bg-accent text-accent-foreground' : 'bg-gray-700 text-gray-300'
+                                      timerStatus.currentRound === round && !timerStatus.matchStatus.startsWith('PausedForVerificationRound') ? 'bg-accent text-accent-foreground' : 'bg-gray-700 text-gray-300'
                          )}>
                         Babak {round}
                     </div>
                 ))}
             </div>
             <p className={cn("text-sm md:text-base text-center px-1 font-semibold",
-                timerStatus.matchStatus.startsWith('PausedForVerification') ? "text-orange-400" : "text-gray-300"
+                timerStatus.matchStatus.startsWith('PausedForVerificationRound') ? "text-orange-400" : "text-gray-300"
              )}>{getMatchStatusText()}</p>
           </div>
 
@@ -349,50 +349,60 @@ export default function MonitoringSkorPage() {
             </Card>
           </div>
         </div>
-        
-        {/* Score details and other info would go here in a full monitoring page */}
-        {/* <Card className="mt-4 shadow-lg bg-gray-700/80 border-gray-600">
-            <CardHeader><CardTitle className="text-gray-200">Detail Skor & Log (Segera Hadir)</CardTitle></CardHeader>
-            <CardContent><p className="text-gray-400">Area ini akan menampilkan detail skor dari juri dan log tindakan dari ketua pertandingan.</p></CardContent>
-        </Card> */}
-
 
         {/* Verification Display Modal for Monitoring */}
-        <Dialog open={isDisplayVerificationModalOpen} onOpenChange={setIsDisplayVerificationModalOpen}>
-          <DialogContent 
-            className="sm:max-w-lg bg-gray-800 border-gray-700 text-white" 
-            onPointerDownOutside={(e) => e.preventDefault()} 
-            onEscapeKeyDown={(e) => e.preventDefault()}
-            >
+        <Dialog open={isDisplayVerificationModalOpen} onOpenChange={(isOpen) => { if (!isOpen && activeDisplayVerificationRequest?.status === 'pending') return; setIsDisplayVerificationModalOpen(isOpen); }}>
+           <DialogContent
+            className="sm:max-w-lg md:max-w-xl bg-gray-800 border-gray-700 text-white"
+            onPointerDownOutside={(e) => {if (activeDisplayVerificationRequest?.status === 'pending') e.preventDefault();}}
+            onEscapeKeyDown={(e) => {if (activeDisplayVerificationRequest?.status === 'pending') e.preventDefault();}}
+          >
             <DialogHeader>
-              <DialogTitle className="text-3xl font-bold font-headline text-center text-accent">Verifikasi Juri</DialogTitle>
-              {activeDisplayVerificationRequest && (
-                <DialogVerificationDescription className="text-center mt-2" asChild>
-                  <div>
-                    <div className="text-lg font-semibold text-gray-200">
-                      {activeDisplayVerificationRequest.type === 'jatuhan' ? 'Verifikasi Jatuhan' : 'Verifikasi Pelanggaran'}
-                    </div>
-                    <div className="text-md text-gray-400">Babak {activeDisplayVerificationRequest.round}</div>
-                  </div>
-                </DialogVerificationDescription>
-              )}
+              <DialogTitle className="text-2xl md:text-3xl font-bold font-headline text-center text-accent">
+                Verifikasi Juri
+              </DialogTitle>
             </DialogHeader>
-            <div className="my-8 space-y-4">
-              <div className="grid grid-cols-3 gap-4 items-stretch justify-items-center text-center">
-                {JURI_IDS.map((juriKey, index) => (
-                  <div key={`vote-display-monitor-${juriKey}`} className="flex flex-col items-center space-y-2">
-                    <p className="text-xl font-semibold text-gray-100">J{index + 1}</p>
-                    <div className={cn("w-full h-20 rounded-lg flex items-center justify-center text-md font-bold p-2 shadow-lg", 
-                                      getJuriVoteDisplayBoxClass(activeDisplayVerificationRequest?.votes[juriKey] || null))}>
-                      {activeDisplayVerificationRequest?.votes[juriKey] === 'merah' ? 'SUDUT MERAH' :
-                       activeDisplayVerificationRequest?.votes[juriKey] === 'biru' ? 'SUDUT BIRU' :
-                       activeDisplayVerificationRequest?.votes[juriKey] === 'invalid' ? 'INVALID' : 
-                       'Belum Vote'}
-                    </div>
+            <div className="py-4 px-2 md:px-6">
+              <div className="mb-6">
+                <h3 className="text-lg md:text-xl font-semibold mb-1 text-center md:text-left text-gray-100">
+                  Detail Verifikasi
+                </h3>
+                {activeDisplayVerificationRequest && (
+                  <div className="text-md md:text-lg text-gray-300 text-center md:text-left">
+                    <span>
+                      {activeDisplayVerificationRequest.type === 'jatuhan' ? 'Verifikasi Jatuhan' : 'Verifikasi Pelanggaran'}
+                    </span>
+                    <span className="mx-2">|</span>
+                    <span>Babak {activeDisplayVerificationRequest.round}</span>
                   </div>
-                ))}
+                )}
+              </div>
+
+              <div className="grid grid-cols-3 gap-3 md:gap-4 items-start justify-items-center text-center">
+                {JURI_IDS.map((juriKey, index) => {
+                  const vote = activeDisplayVerificationRequest?.votes[juriKey] || null;
+                  let voteText = 'Belum Vote';
+                  if (vote === 'merah') voteText = 'SUDUT MERAH';
+                  else if (vote === 'biru') voteText = 'SUDUT BIRU';
+                  else if (vote === 'invalid') voteText = 'INVALID';
+
+                  return (
+                    <div key={`vote-display-monitor-${juriKey}`} className="flex flex-col items-center space-y-1 w-full">
+                      <p className="text-lg md:text-xl font-bold text-gray-100">J{index + 1}</p>
+                      <div
+                        className={cn(
+                          "w-full h-16 md:h-20 rounded-lg flex items-center justify-center text-xs md:text-sm font-bold p-2 shadow-md",
+                          getJuriVoteDisplayBoxClass(vote)
+                        )}
+                      >
+                        {voteText}
+                      </div>
+                    </div>
+                  );
+                })}
               </div>
             </div>
+            {/* This modal is display-only. It closes when verification status is no longer 'pending' */}
           </DialogContent>
         </Dialog>
 
@@ -400,4 +410,3 @@ export default function MonitoringSkorPage() {
     </div>
   );
 }
-

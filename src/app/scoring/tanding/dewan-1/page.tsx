@@ -6,7 +6,7 @@ import Link from 'next/link';
 import { Header } from '@/components/layout/Header';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription as DialogVerificationDescription } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription as DialogVerificationDescriptionElement } from "@/components/ui/dialog"; // Renamed to avoid conflict
 import { ArrowLeft, Play, Pause, RotateCcw, ChevronRight, CheckCircle2, RadioTower, Loader2, Vote } from 'lucide-react';
 import type { ScheduleTanding, KetuaActionLogEntry, TimerStatus, TimerMatchStatus, VerificationRequest, JuriVoteValue } from '@/lib/types';
 import { db } from '@/lib/firebase';
@@ -16,13 +16,13 @@ import { cn } from '@/lib/utils';
 const ACTIVE_TANDING_SCHEDULE_CONFIG_PATH = 'app_settings/active_match_tanding';
 const SCHEDULE_TANDING_COLLECTION = 'schedules_tanding';
 const MATCHES_TANDING_COLLECTION = 'matches_tanding';
-const OFFICIAL_ACTIONS_SUBCOLLECTION = 'official_actions'; 
+const OFFICIAL_ACTIONS_SUBCOLLECTION = 'official_actions';
 const VERIFICATIONS_SUBCOLLECTION = 'verifications';
-const ROUND_DURATION_SECONDS = 120; 
+const ROUND_DURATION_SECONDS = 120;
 const TOTAL_ROUNDS = 3;
 const JURI_IDS = ['juri-1', 'juri-2', 'juri-3'] as const;
-const GRACE_PERIOD_FOR_STRIKE_DECISION = 5000; 
-const JURI_INPUT_VALIDITY_WINDOW_MS = 2000; 
+const GRACE_PERIOD_FOR_STRIKE_DECISION = 5000;
+const JURI_INPUT_VALIDITY_WINDOW_MS = 2000;
 
 interface PesilatInfo {
   name: string;
@@ -78,12 +78,12 @@ export default function ScoringTandingDewanSatuPage() {
   const [juri1Scores, setJuri1Scores] = useState<JuriMatchDataWithId | null>(null);
   const [juri2Scores, setJuri2Scores] = useState<JuriMatchDataWithId | null>(null);
   const [juri3Scores, setJuri3Scores] = useState<JuriMatchDataWithId | null>(null);
-  
+
   const [ketuaActionsLog, setKetuaActionsLog] = useState<KetuaActionLogEntry[]>([]);
 
 
-  const [allContributingEntryKeys, setAllContributingEntryKeys] = useState<Set<string>>(new Set()); 
-  const [permanentlyStruckEntryKeys, setPermanentlyStruckEntryKeys] = useState<Set<string>>(new Set()); 
+  const [allContributingEntryKeys, setAllContributingEntryKeys] = useState<Set<string>>(new Set());
+  const [permanentlyStruckEntryKeys, setPermanentlyStruckEntryKeys] = useState<Set<string>>(new Set());
 
   const [prevSavedUnstruckKeys, setPrevSavedUnstruckKeys] = useState<Set<string>>(new Set());
   const [prevSavedStruckKeys, setPrevSavedStruckKeys] = useState<Set<string>>(new Set());
@@ -102,19 +102,19 @@ export default function ScoringTandingDewanSatuPage() {
   useEffect(() => { // Effect C: Listens to Firestore for active match config
     const unsubConfig = onSnapshot(doc(db, ACTIVE_TANDING_SCHEDULE_CONFIG_PATH), (docSnap) => {
       const newDbConfigId = docSnap.exists() ? docSnap.data()?.activeScheduleId : null;
-      setConfigMatchId(prevId => { 
-        if (prevId === newDbConfigId) { 
+      setConfigMatchId(prevId => {
+        if (prevId === newDbConfigId) {
           return prevId;
         }
-        return newDbConfigId; 
+        return newDbConfigId;
       });
     }, (err) => {
       console.error(`[Dewan-1] Error fetching active schedule config from path '${ACTIVE_TANDING_SCHEDULE_CONFIG_PATH}':`, err);
       setError("Gagal memuat konfigurasi jadwal aktif.");
-      setConfigMatchId(null); 
+      setConfigMatchId(null);
     });
     return () => unsubConfig();
-  }, []); 
+  }, []);
 
   useEffect(() => { // Effect A: Main data loading and state synchronization logic
     let unsubscribers: (() => void)[] = [];
@@ -128,7 +128,7 @@ export default function ScoringTandingDewanSatuPage() {
       setPesilatBiruInfo(null);
       setTimerStatus(initialTimerStatus);
       setJuri1Scores(null); setJuri2Scores(null); setJuri3Scores(null);
-      setKetuaActionsLog([]); 
+      setKetuaActionsLog([]);
       setConfirmedScoreMerah(0); setConfirmedScoreBiru(0);
       setAllContributingEntryKeys(new Set());
       setPermanentlyStruckEntryKeys(new Set());
@@ -149,7 +149,7 @@ export default function ScoringTandingDewanSatuPage() {
         resetAllMatchData("configMatchId became null");
         setActiveScheduleId(null);
       } else { // No previous active match, just ensure loading is false and error is set
-         setIsLoading(false); 
+         setIsLoading(false);
          setError("Tidak ada jadwal pertandingan yang aktif.");
       }
       return () => { mounted = false; unsubscribers.forEach(unsub => unsub()); };
@@ -166,8 +166,8 @@ export default function ScoringTandingDewanSatuPage() {
 
     // If we reach here, configMatchId is valid, and activeScheduleId is in sync with it.
     // This is where data loading for the *current* active match happens.
-    setIsLoading(true); 
-    
+    setIsLoading(true);
+
     const loadData = async (currentMatchId: string) => {
       if (!mounted || !currentMatchId) return;
 
@@ -177,7 +177,7 @@ export default function ScoringTandingDewanSatuPage() {
         const scheduleDocSnap = await getDoc(scheduleDocRef);
 
         if (!mounted) return;
-        if (scheduleDocSnap.exists()) { 
+        if (scheduleDocSnap.exists()) {
           const data = scheduleDocSnap.data() as ScheduleTanding;
           if (mounted) {
             setMatchDetails(data);
@@ -189,7 +189,7 @@ export default function ScoringTandingDewanSatuPage() {
           if (mounted) {
             setError(`Detail jadwal untuk ID ${currentMatchId} dari path '${SCHEDULE_TANDING_COLLECTION}/${currentMatchId}' tidak ditemukan.`);
             resetAllMatchData(`Schedule doc ${currentMatchId} not found`);
-            setMatchDetailsLoaded(false); 
+            setMatchDetailsLoaded(false);
           }
           return; // Stop further loading if schedule details not found
         }
@@ -216,10 +216,10 @@ export default function ScoringTandingDewanSatuPage() {
           } else {
             // If match document doesn't exist, create it with initial data
             if (mounted) {
-              const initialDataForMatch = { 
-                timer_status: initialTimerStatus, 
+              const initialDataForMatch = {
+                timer_status: initialTimerStatus,
                 confirmed_unstruck_keys_log: [],
-                confirmed_struck_keys_log: [] 
+                confirmed_struck_keys_log: []
               };
               try {
                 await setDoc(matchDocRef, initialDataForMatch, { merge: true });
@@ -293,10 +293,12 @@ export default function ScoringTandingDewanSatuPage() {
               setActiveDisplayVerificationRequest(latestVerification);
               setIsDisplayVerificationModalOpen(true);
             } else {
+              // If status is not pending (e.g. completed, cancelled), close the modal
               setActiveDisplayVerificationRequest(null);
               setIsDisplayVerificationModalOpen(false);
             }
           } else {
+            // No verifications found or the latest is not pending
             setActiveDisplayVerificationRequest(null);
             setIsDisplayVerificationModalOpen(false);
           }
@@ -319,19 +321,18 @@ export default function ScoringTandingDewanSatuPage() {
     };
 
     // Only call loadData if activeScheduleId is valid.
-    // The isLoading state will be handled by the second useEffect.
-    if (activeScheduleId) { 
+    if (activeScheduleId) {
       loadData(activeScheduleId);
     } else {
       // This case should ideally be handled by Condition 2, but as a fallback:
-      setIsLoading(false); 
+      setIsLoading(false);
     }
-    
+
     return () => {
       mounted = false;
       unsubscribers.forEach(unsub => unsub());
     };
-  }, [configMatchId, activeScheduleId]); 
+  }, [configMatchId, activeScheduleId]);
 
 
   useEffect(() => { // Effect B: Score calculation and final loading status
@@ -351,7 +352,7 @@ export default function ScoringTandingDewanSatuPage() {
             shouldBeLoading = false;
         }
     }
-    
+
     // Update isLoading state only if it needs to change
     if (isLoading !== shouldBeLoading) {
         setIsLoading(shouldBeLoading);
@@ -369,7 +370,7 @@ export default function ScoringTandingDewanSatuPage() {
         setConfirmedScoreMerah(0);
         return;
     }
-    
+
     const currentUnstruckKeys = new Set(prevSavedUnstruckKeys);
     const currentStruckKeys = new Set(prevSavedStruckKeys);
     const allRawEntries: CombinedScoreEntry[] = [];
@@ -419,7 +420,7 @@ export default function ScoringTandingDewanSatuPage() {
             e1.color === e2.color &&
             e1.points === e2.points &&
             Math.abs(e1.timestamp.toMillis() - e2.timestamp.toMillis()) <= JURI_INPUT_VALIDITY_WINDOW_MS) {
-          
+
           // Found a pair
           currentUnstruckKeys.add(e1.key);
           currentUnstruckKeys.add(e2.key);
@@ -431,7 +432,7 @@ export default function ScoringTandingDewanSatuPage() {
               if (currentUnstruckKeys.has(e3.key) || currentStruckKeys.has(e3.key) || newlyProcessedInThisCycle.has(e3.key)) continue;
               if (e3.juriId !== e1.juriId && e3.juriId !== e2.juriId &&
                   e3.round === e1.round && e3.color === e1.color && e3.points === e1.points &&
-                  Math.abs(e3.timestamp.toMillis() - e1.timestamp.toMillis()) <= JURI_INPUT_VALIDITY_WINDOW_MS && 
+                  Math.abs(e3.timestamp.toMillis() - e1.timestamp.toMillis()) <= JURI_INPUT_VALIDITY_WINDOW_MS &&
                   Math.abs(e3.timestamp.toMillis() - e2.timestamp.toMillis()) <= JURI_INPUT_VALIDITY_WINDOW_MS) {
                   currentUnstruckKeys.add(e3.key);
                   newlyProcessedInThisCycle.add(e3.key);
@@ -452,7 +453,7 @@ export default function ScoringTandingDewanSatuPage() {
         }
       }
     });
-    
+
     // Update state for display
     setAllContributingEntryKeys(new Set(currentUnstruckKeys));
     setPermanentlyStruckEntryKeys(new Set(currentStruckKeys));
@@ -482,18 +483,18 @@ export default function ScoringTandingDewanSatuPage() {
                 agreeingPartners.push(e2);
             }
         }
-        
+
         // Score if at least 2 juri agree
-        if (agreeingPartners.length >= 2) { 
+        if (agreeingPartners.length >= 2) {
             const points = e1.points; // All partners have the same points
             if (e1.color === 'merah') calculatedTotalMerah += points;
             else calculatedTotalBiru += points;
-            
+
             // Mark all contributing partners as scored for this specific agreement instance
             agreeingPartners.forEach(p => scoredPairKeys.add(p.key));
         }
     }
-    
+
     // Add points from Ketua's actions
     ketuaActionsLog.forEach(action => {
         if (action.pesilatColor === 'merah') {
@@ -512,9 +513,9 @@ export default function ScoringTandingDewanSatuPage() {
     if (activeScheduleId) {
       const newUnstruckLogArray = Array.from(currentUnstruckKeys);
       // Check if the new unstruck log is different from the previously saved one
-      let unstruckChanged = newUnstruckLogArray.length !== prevSavedUnstruckKeys.size || 
+      let unstruckChanged = newUnstruckLogArray.length !== prevSavedUnstruckKeys.size ||
                            !newUnstruckLogArray.every(k => prevSavedUnstruckKeys.has(k));
-      
+
       const newStruckLogArray = Array.from(currentStruckKeys);
       // Check if the new struck log is different from the previously saved one
       let struckChanged = newStruckLogArray.length !== prevSavedStruckKeys.size ||
@@ -537,7 +538,7 @@ export default function ScoringTandingDewanSatuPage() {
           }).catch(err => console.error(`[Dewan-1] Error updating Firestore logs at path '${matchDocPath}':`, err));
       }
     }
-  }, [juri1Scores, juri2Scores, juri3Scores, activeScheduleId, matchDetailsLoaded, prevSavedUnstruckKeys, prevSavedStruckKeys, ketuaActionsLog, configMatchId ]); 
+  }, [juri1Scores, juri2Scores, juri3Scores, activeScheduleId, matchDetailsLoaded, prevSavedUnstruckKeys, prevSavedStruckKeys, ketuaActionsLog, configMatchId ]);
 
 
   useEffect(() => {
@@ -552,7 +553,7 @@ export default function ScoringTandingDewanSatuPage() {
                 const currentDBDoc = await getDoc(matchDocRef);
 
                 // If doc doesn't exist (e.g., match reset by another client), stop timer locally.
-                if (!currentDBDoc.exists()) { 
+                if (!currentDBDoc.exists()) {
                     if(interval) clearInterval(interval);
                     setTimerStatus(prev => ({ ...prev, isTimerRunning: false })); // Stop local timer
                     return;
@@ -575,7 +576,7 @@ export default function ScoringTandingDewanSatuPage() {
                     return;
                 }
                  // Defensive check: if local timerStatus.isTimerRunning became false for any reason, stop interval.
-                 if (!timerStatus.isTimerRunning) { 
+                 if (!timerStatus.isTimerRunning) {
                     if (interval) clearInterval(interval);
                     return;
                 }
@@ -583,7 +584,7 @@ export default function ScoringTandingDewanSatuPage() {
 
                 // Proceed with decrementing timer based on DB's current state
                 const newSeconds = Math.max(0, currentDBTimerStatus.timerSeconds - 1);
-                let newMatchStatus = currentDBTimerStatus.matchStatus;
+                let newMatchStatus: TimerMatchStatus = currentDBTimerStatus.matchStatus;
                 let newIsTimerRunning = currentDBTimerStatus.isTimerRunning;
 
                 if (newSeconds === 0) {
@@ -633,8 +634,8 @@ export default function ScoringTandingDewanSatuPage() {
                                    ? docSnap.data()?.timer_status as TimerStatus
                                    : timerStatus; // Fallback to local state if doc doesn't exist (should be rare)
 
-      const newFullStatus: TimerStatus = { 
-        ...currentDBTimerStatus, 
+      const newFullStatus: TimerStatus = {
+        ...currentDBTimerStatus,
         ...newStatusUpdates,
         roundDuration: currentDBTimerStatus.roundDuration || ROUND_DURATION_SECONDS // Ensure roundDuration is preserved
       };
@@ -693,9 +694,9 @@ export default function ScoringTandingDewanSatuPage() {
     // Logic to determine new status and seconds based on current state and target round
     if (timerStatus.matchStatus === 'MatchFinished' && round <= TOTAL_ROUNDS) {
         // If match finished but setting to a previous/current round, treat it as reviewing that finished round
-        newMatchStatus = `FinishedRound${round}` as TimerMatchStatus; 
+        newMatchStatus = `FinishedRound${round}` as TimerMatchStatus;
         newTimerSeconds = 0; // Timer should be 0 for finished rounds
-    } 
+    }
     // If current status is a finished round
     else if (timerStatus.matchStatus.startsWith('FinishedRound')) {
         const finishedRoundNumber = parseInt(timerStatus.matchStatus.replace('FinishedRound', ''));
@@ -703,7 +704,7 @@ export default function ScoringTandingDewanSatuPage() {
              newMatchStatus = `FinishedRound${round}` as TimerMatchStatus;
              newTimerSeconds = 0;
         } else { // Target round is a future round, set to pending
-            newMatchStatus = 'Pending'; 
+            newMatchStatus = 'Pending';
             newTimerSeconds = ROUND_DURATION_SECONDS;
         }
     }
@@ -761,7 +762,7 @@ export default function ScoringTandingDewanSatuPage() {
         });
         return; // Stop here, next press will advance to next round or finish match
     }
-    
+
     // If paused for verification, this action resumes the flow for that round, setting it to 'Pending'
     if (isPausedForVerification && timerStatus.currentRound <= TOTAL_ROUNDS) {
         updateTimerStatusInFirestore({
@@ -825,7 +826,7 @@ export default function ScoringTandingDewanSatuPage() {
         ketuaActionsSnapshot.forEach((doc) => {
             batch.delete(doc.ref);
         });
-        
+
         // Delete all documents in verifications subcollection
         const verificationsCollectionRef = collection(db, MATCHES_TANDING_COLLECTION, activeScheduleId, VERIFICATIONS_SUBCOLLECTION);
         const verificationsSnapshot = await getDocs(verificationsCollectionRef);
@@ -871,7 +872,7 @@ export default function ScoringTandingDewanSatuPage() {
 
   // Helper to get individual Juri scores for display, considering struck/unstruck status
   const getJuriScoreForDisplay = (
-    juriId: string, 
+    juriId: string,
     juriData: JuriMatchDataWithId | null,
     pesilatColor: 'merah' | 'biru',
     round: 1 | 2 | 3,
@@ -898,7 +899,7 @@ export default function ScoringTandingDewanSatuPage() {
       const isPermanentlyStruck = struckKeys.has(entryKey);
       // Check if entry is new and within grace period (e.g., 2 seconds for display before being struck if no partner)
       // JURI_INPUT_VALIDITY_WINDOW_MS is used here as a proxy for a short visual grace period for newly entered scores.
-      const isGracePeriodForDisplay = (Date.now() - entryTimestampMillis <= JURI_INPUT_VALIDITY_WINDOW_MS); 
+      const isGracePeriodForDisplay = (Date.now() - entryTimestampMillis <= JURI_INPUT_VALIDITY_WINDOW_MS);
 
       // Determine if the entry should be displayed as struck
       // It's struck if it's in permanentlyStruckKeys OR if it's not unstruck AND past the visual grace period.
@@ -930,11 +931,10 @@ export default function ScoringTandingDewanSatuPage() {
   };
 
   const getJuriVoteDisplayBoxClass = (vote: JuriVoteValue): string => {
-    if (vote === 'merah') return "bg-red-500 text-white";
-    if (vote === 'biru') return "bg-blue-500 text-white";
+    if (vote === 'merah') return "bg-red-600 text-white";
+    if (vote === 'biru') return "bg-blue-600 text-white";
     if (vote === 'invalid') return "bg-yellow-400 text-black";
-    // Default for "belum vote" (null)
-    return "bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600"; 
+    return "bg-gray-200 dark:bg-gray-600 text-gray-800 dark:text-gray-100";
   };
 
 
@@ -950,7 +950,7 @@ export default function ScoringTandingDewanSatuPage() {
         </div>
     );
   }
-  
+
   // Show loading if activeScheduleId is set but details/juri scores are not yet loaded
   if (isLoading && activeScheduleId) { // activeScheduleId is set, but some data (matchDetails, juriScores) is still loading
     return (
@@ -991,7 +991,7 @@ export default function ScoringTandingDewanSatuPage() {
   }
 
   // Determine button disabled states
-  const nextButtonText: string = timerStatus.matchStatus === 'MatchFinished' ? 'Selesai' 
+  const nextButtonText: string = timerStatus.matchStatus === 'MatchFinished' ? 'Selesai'
     : timerStatus.matchStatus.startsWith('PausedForVerificationRound') ? `Lanjutkan Babak ${timerStatus.currentRound}`
     : (timerStatus.currentRound < TOTAL_ROUNDS ? `Lanjut Babak ${timerStatus.currentRound + 1}` : 'Selesaikan Match');
 
@@ -1001,7 +1001,7 @@ export default function ScoringTandingDewanSatuPage() {
   // Disable start if: no active ID, loading, timer running, match finished, timer is 0, round finished, or paused for verification.
   const isTimerStartDisabled: boolean = !activeScheduleId || isLoading || timerStatus.isTimerRunning || timerStatus.matchStatus === 'MatchFinished' || timerStatus.timerSeconds === 0 || timerStatus.matchStatus.startsWith('FinishedRound') || timerStatus.matchStatus.startsWith('PausedForVerificationRound');
   const isTimerPauseDisabled: boolean = !activeScheduleId || isLoading || !timerStatus.isTimerRunning || timerStatus.matchStatus === 'MatchFinished';
-  const isNextActionDisabledBtn: boolean = !activeScheduleId || isLoading || timerStatus.isTimerRunning || !isNextActionPossible || timerStatus.matchStatus.startsWith("OngoingRound"); 
+  const isNextActionDisabledBtn: boolean = !activeScheduleId || isLoading || timerStatus.isTimerRunning || !isNextActionPossible || timerStatus.matchStatus.startsWith("OngoingRound");
   const isResetButtonDisabled: boolean = !activeScheduleId || isLoading;
 
   const isBabakButtonDisabled = (round: number): boolean => {
@@ -1053,9 +1053,9 @@ export default function ScoringTandingDewanSatuPage() {
               {[1, 2, 3].map((round) => (
                 <Button
                   key={round}
-                  variant={timerStatus.currentRound === round && !timerStatus.matchStatus.startsWith('PausedForVerification') ? "default" : "outline"}
+                  variant={timerStatus.currentRound === round && !timerStatus.matchStatus.startsWith('PausedForVerificationRound') ? "default" : "outline"}
                   className={`w-full text-xs md:text-sm py-1 md:py-2 h-auto transition-all ${
-                    timerStatus.currentRound === round && !timerStatus.matchStatus.startsWith('PausedForVerification')
+                    timerStatus.currentRound === round && !timerStatus.matchStatus.startsWith('PausedForVerificationRound')
                       ? 'bg-accent text-accent-foreground ring-2 ring-offset-1 ring-accent dark:ring-offset-gray-800 font-semibold'
                       : 'bg-white dark:bg-gray-700 text-gray-700 dark:text-gray-200 border-gray-300 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-600'
                   } ${ isBabakButtonDisabled(round) ? 'opacity-50 cursor-not-allowed' : ''}`}
@@ -1067,7 +1067,7 @@ export default function ScoringTandingDewanSatuPage() {
               ))}
             </div>
              <p className={cn("text-xs text-center px-1 font-semibold",
-                timerStatus.matchStatus.startsWith('PausedForVerification') ? "text-orange-600 dark:text-orange-400" : "text-gray-600 dark:text-gray-400"
+                timerStatus.matchStatus.startsWith('PausedForVerificationRound') ? "text-orange-600 dark:text-orange-400" : "text-gray-600 dark:text-gray-400"
              )}>{getMatchStatusText()}</p>
           </div>
 
@@ -1162,38 +1162,54 @@ export default function ScoringTandingDewanSatuPage() {
         </Card>
 
         {/* Verification Display Modal */}
-        <Dialog open={isDisplayVerificationModalOpen} onOpenChange={setIsDisplayVerificationModalOpen}>
-          <DialogContent className="sm:max-w-md" onPointerDownOutside={(e) => e.preventDefault()} onEscapeKeyDown={(e) => e.preventDefault()}>
+        <Dialog open={isDisplayVerificationModalOpen} onOpenChange={(isOpen) => { if (!isOpen && activeDisplayVerificationRequest?.status === 'pending') return; setIsDisplayVerificationModalOpen(isOpen); }}>
+          <DialogContent className="sm:max-w-lg md:max-w-xl" onPointerDownOutside={(e) => {if (activeDisplayVerificationRequest?.status === 'pending') e.preventDefault();}} onEscapeKeyDown={(e) => {if (activeDisplayVerificationRequest?.status === 'pending') e.preventDefault();}}>
             <DialogHeader>
-              <DialogTitle className="text-2xl font-bold font-headline text-center">Verifikasi Juri</DialogTitle>
-              {activeDisplayVerificationRequest && (
-                <DialogVerificationDescription className="text-center mt-2" asChild>
-                  <div>
-                    <div className="text-lg font-semibold">
-                      {activeDisplayVerificationRequest.type === 'jatuhan' ? 'Verifikasi Jatuhan' : 'Verifikasi Pelanggaran'}
-                    </div>
-                    <div className="text-sm text-muted-foreground">Babak {activeDisplayVerificationRequest.round}</div>
-                  </div>
-                </DialogVerificationDescription>
-              )}
+              <DialogTitle className="text-2xl md:text-3xl font-bold font-headline text-center">
+                Verifikasi Juri
+              </DialogTitle>
             </DialogHeader>
-            <div className="my-6 space-y-4">
-              <div className="grid grid-cols-3 gap-3 items-stretch justify-items-center text-center">
-                {JURI_IDS.map((juriKey, index) => (
-                  <div key={`vote-display-${juriKey}`} className="flex flex-col items-center space-y-2">
-                    <p className="text-lg font-semibold">J{index + 1}</p>
-                    <div className={cn("w-full h-16 rounded-md flex items-center justify-center text-sm font-medium p-2 shadow", 
-                                      getJuriVoteDisplayBoxClass(activeDisplayVerificationRequest?.votes[juriKey] || null))}>
-                      {activeDisplayVerificationRequest?.votes[juriKey] === 'merah' ? 'SUDUT MERAH' :
-                       activeDisplayVerificationRequest?.votes[juriKey] === 'biru' ? 'SUDUT BIRU' :
-                       activeDisplayVerificationRequest?.votes[juriKey] === 'invalid' ? 'INVALID' : 
-                       'Belum Vote'}
-                    </div>
+            <div className="py-4 px-2 md:px-6">
+              <div className="mb-6">
+                <h3 className="text-lg md:text-xl font-semibold mb-1 text-center md:text-left text-foreground">
+                  Detail Verifikasi
+                </h3>
+                {activeDisplayVerificationRequest && (
+                  <div className="text-md md:text-lg text-muted-foreground text-center md:text-left">
+                    <span>
+                      {activeDisplayVerificationRequest.type === 'jatuhan' ? 'Verifikasi Jatuhan' : 'Verifikasi Pelanggaran'}
+                    </span>
+                    <span className="mx-2">|</span>
+                    <span>Babak {activeDisplayVerificationRequest.round}</span>
                   </div>
-                ))}
+                )}
+              </div>
+
+              <div className="grid grid-cols-3 gap-3 md:gap-4 items-start justify-items-center text-center">
+                {JURI_IDS.map((juriKey, index) => {
+                  const vote = activeDisplayVerificationRequest?.votes[juriKey] || null;
+                  let voteText = 'Belum Vote';
+                  if (vote === 'merah') voteText = 'SUDUT MERAH';
+                  else if (vote === 'biru') voteText = 'SUDUT BIRU';
+                  else if (vote === 'invalid') voteText = 'INVALID';
+
+                  return (
+                    <div key={`vote-display-dewan1-${juriKey}`} className="flex flex-col items-center space-y-1 w-full">
+                      <p className="text-lg md:text-xl font-bold text-foreground">J{index + 1}</p>
+                      <div
+                        className={cn(
+                          "w-full h-16 md:h-20 rounded-lg flex items-center justify-center text-xs md:text-sm font-bold p-2 shadow-md",
+                          getJuriVoteDisplayBoxClass(vote)
+                        )}
+                      >
+                        {voteText}
+                      </div>
+                    </div>
+                  );
+                })}
               </div>
             </div>
-            {/* This modal is display-only for Dewan, no footer/actions needed here */}
+            {/* This modal is display-only for Dewan, no footer/actions needed here. It closes when verification status is no longer 'pending' */}
           </DialogContent>
         </Dialog>
 
@@ -1201,4 +1217,3 @@ export default function ScoringTandingDewanSatuPage() {
     </div>
   );
 }
-
