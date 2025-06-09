@@ -577,11 +577,11 @@ export default function MonitoringSkorPage() {
           {/* Kolom Tengah Bawah (Info Boxes) */}
           <div className="flex flex-col items-center justify-start w-full px-1 md:px-2">
             <div className="w-full max-w-[180px] flex flex-col space-y-1 md:space-y-2">
-                <div className="h-10 md:h-12 border border-[var(--monitor-border)] rounded-md flex items-center justify-center text-xs md:text-sm text-[var(--monitor-text-muted)] bg-[var(--monitor-header-section-bg)] shadow-sm">
-                    Info Box 1
+                <div className="py-1 md:py-2 border border-[var(--monitor-border)] rounded-md flex items-center justify-center text-xs md:text-sm text-[var(--monitor-text-muted)] bg-[var(--monitor-header-section-bg)] shadow-sm">
+                    Pukulan
                 </div>
-                <div className="h-10 md:h-12 border border-[var(--monitor-border)] rounded-md flex items-center justify-center text-xs md:text-sm text-[var(--monitor-text-muted)] bg-[var(--monitor-header-section-bg)] shadow-sm">
-                    Info Box 2
+                <div className="py-1 md:py-2 border border-[var(--monitor-border)] rounded-md flex items-center justify-center text-xs md:text-sm text-[var(--monitor-text-muted)] bg-[var(--monitor-header-section-bg)] shadow-sm">
+                    Tendangan
                 </div>
             </div>
           </div>
@@ -663,3 +663,4 @@ export default function MonitoringSkorPage() {
     </div>
   );
 }
+
