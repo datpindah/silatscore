@@ -62,10 +62,10 @@ export default function MonitoringSkorPage() {
 
 
   const [ketuaActionsLog, setKetuaActionsLog] = useState<KetuaActionLogEntry[]>([]);
-  const [juriScoresData, setJuriScoresData] = useState<Record<string, DisplayJuriMatchData | null>>({
+  const [juriScoresData, setJuriScoresData] = useState<Record<string, LibRoundScoresType | null>>({
     'juri-1': null, 'juri-2': null, 'juri-3': null
   });
-  const prevJuriScoresDataRef = useRef<Record<string, DisplayJuriMatchData | null>>(juriScoresData);
+  const prevJuriScoresDataRef = useRef<Record<string, LibRoundScoresType | null>>(juriScoresData);
 
   const [activeJuriHighlights, setActiveJuriHighlights] = useState<Record<string, boolean>>({});
   const highlightTimeoutsRef = useRef<Record<string, NodeJS.Timeout>>({});
@@ -180,7 +180,7 @@ export default function MonitoringSkorPage() {
         JURI_IDS.forEach(juriId => {
           unsubscribers.push(onSnapshot(doc(matchDocRef, JURI_SCORES_SUBCOLLECTION, juriId), (juriDocSnap) => {
             if (!mounted) return;
-            const newJuriData = juriDocSnap.exists() ? juriDocSnap.data() as DisplayJuriMatchData : null;
+            const newJuriData = juriDocSnap.exists() ? juriDocSnap.data() as LibRoundScoresType : null;
             setJuriScoresData(prev => ({ ...prev, [juriId]: newJuriData }));
           },(err) => {
              if (mounted) console.error(`[MonitoringSkor] Error fetching scores for ${juriId}:`, err);
@@ -195,12 +195,10 @@ export default function MonitoringSkorPage() {
               setActiveDisplayVerificationRequest(latestVerification);
               setIsDisplayVerificationModalOpen(true);
             } else {
-              // If status is not pending (e.g. completed, cancelled), close the modal
               setActiveDisplayVerificationRequest(null);
               setIsDisplayVerificationModalOpen(false);
             }
           } else {
-            // No verifications found or the latest is not pending
             setActiveDisplayVerificationRequest(null);
             setIsDisplayVerificationModalOpen(false);
           }
@@ -252,7 +250,8 @@ export default function MonitoringSkorPage() {
         if (juriData) {
             (['merah', 'biru'] as const).forEach(pesilatColor => {
                 (['round1', 'round2', 'round3'] as const).forEach(roundKey => {
-                    juriData[pesilatColor]?.[roundKey]?.forEach(entry => {
+                    const roundSpecificScores = (juriData as any)[pesilatColor]?.[roundKey] as ScoreEntry[] | undefined;
+                    roundSpecificScores?.forEach(entry => {
                         if (entry && entry.timestamp && typeof entry.timestamp.toMillis === 'function') {
                             const entryKey = `${juriId}_${entry.timestamp.toMillis()}_${entry.points}`;
                             allRawEntries.push({
@@ -320,14 +319,14 @@ export default function MonitoringSkorPage() {
     const roundKey = `round${timerStatus.currentRound}` as keyof LibRoundScoresType;
 
     JURI_IDS.forEach(juriId => {
-      const currentScores = currentJuriData[juriId];
-      const prevScores = prevJuriData[juriId];
+      const currentJuriScoresForId = currentJuriData[juriId];
+      const prevJuriScoresForId = prevJuriData[juriId];
 
-      if (currentScores && timerStatus.currentRound) {
+      if (currentJuriScoresForId && timerStatus.currentRound) {
         (['merah', 'biru'] as PesilatColorIdentity[]).forEach(color => {
-          const currentRoundEntries = currentScores[color]?.[roundKey] || [];
-          const prevRoundEntries = prevScores?.[color]?.[roundKey] || [];
-
+          const currentRoundEntries = (currentJuriScoresForId as any)[color]?.[roundKey] || [];
+          const prevRoundEntries = (prevJuriScoresForId as any)?.[color]?.[roundKey] || [];
+          
           if (currentRoundEntries.length > prevRoundEntries.length) {
             const newEntry = currentRoundEntries[currentRoundEntries.length - 1];
             if (newEntry) {
@@ -393,7 +392,8 @@ export default function MonitoringSkorPage() {
         const teguranCount = ketuaActionsLog.filter(
             log => log.pesilatColor === pesilatColor &&
                    log.round === timerStatus.currentRound &&
-                   log.actionType === 'Teguran' 
+                   log.actionType === 'Teguran' &&
+                   typeof log.originalActionType === 'undefined' // Only count pure tegurans for T1/T2 display here
         ).length;
         return teguranCount >= count;
     }
@@ -535,11 +535,11 @@ export default function MonitoringSkorPage() {
           <div className="text-xs md:text-sm text-[var(--monitor-status-text)] mt-1 md:mt-2 text-center">
             {getMatchStatusTextForMonitor()}
           </div>
-          <div className="mt-4 w-full max-w-[180px] space-y-2">
-              <div className="h-16 md:h-20 border border-[var(--monitor-border)] rounded-md flex items-center justify-center text-sm text-[var(--monitor-text-muted)] bg-[var(--monitor-header-section-bg)] shadow-sm">
+          <div className="mt-4 w-full max-w-[180px] flex gap-1 md:gap-2">
+              <div className="flex-1 h-10 md:h-12 border border-[var(--monitor-border)] rounded-md flex items-center justify-center text-xs md:text-sm text-[var(--monitor-text-muted)] bg-[var(--monitor-header-section-bg)] shadow-sm">
                   Info Box 1
               </div>
-              <div className="h-16 md:h-20 border border-[var(--monitor-border)] rounded-md flex items-center justify-center text-sm text-[var(--monitor-text-muted)] bg-[var(--monitor-header-section-bg)] shadow-sm">
+              <div className="flex-1 h-10 md:h-12 border border-[var(--monitor-border)] rounded-md flex items-center justify-center text-xs md:text-sm text-[var(--monitor-text-muted)] bg-[var(--monitor-header-section-bg)] shadow-sm">
                   Info Box 2
               </div>
           </div>
