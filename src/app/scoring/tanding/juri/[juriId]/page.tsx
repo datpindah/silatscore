@@ -1,3 +1,4 @@
+
 "use client";
 
 import { use, useState, useEffect, useCallback } from 'react';
@@ -27,7 +28,7 @@ interface PesilatInfo {
 
 interface ScoreEntry {
   points: 1 | 2;
-  timestamp: Timestamp; // Remains Timestamp for type consistency after Firestore read
+  timestamp: Timestamp; 
 }
 
 interface RoundScores {
@@ -39,7 +40,7 @@ interface RoundScores {
 interface JuriMatchData {
   merah: RoundScores;
   biru: RoundScores;
-  lastUpdated?: Timestamp; // Remains Timestamp for type consistency after Firestore read
+  lastUpdated?: Timestamp; 
 }
 
 interface TimerStatusFromDewan {
@@ -276,10 +277,9 @@ export default function JuriDynamicPage({ params: paramsPromise }: { params: Pro
     if (!activeMatchId || !juriId) return;
     const juriScoreDocRef = doc(db, MATCHES_TANDING_COLLECTION, activeMatchId, 'juri_scores', juriId);
     try {
-      // Data is already structured by handleScore, directly save it with serverTimestamp for lastUpdated
       const dataToSave: JuriMatchData = {
         ...newScoresData,
-        lastUpdated: serverTimestamp() as any, // Firestore will convert this sentinel
+        lastUpdated: serverTimestamp() as any, 
       };
       await setDoc(juriScoreDocRef, dataToSave, { merge: true });
     } catch (error) {
@@ -294,14 +294,14 @@ export default function JuriDynamicPage({ params: paramsPromise }: { params: Pro
       const roundKey = `round${dewanControlledRound}` as keyof RoundScores;
       const newEntry: ScoreEntry = { 
         points: pointsValue, 
-        timestamp: serverTimestamp() as any, // Use serverTimestamp sentinel
+        timestamp: Timestamp.now(), // Use client-side Timestamp.now() here
       };
       const updatedColorScoresForRound = [...(prevScores[pesilatColor]?.[roundKey] || []), newEntry];
       const newScoresData: JuriMatchData = {
         ...prevScores,
         [pesilatColor]: { ...prevScores[pesilatColor], [roundKey]: updatedColorScoresForRound },
       };
-      saveScoresToFirestore(newScoresData); // Save data with the serverTimestamp sentinel
+      saveScoresToFirestore(newScoresData); 
       return newScoresData;
     });
   };
@@ -343,12 +343,9 @@ export default function JuriDynamicPage({ params: paramsPromise }: { params: Pro
     if (!roundData || roundData.length === 0) return '-';
     return roundData.map((entry, index) => {
       let entryTimestampMillis: number;
-      // Check if timestamp is a Firestore Timestamp and has toMillis method
       if (entry.timestamp && typeof (entry.timestamp as unknown as Timestamp).toMillis === 'function') {
         entryTimestampMillis = (entry.timestamp as unknown as Timestamp).toMillis();
       } else { 
-        // If it's a serverTimestamp() sentinel or other invalid format, display as 'Inv!'
-        // This handles the case where the score is newly added locally and not yet confirmed by Firestore
         return <span key={`${juriId}-roundEntry-${index}-pending`} className="mr-1.5 text-yellow-500 italic">Baru!</span>;
       }
 
@@ -356,8 +353,6 @@ export default function JuriDynamicPage({ params: paramsPromise }: { params: Pro
       const isUnstruckByDewan = confirmedUnstruckKeysFromDewan.has(entryKey);
       const isPermanentlyStruckByDewan = confirmedStruckKeysFromDewan.has(entryKey);
       
-      // Only apply struck-through if Dewan has marked it so, or if it's not unstruck AND past grace period (on Dewan's side logic)
-      // Juri panel primarily reflects Dewan's decision on struck/unstruck.
       const shouldDisplayAsStruck = isPermanentlyStruckByDewan; 
 
       return (
