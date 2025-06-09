@@ -3,7 +3,7 @@
 
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { ArrowLeft, Loader2, Shield, Swords } from 'lucide-react';
-import type { ScheduleTanding, TimerStatus, KetuaActionLogEntry, PesilatColorIdentity, JuriMatchData as LibJuriMatchData, RoundScores as LibRoundScoresType, KetuaActionType, ScoreEntry as LibScoreEntryType } from '@/lib/types';
+import type { ScheduleTanding, TimerStatus, KetuaActionLogEntry, PesilatColorIdentity, JuriMatchData as LibJuriMatchData, RoundScores as LibRoundScoresType, ScoreEntry as LibScoreEntryType } from '@/lib/types';
 import { db } from '@/lib/firebase';
 import { doc, onSnapshot, getDoc, collection, query, orderBy, Timestamp } from 'firebase/firestore';
 import { cn } from '@/lib/utils';
@@ -17,6 +17,7 @@ const MATCHES_TANDING_COLLECTION = 'matches_tanding';
 const OFFICIAL_ACTIONS_SUBCOLLECTION = 'official_actions';
 const JURI_SCORES_SUBCOLLECTION = 'juri_scores';
 const JURI_IDS = ['juri-1', 'juri-2', 'juri-3'] as const;
+const JURI_INPUT_VALIDITY_WINDOW_MS = 2000; // Consistent with Dewan 1
 
 interface PesilatDisplayInfo {
   name: string;
@@ -27,6 +28,12 @@ interface JuriMatchDataForPage extends LibJuriMatchData {}
 interface RoundScoresForPage extends LibRoundScoresType {}
 interface ScoreEntryForPage extends LibScoreEntryType {}
 
+interface CombinedScoreEntry extends ScoreEntryForPage {
+  juriId: string;
+  key: string;
+  round: keyof LibRoundScoresType;
+  color: 'merah' | 'biru';
+}
 
 const initialTimerStatus: TimerStatus = {
   currentRound: 1,
@@ -141,6 +148,7 @@ export default function DewanDuaPage() {
   const [timerStatus, setTimerStatus] = useState<TimerStatus>(initialTimerStatus);
   const [confirmedScoreMerah, setConfirmedScoreMerah] = useState(0);
   const [confirmedScoreBiru, setConfirmedScoreBiru] = useState(0);
+  const [prevSavedUnstruckKeysFromDewan, setPrevSavedUnstruckKeysFromDewan] = useState<Set<string>>(new Set());
 
   const [ketuaActionsLog, setKetuaActionsLog] = useState<KetuaActionLogEntry[]>([]);
   const [juriScores, setJuriScores] = useState<Record<string, JuriMatchDataForPage | null>>({
@@ -161,6 +169,7 @@ export default function DewanDuaPage() {
     setTimerStatus(initialTimerStatus);
     setConfirmedScoreMerah(0);
     setConfirmedScoreBiru(0);
+    setPrevSavedUnstruckKeysFromDewan(new Set());
     setKetuaActionsLog([]);
     setJuriScores({ 'juri-1': null, 'juri-2': null, 'juri-3': null });
     setError(null);
@@ -227,9 +236,10 @@ export default function DewanDuaPage() {
           if (docSnap.exists()) {
             const data = docSnap.data();
             if (data?.timer_status) setTimerStatus(data.timer_status as TimerStatus);
-            // Overall confirmed scores will be calculated based on individual entries later
+            setPrevSavedUnstruckKeysFromDewan(new Set(data?.confirmed_unstruck_keys_log as string[] || []));
           } else {
             setTimerStatus(initialTimerStatus);
+            setPrevSavedUnstruckKeysFromDewan(new Set());
             setConfirmedScoreMerah(0); setConfirmedScoreBiru(0);
           }
         }, (err) => console.error("[Dewan2] Error fetching match document (timer/scores):", err)));
@@ -258,40 +268,88 @@ export default function DewanDuaPage() {
   }, [activeScheduleId, matchDetailsLoaded, resetMatchDisplayData]);
 
  useEffect(() => {
-    // Calculate overall confirmed scores based on Dewan 1's confirmed_unstruck_keys_log
-    // This logic is complex and would ideally mirror Dewan 1's final score calculation or read it directly if available
-    // For now, a simplified sum of Ketua actions + total juri scores for demonstration
-    if (!activeScheduleId) {
-      setConfirmedScoreMerah(0);
-      setConfirmedScoreBiru(0);
-      return;
+    if (!activeScheduleId || Object.values(juriScores).every(data => data === null) && prevSavedUnstruckKeysFromDewan.size === 0) {
+        let calculatedTotalMerah = 0;
+        let calculatedTotalBiru = 0;
+        ketuaActionsLog.forEach(action => {
+            if (action.pesilatColor === 'merah') calculatedTotalMerah += action.points;
+            else if (action.pesilatColor === 'biru') calculatedTotalBiru += action.points;
+        });
+        setConfirmedScoreMerah(calculatedTotalMerah);
+        setConfirmedScoreBiru(calculatedTotalBiru);
+        return;
     }
 
-    let totalMerah = 0;
-    let totalBiru = 0;
-
-    (['round1', 'round2', 'round3'] as const).forEach(roundKey => {
-      const roundNum = parseInt(roundKey.replace('round', '')) as 1 | 2 | 3;
-      JURI_IDS.forEach(juriId => {
-        const juriData = juriScores[juriId];
-        if (juriData) {
-          const merahScores = (juriData.merah as any)?.[roundKey] as ScoreEntryForPage[] | undefined;
-          if (merahScores) totalMerah += merahScores.reduce((sum, s) => sum + s.points, 0);
-          const biruScores = (juriData.biru as any)?.[roundKey] as ScoreEntryForPage[] | undefined;
-          if (biruScores) totalBiru += biruScores.reduce((sum, s) => sum + s.points, 0);
+    const allRawEntries: CombinedScoreEntry[] = [];
+    JURI_IDS.forEach(juriId => {
+        const juriSpecificMatchData = juriScores[juriId];
+        if (juriSpecificMatchData) {
+            (['merah', 'biru'] as const).forEach(pesilatColor => {
+                const pesilatColorScores = juriSpecificMatchData[pesilatColor];
+                if (pesilatColorScores) {
+                    (['round1', 'round2', 'round3'] as const).forEach(roundKey => {
+                        const roundScoresArray = pesilatColorScores[roundKey];
+                        if (roundScoresArray) {
+                            roundScoresArray.forEach(entry => {
+                                if (entry && entry.timestamp && typeof entry.timestamp.toMillis === 'function') {
+                                    const entryKey = `${juriId}_${entry.timestamp.toMillis()}_${entry.points}`;
+                                    allRawEntries.push({
+                                        ...entry,
+                                        juriId: juriId,
+                                        key: entryKey,
+                                        round: roundKey,
+                                        color: pesilatColor
+                                    });
+                                }
+                            });
+                        }
+                    });
+                }
+            });
         }
-      });
     });
     
+    const confirmedUnstruckEntries = allRawEntries.filter(e => prevSavedUnstruckKeysFromDewan.has(e.key));
+    
+    let calculatedTotalMerah = 0;
+    let calculatedTotalBiru = 0;
+    const scoredPairKeys = new Set<string>();
+
+    for (let i = 0; i < confirmedUnstruckEntries.length; i++) {
+        const e1 = confirmedUnstruckEntries[i];
+        if (scoredPairKeys.has(e1.key)) continue;
+
+        const agreeingPartners = [e1];
+        for (let j = i + 1; j < confirmedUnstruckEntries.length; j++) {
+            const e2 = confirmedUnstruckEntries[j];
+            if (scoredPairKeys.has(e2.key)) continue;
+
+            if (e1.juriId !== e2.juriId &&
+                e1.round === e2.round &&
+                e1.color === e2.color &&
+                e1.points === e2.points &&
+                Math.abs(e1.timestamp.toMillis() - e2.timestamp.toMillis()) <= JURI_INPUT_VALIDITY_WINDOW_MS) {
+                agreeingPartners.push(e2);
+            }
+        }
+
+        if (agreeingPartners.length >= 2) {
+            const points = e1.points;
+            if (e1.color === 'merah') calculatedTotalMerah += points;
+            else calculatedTotalBiru += points;
+            agreeingPartners.forEach(p => scoredPairKeys.add(p.key));
+        }
+    }
+
     ketuaActionsLog.forEach(action => {
-      if (action.pesilatColor === 'merah') totalMerah += action.points;
-      if (action.pesilatColor === 'biru') totalBiru += action.points;
+        if (action.pesilatColor === 'merah') calculatedTotalMerah += action.points;
+        else if (action.pesilatColor === 'biru') calculatedTotalBiru += action.points;
     });
 
-    setConfirmedScoreMerah(totalMerah);
-    setConfirmedScoreBiru(totalBiru);
+    setConfirmedScoreMerah(calculatedTotalMerah);
+    setConfirmedScoreBiru(calculatedTotalBiru);
 
-  }, [juriScores, ketuaActionsLog, activeScheduleId]);
+  }, [juriScores, ketuaActionsLog, activeScheduleId, prevSavedUnstruckKeysFromDewan]);
 
 
  useEffect(() => {
@@ -321,7 +379,7 @@ export default function DewanDuaPage() {
   );
 
   const LabelCell = ({ children }: { children: React.ReactNode }) => (
-    <td className="border border-black px-2 py-1 md:px-3 md:py-2 text-left text-xs md:text-sm h-10 md:h-12">{children}</td>
+    <td className="border border-black px-2 py-1 md:px-3 md:py-2 text-left text-xs md:text-sm h-10 md:h-12 align-top">{children}</td>
   );
 
   const tableRowDefinitions = [
@@ -453,3 +511,4 @@ export default function DewanDuaPage() {
     </div>
   );
 }
+
