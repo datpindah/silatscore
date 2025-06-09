@@ -514,13 +514,13 @@ export default function KetuaPertandinganPage() {
           <Table className="min-w-full border-collapse border border-gray-300 dark:border-gray-700">
             <TableHeader>
               <TableRow className="bg-gray-100 dark:bg-gray-800">
-                <TableHead className="border border-gray-300 dark:border-gray-700 text-center text-red-600 py-2 px-1 text-xs sm:text-sm">Hukuman (M)</TableHead>
-                <TableHead className="border border-gray-300 dark:border-gray-700 text-center text-red-600 py-2 px-1 text-xs sm:text-sm">Binaan (M)</TableHead>
-                <TableHead className="border border-gray-300 dark:border-gray-700 text-center text-red-600 py-2 px-1 text-xs sm:text-sm">Jatuhan (M)</TableHead>
+                <TableHead className="border border-gray-300 dark:border-gray-700 text-center text-red-600 py-2 px-1 text-xs sm:text-sm">Hukuman </TableHead>
+                <TableHead className="border border-gray-300 dark:border-gray-700 text-center text-red-600 py-2 px-1 text-xs sm:text-sm">Binaan </TableHead>
+                <TableHead className="border border-gray-300 dark:border-gray-700 text-center text-red-600 py-2 px-1 text-xs sm:text-sm">Jatuhan </TableHead>
                 <TableHead className="border border-gray-300 dark:border-gray-700 text-center py-2 px-1 text-xs sm:text-sm">Babak</TableHead>
-                <TableHead className="border border-gray-300 dark:border-gray-700 text-center text-blue-600 py-2 px-1 text-xs sm:text-sm">Jatuhan (B)</TableHead>
-                <TableHead className="border border-gray-300 dark:border-gray-700 text-center text-blue-600 py-2 px-1 text-xs sm:text-sm">Binaan (B)</TableHead>
-                <TableHead className="border border-gray-300 dark:border-gray-700 text-center text-blue-600 py-2 px-1 text-xs sm:text-sm">Hukuman (B)</TableHead>
+                <TableHead className="border border-gray-300 dark:border-gray-700 text-center text-blue-600 py-2 px-1 text-xs sm:text-sm">Jatuhan </TableHead>
+                <TableHead className="border border-gray-300 dark:border-gray-700 text-center text-blue-600 py-2 px-1 text-xs sm:text-sm">Binaan </TableHead>
+                <TableHead className="border border-gray-300 dark:border-gray-700 text-center text-blue-600 py-2 px-1 text-xs sm:text-sm">Hukuman </TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -552,7 +552,7 @@ export default function KetuaPertandinganPage() {
               <Button onClick={() => handleKetuaAction('merah', 'Peringatan')} className="w-full py-3 text-xs sm:text-sm bg-red-600 hover:bg-red-700 text-white" disabled={isActionButtonDisabled}>Peringatan</Button>
             </div>
             <Button onClick={() => handleDeleteLastAction('merah')} className="w-full py-4 text-sm sm:text-base bg-red-800 hover:bg-red-900 text-white" disabled={isActionButtonDisabled || ketuaActionsLog.filter(a => a.pesilatColor === 'merah' && a.round === dewanTimerStatus.currentRound).length === 0}>
-              <Trash2 className="mr-2 h-4 w-4" /> Hapus (Merah)
+              <Trash2 className="mr-2 h-4 w-4" /> Hapus
             </Button>
           </div>
 
@@ -629,7 +629,7 @@ export default function KetuaPertandinganPage() {
               <Button onClick={() => handleKetuaAction('biru', 'Peringatan')} className="w-full py-3 text-xs sm:text-sm bg-blue-600 hover:bg-blue-700 text-white" disabled={isActionButtonDisabled}>Peringatan</Button>
             </div>
             <Button onClick={() => handleDeleteLastAction('biru')} className="w-full py-4 text-sm sm:text-base bg-blue-800 hover:bg-blue-900 text-white" disabled={isActionButtonDisabled || ketuaActionsLog.filter(a => a.pesilatColor === 'biru' && a.round === dewanTimerStatus.currentRound).length === 0}>
-              <Trash2 className="mr-2 h-4 w-4"/> Hapus (Biru)
+              <Trash2 className="mr-2 h-4 w-4"/> Hapus
             </Button>
           </div>
         </div>

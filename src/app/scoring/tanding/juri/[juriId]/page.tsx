@@ -389,7 +389,7 @@ export default function JuriDynamicPage({ params: paramsPromise }: { params: Pro
     if (configMatchId === undefined && isLoading) return "Memuat konfigurasi...";
     if (isLoading && (activeMatchId || configMatchId === undefined )) return `Memuat data pertandingan... (Babak Dewan: ${dewanControlledRound})`;
     if (!activeMatchId && !isLoading && configMatchId === null) return "Tidak ada pertandingan yang aktif.";
-    if (matchDetailsLoaded && activeMatchId) return `${pesilatMerah?.name || 'Merah'} vs ${pesilatBiru?.name || 'Biru'} - Babak Aktif (Dewan): ${dewanControlledRound}`;
+    if (matchDetailsLoaded && activeMatchId) return `${pesilatMerah?.name || 'Merah'} vs ${pesilatBiru?.name || 'Biru'} - Babak Aktif: ${dewanControlledRound}`;
     if (activeMatchId && !matchDetailsLoaded && !isLoading) return "Menunggu detail pertandingan...";
     if (error) return `Error: ${error}`;
     return `Menunggu info pertandingan... (Babak Dewan: ${dewanControlledRound})`;
@@ -443,7 +443,7 @@ export default function JuriDynamicPage({ params: paramsPromise }: { params: Pro
                 <div>Kontingen: { (activeMatchId && matchDetailsLoaded) ? (pesilatMerah?.contingent || '-') : ((isLoading && activeMatchId) ? <Skeleton className="h-4 w-24 mt-1" /> : '-') }</div>
               </div>
               <div className="text-lg font-bold text-gray-700 dark:text-gray-300">
-                Babak (Dewan): <span className="text-primary">{dewanControlledRound}</span>
+                Babak: <span className="text-primary">{dewanControlledRound}</span>
               </div>
               <div className="text-blue-600 text-right">
                 <div className="font-semibold text-lg">{(activeMatchId && matchDetailsLoaded) ? (pesilatBiru?.name || 'PESILAT BIRU') : ((isLoading && activeMatchId) ? <Skeleton className="h-6 w-32" /> : 'PESILAT BIRU')}</div>
@@ -454,7 +454,7 @@ export default function JuriDynamicPage({ params: paramsPromise }: { params: Pro
             <div className="border rounded-lg overflow-hidden">
               <div className="grid grid-cols-3 text-center font-semibold">
                 <div className="bg-red-500 text-white p-2">MERAH</div>
-                <div className="bg-yellow-400 text-black p-2">BABAK (Skor Anda)</div>
+                <div className="bg-yellow-400 text-black p-2">BABAK</div>
                 <div className="bg-blue-500 text-white p-2">BIRU</div>
               </div>
               {[1, 2, 3].map((round) => (
