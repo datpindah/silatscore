@@ -6,19 +6,21 @@ import Link from 'next/link';
 import { Header } from '@/components/layout/Header';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
-import { ArrowLeft, Play, Pause, RotateCcw, ChevronRight, CheckCircle2, RadioTower, Loader2 } from 'lucide-react';
-import type { ScheduleTanding, KetuaActionLogEntry, TimerStatus, TimerMatchStatus } from '@/lib/types';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription as DialogVerificationDescription } from "@/components/ui/dialog";
+import { ArrowLeft, Play, Pause, RotateCcw, ChevronRight, CheckCircle2, RadioTower, Loader2, Vote } from 'lucide-react';
+import type { ScheduleTanding, KetuaActionLogEntry, TimerStatus, TimerMatchStatus, VerificationRequest, JuriVoteValue } from '@/lib/types';
 import { db } from '@/lib/firebase';
-import { doc, onSnapshot, setDoc, getDoc, Timestamp, updateDoc, writeBatch, collection, query, orderBy, getDocs, deleteDoc } from 'firebase/firestore';
+import { doc, onSnapshot, setDoc, getDoc, Timestamp, updateDoc, writeBatch, collection, query, orderBy, getDocs, deleteDoc, limit } from 'firebase/firestore';
 import { cn } from '@/lib/utils';
 
 const ACTIVE_TANDING_SCHEDULE_CONFIG_PATH = 'app_settings/active_match_tanding';
 const SCHEDULE_TANDING_COLLECTION = 'schedules_tanding';
 const MATCHES_TANDING_COLLECTION = 'matches_tanding';
 const OFFICIAL_ACTIONS_SUBCOLLECTION = 'official_actions'; 
+const VERIFICATIONS_SUBCOLLECTION = 'verifications';
 const ROUND_DURATION_SECONDS = 120; 
 const TOTAL_ROUNDS = 3;
-const JURI_IDS = ['juri-1', 'juri-2', 'juri-3'];
+const JURI_IDS = ['juri-1', 'juri-2', 'juri-3'] as const;
 const GRACE_PERIOD_FOR_STRIKE_DECISION = 5000; 
 const JURI_INPUT_VALIDITY_WINDOW_MS = 2000; 
 
@@ -93,20 +95,23 @@ export default function ScoringTandingDewanSatuPage() {
   const [error, setError] = useState<string | null>(null);
   const [matchDetailsLoaded, setMatchDetailsLoaded] = useState(false);
 
+  const [activeDisplayVerificationRequest, setActiveDisplayVerificationRequest] = useState<VerificationRequest | null>(null);
+  const [isDisplayVerificationModalOpen, setIsDisplayVerificationModalOpen] = useState(false);
+
+
   useEffect(() => { // Effect C: Listens to Firestore for active match config
     const unsubConfig = onSnapshot(doc(db, ACTIVE_TANDING_SCHEDULE_CONFIG_PATH), (docSnap) => {
       const newDbConfigId = docSnap.exists() ? docSnap.data()?.activeScheduleId : null;
-      setConfigMatchId(prevId => { // Use functional update
-        if (prevId === newDbConfigId) { // If new ID is same as current, no need to update state
+      setConfigMatchId(prevId => { 
+        if (prevId === newDbConfigId) { 
           return prevId;
         }
-        // console.log(`[Dewan-1] ConfigMatchId changing from ${prevId} to ${newDbConfigId}`);
-        return newDbConfigId; // Otherwise, update to the new ID (or null)
+        return newDbConfigId; 
       });
     }, (err) => {
       console.error(`[Dewan-1] Error fetching active schedule config from path '${ACTIVE_TANDING_SCHEDULE_CONFIG_PATH}':`, err);
       setError("Gagal memuat konfigurasi jadwal aktif.");
-      setConfigMatchId(null); // Ensure configMatchId is set to null on error
+      setConfigMatchId(null); 
     });
     return () => unsubConfig();
   }, []); 
@@ -117,7 +122,6 @@ export default function ScoringTandingDewanSatuPage() {
 
     const resetAllMatchData = (reason: string) => {
       if (!mounted) return;
-      // console.log(`[Dewan-1] Resetting all match data due to: ${reason}`);
       setMatchDetails(null);
       setMatchDetailsLoaded(false);
       setPesilatMerahInfo(null);
@@ -130,13 +134,14 @@ export default function ScoringTandingDewanSatuPage() {
       setPermanentlyStruckEntryKeys(new Set());
       setPrevSavedUnstruckKeys(new Set());
       setPrevSavedStruckKeys(new Set());
+      setActiveDisplayVerificationRequest(null);
+      setIsDisplayVerificationModalOpen(false);
       setError(null);
-      // DO NOT set isLoading here, let the main effects manage it.
     };
 
     if (configMatchId === undefined) {
       setIsLoading(true);
-      return () => { mounted = false; /* no unsubscribers yet */ };
+      return () => { mounted = false; };
     }
 
     if (configMatchId === null) {
@@ -144,22 +149,20 @@ export default function ScoringTandingDewanSatuPage() {
         resetAllMatchData("configMatchId became null");
         setActiveScheduleId(null);
       } else {
-         setIsLoading(false); // No active schedule, not loading
+         setIsLoading(false); 
          setError("Tidak ada jadwal pertandingan yang aktif.");
       }
       return () => { mounted = false; unsubscribers.forEach(unsub => unsub()); };
     }
 
-    // configMatchId is a string here
     if (configMatchId !== activeScheduleId) {
       resetAllMatchData(`configMatchId changed from ${activeScheduleId} to ${configMatchId}`);
       setActiveScheduleId(configMatchId);
-      // setIsLoading(true); // REMOVED: This was line 154. Redundant, will be set before loadData.
+      // setIsLoading(true); // Removed as per previous fix
       return () => { mounted = false; unsubscribers.forEach(unsub => unsub()); };
     }
 
-    // At this point, configMatchId is a string and activeScheduleId === configMatchId
-    setIsLoading(true); // Set loading true as we are about to load/check data for activeScheduleId
+    setIsLoading(true); 
     
     const loadData = async (currentMatchId: string) => {
       if (!mounted || !currentMatchId) return;
@@ -181,7 +184,7 @@ export default function ScoringTandingDewanSatuPage() {
           if (mounted) {
             setError(`Detail jadwal untuk ID ${currentMatchId} dari path '${SCHEDULE_TANDING_COLLECTION}/${currentMatchId}' tidak ditemukan.`);
             resetAllMatchData(`Schedule doc ${currentMatchId} not found`);
-            setMatchDetailsLoaded(false); // Ensure this is set
+            setMatchDetailsLoaded(false); 
           }
           return;
         }
@@ -264,30 +267,56 @@ export default function ScoringTandingDewanSatuPage() {
         });
         if (mounted) unsubscribers.push(unsubKetuaActions);
 
+        // Listener for verification display
+        const verificationQuery = query(
+          collection(db, MATCHES_TANDING_COLLECTION, currentMatchId, VERIFICATIONS_SUBCOLLECTION),
+          orderBy('timestamp', 'desc'),
+          limit(1)
+        );
+        const unsubVerificationDisplay = onSnapshot(verificationQuery, (snapshot) => {
+          if (!mounted) return;
+          if (!snapshot.empty) {
+            const latestVerification = { id: snapshot.docs[0].id, ...snapshot.docs[0].data() } as VerificationRequest;
+            if (latestVerification.status === 'pending') {
+              setActiveDisplayVerificationRequest(latestVerification);
+              setIsDisplayVerificationModalOpen(true);
+            } else {
+              setActiveDisplayVerificationRequest(null);
+              setIsDisplayVerificationModalOpen(false);
+            }
+          } else {
+            setActiveDisplayVerificationRequest(null);
+            setIsDisplayVerificationModalOpen(false);
+          }
+        }, (err) => {
+          if (mounted) {
+            console.error(`[Dewan-1] Error fetching verification for display:`, err);
+            setActiveDisplayVerificationRequest(null);
+            setIsDisplayVerificationModalOpen(false);
+          }
+        });
+        if (mounted) unsubscribers.push(unsubVerificationDisplay);
+
+
       } catch (err) {
         if (mounted) {
           console.error("[Dewan-1] Error in loadData function:", err);
           setError("Gagal memuat data pertandingan.");
-          // Ensure loading state is handled if loadData fails critically
-          // setMatchDetailsLoaded(false); // Already handled if scheduleDocSnap doesn't exist
-          // Consider setting setIsLoading(false) here if error is fatal for loading
         }
       }
     };
 
-    if (activeScheduleId) { // Guard: Only call loadData if activeScheduleId is truthy
+    if (activeScheduleId) { 
       loadData(activeScheduleId);
     } else {
-      // If activeScheduleId became null but configMatchId is not null (edge case, shouldn't happen with current logic)
-      // Or if we reach here because activeScheduleId was already null and configMatchId became null.
-      setIsLoading(false); // Not loading if there's no active schedule ID to load for.
+      setIsLoading(false); 
     }
     
     return () => {
       mounted = false;
       unsubscribers.forEach(unsub => unsub());
     };
-  }, [configMatchId, activeScheduleId]); // Removed isLoading from here
+  }, [configMatchId, activeScheduleId]); 
 
 
   useEffect(() => { // Effect B: Score calculation and final loading status
@@ -306,7 +335,6 @@ export default function ScoringTandingDewanSatuPage() {
         }
     }
     
-    // Only update isLoading if its value needs to change
     if (isLoading !== shouldBeLoading) {
         setIsLoading(shouldBeLoading);
     }
@@ -469,7 +497,7 @@ export default function ScoringTandingDewanSatuPage() {
           }).catch(err => console.error(`[Dewan-1] Error updating Firestore logs at path '${matchDocPath}':`, err));
       }
     }
-  }, [juri1Scores, juri2Scores, juri3Scores, activeScheduleId, matchDetailsLoaded, prevSavedUnstruckKeys, prevSavedStruckKeys, ketuaActionsLog, configMatchId, isLoading]); // isLoading removed from deps of Effect B
+  }, [juri1Scores, juri2Scores, juri3Scores, activeScheduleId, matchDetailsLoaded, prevSavedUnstruckKeys, prevSavedStruckKeys, ketuaActionsLog, configMatchId ]); 
 
 
   useEffect(() => {
@@ -818,6 +846,14 @@ export default function ScoringTandingDewanSatuPage() {
     return total;
   };
 
+  const getJuriVoteDisplayBoxClass = (vote: JuriVoteValue): string => {
+    if (vote === 'merah') return "bg-red-500 text-white";
+    if (vote === 'biru') return "bg-blue-500 text-white";
+    if (vote === 'invalid') return "bg-yellow-400 text-black";
+    return "bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600"; // Default for no vote
+  };
+
+
   if (isLoading && configMatchId === undefined) { 
     return (
         <div className="flex flex-col min-h-screen">
@@ -1028,7 +1064,43 @@ export default function ScoringTandingDewanSatuPage() {
                 })}
             </CardContent>
         </Card>
+
+        {/* Verification Display Modal */}
+        <Dialog open={isDisplayVerificationModalOpen} onOpenChange={setIsDisplayVerificationModalOpen}>
+          <DialogContent className="sm:max-w-md" onPointerDownOutside={(e) => e.preventDefault()} onEscapeKeyDown={(e) => e.preventDefault()}>
+            <DialogHeader>
+              <DialogTitle className="text-2xl font-bold font-headline text-center">Verifikasi Juri</DialogTitle>
+              {activeDisplayVerificationRequest && (
+                <DialogVerificationDescription className="text-center mt-2">
+                  <p className="text-lg font-semibold">
+                    {activeDisplayVerificationRequest.type === 'jatuhan' ? 'Verifikasi Jatuhan' : 'Verifikasi Pelanggaran'}
+                  </p>
+                  <p className="text-sm text-muted-foreground">Babak {activeDisplayVerificationRequest.round}</p>
+                </DialogVerificationDescription>
+              )}
+            </DialogHeader>
+            <div className="my-6 space-y-4">
+              <div className="grid grid-cols-3 gap-3 items-stretch justify-items-center text-center">
+                {JURI_IDS.map((juriKey, index) => (
+                  <div key={`vote-display-${juriKey}`} className="flex flex-col items-center space-y-2">
+                    <p className="text-lg font-semibold">J{index + 1}</p>
+                    <div className={cn("w-full h-16 rounded-md flex items-center justify-center text-sm font-medium p-2 shadow", 
+                                      getJuriVoteDisplayBoxClass(activeDisplayVerificationRequest?.votes[juriKey] || null))}>
+                      {activeDisplayVerificationRequest?.votes[juriKey] === 'merah' ? 'SUDUT MERAH' :
+                       activeDisplayVerificationRequest?.votes[juriKey] === 'biru' ? 'SUDUT BIRU' :
+                       activeDisplayVerificationRequest?.votes[juriKey] === 'invalid' ? 'INVALID' : 
+                       'Belum Vote'}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+            {/* This modal is display-only for Dewan, no footer/actions needed here */}
+          </DialogContent>
+        </Dialog>
+
       </main>
     </div>
   );
 }
+
