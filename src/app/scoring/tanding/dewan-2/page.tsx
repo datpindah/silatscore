@@ -159,9 +159,7 @@ export default function DewanDuaPage() {
             const data = docSnap.data();
             if (data?.timer_status) setTimerStatus(data.timer_status as TimerStatus);
             // For overall scores, we need to implement the full calculation logic or read from a confirmed field
-            // For simplicity now, let's assume Dewan 1's confirmed scores are not directly readable here or complex to recalculate.
             // This part can be enhanced later. For now, the top scores will be 0 or need a dedicated source.
-            // Let's placeholder them and focus on the table scores.
             // A more robust solution would be to have Dewan 1 write confirmed scores to the matchDoc.
           } else {
             setTimerStatus(initialTimerStatus);
@@ -234,9 +232,9 @@ export default function DewanDuaPage() {
     return "?";
   };
 
-  const ScoreCell = ({ value, isLoading }: { value: number | string | null, isLoading?: boolean }) => (
+  const ScoreCell = ({ value, isLoadingValue }: { value: number | string | null, isLoadingValue?: boolean }) => (
     <td className="border border-black text-center p-1 md:p-2 h-10 md:h-12">
-      {isLoading ? <Skeleton className="h-5 w-8 mx-auto bg-gray-400" /> : value}
+      {isLoadingValue ? <Skeleton className="h-5 w-8 mx-auto bg-gray-400" /> : value}
     </td>
   );
 
@@ -257,27 +255,27 @@ export default function DewanDuaPage() {
       <>
         <tr>
           <LabelCell>Juri 1</LabelCell>
-          <ScoreCell value={j1Score} isLoading={isLoading} />
+          <ScoreCell value={j1Score} isLoadingValue={isLoading} />
         </tr>
         <tr>
           <LabelCell>Juri 2</LabelCell>
-          <ScoreCell value={j2Score} isLoading={isLoading} />
+          <ScoreCell value={j2Score} isLoadingValue={isLoading} />
         </tr>
         <tr>
           <LabelCell>Juri 3</LabelCell>
-          <ScoreCell value={j3Score} isLoading={isLoading} />
+          <ScoreCell value={j3Score} isLoadingValue={isLoading} />
         </tr>
         <tr>
           <LabelCell><span className="font-semibold">Total Nilai Juri</span></LabelCell>
-          <ScoreCell value={totalNilaiJuri} isLoading={isLoading} />
+          <ScoreCell value={totalNilaiJuri} isLoadingValue={isLoading} />
         </tr>
         <tr>
           <LabelCell>Jatuhan</LabelCell>
-          <ScoreCell value={jatuhan} isLoading={isLoading} />
+          <ScoreCell value={jatuhan} isLoadingValue={isLoading} />
         </tr>
         <tr>
           <LabelCell>Hukuman</LabelCell>
-          <ScoreCell value={hukuman} isLoading={isLoading} />
+          <ScoreCell value={hukuman} isLoadingValue={isLoading} />
         </tr>
       </>
     );
@@ -304,9 +302,9 @@ export default function DewanDuaPage() {
             <h1 className="text-xl md:text-3xl font-bold uppercase">
               {matchDetails?.class || (isLoading ? <Skeleton className="h-8 w-48 inline-block bg-blue-500" /> : "Detail Pertandingan")}
             </h1>
-            <p className="text-sm md:text-lg">
+            <div className="text-sm md:text-lg">
               {matchDetails?.round || (isLoading ? <Skeleton className="h-5 w-32 inline-block mt-1 bg-blue-500" /> : "Babak")}
-            </p>
+            </div>
           </div>
           <PlaceholderLogo className="bg-blue-500" />
         </div>
@@ -323,8 +321,8 @@ export default function DewanDuaPage() {
               </>
             ) : (
               <>
-                <p className="text-sm md:text-base font-semibold text-red-600">KONTINGEN {pesilatMerahInfo?.contingent.toUpperCase()}</p>
-                <p className="text-lg md:text-2xl font-bold text-red-600">{pesilatMerahInfo?.name.toUpperCase()}</p>
+                <div className="text-sm md:text-base font-semibold text-red-600">KONTINGEN {pesilatMerahInfo?.contingent.toUpperCase()}</div>
+                <div className="text-lg md:text-2xl font-bold text-red-600">{pesilatMerahInfo?.name.toUpperCase()}</div>
               </>
             )}
             <p className="text-3xl md:text-5xl font-bold text-red-600 mt-1">{confirmedScoreMerah}</p>
@@ -342,8 +340,8 @@ export default function DewanDuaPage() {
               </>
             ) : (
               <>
-                <p className="text-sm md:text-base font-semibold text-blue-600">KONTINGEN {pesilatBiruInfo?.contingent.toUpperCase()}</p>
-                <p className="text-lg md:text-2xl font-bold text-blue-600">{pesilatBiruInfo?.name.toUpperCase()}</p>
+                <div className="text-sm md:text-base font-semibold text-blue-600">KONTINGEN {pesilatBiruInfo?.contingent.toUpperCase()}</div>
+                <div className="text-lg md:text-2xl font-bold text-blue-600">{pesilatBiruInfo?.name.toUpperCase()}</div>
               </>
             )}
             <p className="text-3xl md:text-5xl font-bold text-blue-600 mt-1">{confirmedScoreBiru}</p>
@@ -405,4 +403,3 @@ export default function DewanDuaPage() {
     </div>
   );
 }
-
