@@ -367,11 +367,13 @@ export default function MonitoringSkorPage() {
             <DialogHeader>
               <DialogTitle className="text-3xl font-bold font-headline text-center text-accent">Verifikasi Juri</DialogTitle>
               {activeDisplayVerificationRequest && (
-                <DialogVerificationDescription className="text-center mt-2">
-                  <div className="text-xl font-semibold text-gray-200">
-                    {activeDisplayVerificationRequest.type === 'jatuhan' ? 'Verifikasi Jatuhan' : 'Verifikasi Pelanggaran'}
+                <DialogVerificationDescription className="text-center mt-2" asChild>
+                  <div>
+                    <div className="text-lg font-semibold text-gray-200">
+                      {activeDisplayVerificationRequest.type === 'jatuhan' ? 'Verifikasi Jatuhan' : 'Verifikasi Pelanggaran'}
+                    </div>
+                    <div className="text-md text-gray-400">Babak {activeDisplayVerificationRequest.round}</div>
                   </div>
-                  <div className="text-md text-gray-400">Babak {activeDisplayVerificationRequest.round}</div>
                 </DialogVerificationDescription>
               )}
             </DialogHeader>
