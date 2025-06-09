@@ -213,17 +213,13 @@ export default function MonitoringSkorPage() {
 
     loadData(activeScheduleId);
     return () => { mounted = false; unsubscribers.forEach(unsub => unsub()); };
-  }, [activeScheduleId, matchDetailsLoaded]); // Removed isLoading from here as it's managed inside
+  }, [activeScheduleId, matchDetailsLoaded]);
 
   useEffect(() => {
-    if (activeScheduleId && !matchDetailsLoaded && !error?.includes("Detail jadwal ID")) {
-        setIsLoading(true);
-    } else if (activeScheduleId && matchDetailsLoaded) {
-        setIsLoading(false);
-    } else if (!activeScheduleId) {
+    if (isLoading && (matchDetailsLoaded || activeScheduleId === null)) {
         setIsLoading(false);
     }
-  }, [activeScheduleId, matchDetailsLoaded, error, activeDisplayVerificationRequest]);
+  }, [isLoading, matchDetailsLoaded, activeScheduleId]);
 
 
   useEffect(() => {
@@ -300,10 +296,10 @@ export default function MonitoringSkorPage() {
 
   const FoulBox = ({ label, isActive }: { label: string; isActive: boolean }) => (
     <div className={cn(
-      "w-full h-full flex items-center justify-center rounded-sm border border-gray-400 dark:border-gray-500 text-[9px] md:text-[10px] font-medium leading-tight",
+      "w-full h-full flex items-center justify-center rounded-sm border text-[9px] md:text-[10px] font-medium leading-tight",
       isActive 
-        ? "bg-yellow-400 text-black" 
-        : "bg-gray-200 dark:bg-gray-600 text-gray-700 dark:text-gray-200"
+        ? "bg-yellow-400 text-black border-yellow-500" 
+        : "bg-gray-200 dark:bg-gray-600 text-gray-700 dark:text-gray-200 border-gray-400 dark:border-gray-500"
     )}>
       {label}
     </div>
@@ -365,7 +361,7 @@ export default function MonitoringSkorPage() {
             <div className="text-xs md:text-base text-blue-400">{pesilatBiruInfo?.contingent || <Skeleton className="h-4 w-24 bg-gray-600 mt-1" />}</div>
           </div>
           
-          <div className="flex w-full items-stretch gap-1 md:gap-2 mb-1 md:mb-2 h-36 md:h-44">
+          <div className="flex w-full items-stretch gap-1 md:gap-2 mb-1 md:mb-2 h-40 md:h-52">
             <div className="flex flex-col gap-1 p-0.5 w-20 md:w-28 h-full">
                 <div className="grid grid-cols-2 gap-1 flex-1">
                     <FoulBox label="B1" isActive={getFoulStatus('biru', 'Binaan', 1)} />
@@ -397,8 +393,8 @@ export default function MonitoringSkorPage() {
         </div>
 
         {/* Central Column: Timer, Babak Indicators, Match Status */}
-        <div className="flex flex-col items-center justify-center space-y-2 md:space-y-3 px-1 md:px-2">
-          <div className="text-4xl md:text-6xl font-mono font-bold text-white">
+        <div className="flex flex-col items-center justify-start space-y-2 md:space-y-3 px-1 md:px-2 pt-2 md:pt-4">
+           <div className="text-4xl md:text-6xl font-mono font-bold text-white mb-2 md:mb-4">
             {formatTime(timerStatus.timerSeconds)}
           </div>
           <div className="space-y-1 md:space-y-2 w-full max-w-[120px] md:max-w-[180px]">
@@ -412,7 +408,7 @@ export default function MonitoringSkorPage() {
                     : "bg-gray-600 text-gray-200 border-gray-500"
                 )}
               >
-                Babak {b}
+                {b === 1 ? 'I' : b === 2 ? 'II' : 'III'}
               </div>
             ))}
           </div>
@@ -428,7 +424,7 @@ export default function MonitoringSkorPage() {
             <div className="text-xs md:text-base text-red-400">{pesilatMerahInfo?.contingent || <Skeleton className="h-4 w-24 bg-gray-600 mt-1" />}</div>
           </div>
 
-          <div className="flex w-full items-stretch gap-1 md:gap-2 mb-1 md:mb-2 h-36 md:h-44">
+          <div className="flex w-full items-stretch gap-1 md:gap-2 mb-1 md:mb-2 h-40 md:h-52">
             <div className="flex-grow h-full bg-red-600 flex items-center justify-center text-5xl md:text-8xl font-bold rounded-md">
                 {confirmedScoreMerah}
             </div>
@@ -525,3 +521,4 @@ export default function MonitoringSkorPage() {
     </div>
   );
 }
+
