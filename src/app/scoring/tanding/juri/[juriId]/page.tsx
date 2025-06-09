@@ -1,4 +1,3 @@
-
 "use client";
 
 import { use, useState, useEffect, useCallback } from 'react';
@@ -28,7 +27,7 @@ interface PesilatInfo {
 
 interface ScoreEntry {
   points: 1 | 2;
-  timestamp: Timestamp;
+  timestamp: Timestamp; // Remains Timestamp for type consistency after Firestore read
 }
 
 interface RoundScores {
@@ -40,7 +39,7 @@ interface RoundScores {
 interface JuriMatchData {
   merah: RoundScores;
   biru: RoundScores;
-  lastUpdated?: Timestamp;
+  lastUpdated?: Timestamp; // Remains Timestamp for type consistency after Firestore read
 }
 
 interface TimerStatusFromDewan {
@@ -114,7 +113,7 @@ export default function JuriDynamicPage({ params: paramsPromise }: { params: Pro
       setConfigMatchId(null);
     });
     return () => unsubConfig();
-  }, []); // configMatchId removed to prevent loop, listener set once
+  }, [configMatchId, juriId]); 
 
   useEffect(() => {
     if (configMatchId === undefined) {
@@ -244,13 +243,8 @@ export default function JuriDynamicPage({ params: paramsPromise }: { params: Pro
           setActiveVerification(verificationData);
           setIsVerificationModalOpen(true);
         } else {
-          // Juri sudah vote untuk verifikasi ini, atau verifikasi ini bukan yang terbaru
-          // Jika ada verifikasi lain yang aktif dan juri belum vote, listener akan menangkapnya.
-          // Jika tidak, pastikan modal tertutup.
            if (activeVerification && activeVerification.id === verificationData.id) {
-             // No change if it's the same one they already voted on / or not for them
            } else {
-             // If there was an older modal open for a different verification, close it.
              setActiveVerification(null);
              setIsVerificationModalOpen(false);
            }
@@ -276,23 +270,18 @@ export default function JuriDynamicPage({ params: paramsPromise }: { params: Pro
       if (unsubJuriScores) unsubJuriScores();
       if (unsubVerifications) unsubVerifications();
     };
-  }, [activeMatchId, juriId]); // isLoading removed from dependencies
+  }, [activeMatchId, juriId, resetAllMatchData]); 
 
   const saveScoresToFirestore = useCallback(async (newScoresData: JuriMatchData) => {
     if (!activeMatchId || !juriId) return;
     const juriScoreDocRef = doc(db, MATCHES_TANDING_COLLECTION, activeMatchId, 'juri_scores', juriId);
     try {
-      const sanitizeScores = (roundScores: RoundScores): RoundScores => ({
-        round1: roundScores.round1.filter(e => e.timestamp instanceof Timestamp),
-        round2: roundScores.round2.filter(e => e.timestamp instanceof Timestamp),
-        round3: roundScores.round3.filter(e => e.timestamp instanceof Timestamp),
-      });
-      const sanitizedDataToSave: JuriMatchData = {
-        merah: sanitizeScores(newScoresData.merah),
-        biru: sanitizeScores(newScoresData.biru),
-        lastUpdated: Timestamp.now(),
+      // Data is already structured by handleScore, directly save it with serverTimestamp for lastUpdated
+      const dataToSave: JuriMatchData = {
+        ...newScoresData,
+        lastUpdated: serverTimestamp() as any, // Firestore will convert this sentinel
       };
-      await setDoc(juriScoreDocRef, sanitizedDataToSave, { merge: true });
+      await setDoc(juriScoreDocRef, dataToSave, { merge: true });
     } catch (error) {
       console.error(`[Juri ${juriId}] Error saving scores:`, error);
       setError("Gagal menyimpan skor ke server.");
@@ -303,13 +292,16 @@ export default function JuriDynamicPage({ params: paramsPromise }: { params: Pro
     if (isInputDisabled) return;
     setScoresData(prevScores => {
       const roundKey = `round${dewanControlledRound}` as keyof RoundScores;
-      const newEntry: ScoreEntry = { points: pointsValue, timestamp: Timestamp.now() };
+      const newEntry: ScoreEntry = { 
+        points: pointsValue, 
+        timestamp: serverTimestamp() as any, // Use serverTimestamp sentinel
+      };
       const updatedColorScoresForRound = [...(prevScores[pesilatColor]?.[roundKey] || []), newEntry];
       const newScoresData: JuriMatchData = {
         ...prevScores,
         [pesilatColor]: { ...prevScores[pesilatColor], [roundKey]: updatedColorScoresForRound },
       };
-      saveScoresToFirestore(newScoresData);
+      saveScoresToFirestore(newScoresData); // Save data with the serverTimestamp sentinel
       return newScoresData;
     });
   };
@@ -335,10 +327,9 @@ export default function JuriDynamicPage({ params: paramsPromise }: { params: Pro
       const verificationDocRef = doc(db, MATCHES_TANDING_COLLECTION, activeVerification.matchId, VERIFICATIONS_SUBCOLLECTION, activeVerification.id);
       await updateDoc(verificationDocRef, {
         [`votes.${juriId}`]: vote,
-        // Optionally, update a 'lastVotedTimestamp' or similar for the juri
       });
       setIsVerificationModalOpen(false);
-      setActiveVerification(null); // Clear active verification after voting
+      setActiveVerification(null); 
     } catch (err) {
       console.error(`[Juri ${juriId}] Error submitting vote:`, err);
       setError(err instanceof Error ? `Gagal mengirim vote: ${err.message}` : "Gagal mengirim vote.");
@@ -352,14 +343,23 @@ export default function JuriDynamicPage({ params: paramsPromise }: { params: Pro
     if (!roundData || roundData.length === 0) return '-';
     return roundData.map((entry, index) => {
       let entryTimestampMillis: number;
-      if (entry.timestamp && typeof entry.timestamp.toMillis === 'function') {
-        entryTimestampMillis = entry.timestamp.toMillis();
-      } else { return <span key={`${juriId}-roundEntry-${index}-invalid`} className="mr-1.5 text-red-500">Inv!</span>; }
+      // Check if timestamp is a Firestore Timestamp and has toMillis method
+      if (entry.timestamp && typeof (entry.timestamp as unknown as Timestamp).toMillis === 'function') {
+        entryTimestampMillis = (entry.timestamp as unknown as Timestamp).toMillis();
+      } else { 
+        // If it's a serverTimestamp() sentinel or other invalid format, display as 'Inv!'
+        // This handles the case where the score is newly added locally and not yet confirmed by Firestore
+        return <span key={`${juriId}-roundEntry-${index}-pending`} className="mr-1.5 text-yellow-500 italic">Baru!</span>;
+      }
+
       const entryKey = `${juriId}_${entryTimestampMillis}_${entry.points}`;
       const isUnstruckByDewan = confirmedUnstruckKeysFromDewan.has(entryKey);
       const isPermanentlyStruckByDewan = confirmedStruckKeysFromDewan.has(entryKey);
-      const isNewLocalEntryInGrace = !isUnstruckByDewan && !isPermanentlyStruckByDewan && (Date.now() - entryTimestampMillis <= JURI_VISUAL_GRACE_PERIOD_MS);
-      const shouldDisplayAsStruck = isPermanentlyStruckByDewan || (!isUnstruckByDewan && !isNewLocalEntryInGrace);
+      
+      // Only apply struck-through if Dewan has marked it so, or if it's not unstruck AND past grace period (on Dewan's side logic)
+      // Juri panel primarily reflects Dewan's decision on struck/unstruck.
+      const shouldDisplayAsStruck = isPermanentlyStruckByDewan; 
+
       return (
         <span key={`${juriId}-roundEntry-${index}-${entryTimestampMillis}`} className={cn(shouldDisplayAsStruck && "line-through text-gray-400 dark:text-gray-600 opacity-70", "mr-1.5")}>
           {entry.points}
@@ -501,8 +501,7 @@ export default function JuriDynamicPage({ params: paramsPromise }: { params: Pro
         </div>
         {error && (<Card className="mt-6 bg-destructive/10 border-destructive"><CardContent className="p-4 text-center text-destructive-foreground"><p className="font-semibold">Terjadi Kesalahan:</p><p>{error}</p></CardContent></Card>)}
 
-        {/* Verification Modal */}
-        <Dialog open={isVerificationModalOpen && activeVerification !== null && activeVerification.votes[juriId as keyof VerificationRequest['votes']] === null} onOpenChange={(open) => { if(!open && activeVerification) { /* Juri menutup manual, mungkin kita ingin mencatat ini atau tidak melakukan apa-apa */ setIsVerificationModalOpen(false); /* setActiveVerification(null); // Bisa jadi juri ingin buka lagi jika tak sengaja tutup */ } else { setIsVerificationModalOpen(open); }}}>
+        <Dialog open={isVerificationModalOpen && activeVerification !== null && activeVerification.votes[juriId as keyof VerificationRequest['votes']] === null} onOpenChange={(open) => { if(!open && activeVerification) { setIsVerificationModalOpen(false); } else { setIsVerificationModalOpen(open); }}}>
           <DialogContent className="sm:max-w-md" onPointerDownOutside={(e) => e.preventDefault()} onEscapeKeyDown={(e) => e.preventDefault()}>
             <DialogTitle className="sr-only">Verifikasi Keputusan Juri</DialogTitle>
             <DialogHeader className="text-center">
@@ -547,4 +546,3 @@ export default function JuriDynamicPage({ params: paramsPromise }: { params: Pro
     </div>
   );
 }
-
