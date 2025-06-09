@@ -100,6 +100,7 @@ export default function ScoringTandingDewanSatuPage() {
         if (prevId === newDbConfigId) { // If new ID is same as current, no need to update state
           return prevId;
         }
+        // console.log(`[Dewan-1] ConfigMatchId changing from ${prevId} to ${newDbConfigId}`);
         return newDbConfigId; // Otherwise, update to the new ID (or null)
       });
     }, (err) => {
@@ -116,6 +117,7 @@ export default function ScoringTandingDewanSatuPage() {
 
     const resetAllMatchData = (reason: string) => {
       if (!mounted) return;
+      // console.log(`[Dewan-1] Resetting all match data due to: ${reason}`);
       setMatchDetails(null);
       setMatchDetailsLoaded(false);
       setPesilatMerahInfo(null);
@@ -129,6 +131,7 @@ export default function ScoringTandingDewanSatuPage() {
       setPrevSavedUnstruckKeys(new Set());
       setPrevSavedStruckKeys(new Set());
       setError(null);
+      // DO NOT set isLoading here, let the main effects manage it.
     };
 
     if (configMatchId === undefined) {
@@ -141,7 +144,7 @@ export default function ScoringTandingDewanSatuPage() {
         resetAllMatchData("configMatchId became null");
         setActiveScheduleId(null);
       } else {
-         setIsLoading(false);
+         setIsLoading(false); // No active schedule, not loading
          setError("Tidak ada jadwal pertandingan yang aktif.");
       }
       return () => { mounted = false; unsubscribers.forEach(unsub => unsub()); };
@@ -151,13 +154,13 @@ export default function ScoringTandingDewanSatuPage() {
     if (configMatchId !== activeScheduleId) {
       resetAllMatchData(`configMatchId changed from ${activeScheduleId} to ${configMatchId}`);
       setActiveScheduleId(configMatchId);
-      setIsLoading(true); 
+      // setIsLoading(true); // REMOVED: This was line 154. Redundant, will be set before loadData.
       return () => { mounted = false; unsubscribers.forEach(unsub => unsub()); };
     }
 
-    // configMatchId is a string AND configMatchId === activeScheduleId
-    setIsLoading(true);
-
+    // At this point, configMatchId is a string and activeScheduleId === configMatchId
+    setIsLoading(true); // Set loading true as we are about to load/check data for activeScheduleId
+    
     const loadData = async (currentMatchId: string) => {
       if (!mounted || !currentMatchId) return;
 
@@ -166,7 +169,7 @@ export default function ScoringTandingDewanSatuPage() {
         const scheduleDocSnap = await getDoc(scheduleDocRef);
 
         if (!mounted) return;
-        if (scheduleDocSnap.exists()) { // Line 171
+        if (scheduleDocSnap.exists()) { 
           const data = scheduleDocSnap.data() as ScheduleTanding;
           if (mounted) {
             setMatchDetails(data);
@@ -178,7 +181,7 @@ export default function ScoringTandingDewanSatuPage() {
           if (mounted) {
             setError(`Detail jadwal untuk ID ${currentMatchId} dari path '${SCHEDULE_TANDING_COLLECTION}/${currentMatchId}' tidak ditemukan.`);
             resetAllMatchData(`Schedule doc ${currentMatchId} not found`);
-            setMatchDetailsLoaded(false);
+            setMatchDetailsLoaded(false); // Ensure this is set
           }
           return;
         }
@@ -195,9 +198,9 @@ export default function ScoringTandingDewanSatuPage() {
             const firestoreStruckKeys = new Set(data?.confirmed_struck_keys_log as string[] || []);
             if (mounted) {
               setPrevSavedUnstruckKeys(firestoreUnstruckKeys);
-              setAllContributingEntryKeys(firestoreUnstruckKeys); // Initialize with saved unstruck keys
+              setAllContributingEntryKeys(firestoreUnstruckKeys); 
               setPrevSavedStruckKeys(firestoreStruckKeys);
-              setPermanentlyStruckKeys(firestoreStruckKeys); // Initialize with saved struck keys
+              setPermanentlyStruckEntryKeys(firestoreStruckKeys); 
             }
           } else {
             if (mounted) {
@@ -208,11 +211,13 @@ export default function ScoringTandingDewanSatuPage() {
               };
               try {
                 await setDoc(matchDocRef, initialDataForMatch, { merge: true });
-                setTimerStatus(initialTimerStatus);
-                setPrevSavedUnstruckKeys(new Set());
-                setAllContributingEntryKeys(new Set());
-                setPrevSavedStruckKeys(new Set());
-                setPermanentlyStruckKeys(new Set());
+                if (mounted) {
+                    setTimerStatus(initialTimerStatus);
+                    setPrevSavedUnstruckKeys(new Set());
+                    setAllContributingEntryKeys(new Set());
+                    setPrevSavedStruckKeys(new Set());
+                    setPermanentlyStruckEntryKeys(new Set());
+                }
               } catch (setErr) {
                 console.error(`[Dewan-1] Error setting initial match data at path '${MATCHES_TANDING_COLLECTION}/${currentMatchId}':`, setErr);
               }
@@ -263,51 +268,57 @@ export default function ScoringTandingDewanSatuPage() {
         if (mounted) {
           console.error("[Dewan-1] Error in loadData function:", err);
           setError("Gagal memuat data pertandingan.");
+          // Ensure loading state is handled if loadData fails critically
+          // setMatchDetailsLoaded(false); // Already handled if scheduleDocSnap doesn't exist
+          // Consider setting setIsLoading(false) here if error is fatal for loading
         }
       }
     };
 
-    if (activeScheduleId) {
+    if (activeScheduleId) { // Guard: Only call loadData if activeScheduleId is truthy
       loadData(activeScheduleId);
+    } else {
+      // If activeScheduleId became null but configMatchId is not null (edge case, shouldn't happen with current logic)
+      // Or if we reach here because activeScheduleId was already null and configMatchId became null.
+      setIsLoading(false); // Not loading if there's no active schedule ID to load for.
     }
     
     return () => {
       mounted = false;
       unsubscribers.forEach(unsub => unsub());
     };
-  }, [configMatchId, activeScheduleId]); 
+  }, [configMatchId, activeScheduleId]); // Removed isLoading from here
 
 
   useEffect(() => { // Effect B: Score calculation and final loading status
     let shouldBeLoading = false;
-    if (configMatchId === undefined) { // Still waiting for initial config
+    if (configMatchId === undefined) { 
         shouldBeLoading = true;
-    } else if (configMatchId === null) { // Config loaded, no active match
+    } else if (configMatchId === null) { 
         shouldBeLoading = false;
-    } else { // configMatchId is a string (active match ID is set)
-        if (!activeScheduleId || activeScheduleId !== configMatchId) { // Waiting for activeScheduleId to sync with configMatchId
+    } else { 
+        if (!activeScheduleId || activeScheduleId !== configMatchId) { 
             shouldBeLoading = true;
         } else if (!matchDetailsLoaded || juri1Scores === undefined || juri2Scores === undefined || juri3Scores === undefined) {
-            // Data for the active match is still loading
             shouldBeLoading = true;
-        } else { // All essential data for the active match is loaded
+        } else { 
             shouldBeLoading = false;
         }
     }
     
+    // Only update isLoading if its value needs to change
     if (isLoading !== shouldBeLoading) {
         setIsLoading(shouldBeLoading);
     }
 
-    if (shouldBeLoading) return; // Don't proceed to score calculation if still loading
+
+    if (shouldBeLoading) return; 
 
 
     const allJuriDataInput = [juri1Scores, juri2Scores, juri3Scores].filter(Boolean) as JuriMatchDataWithId[];
     if (allJuriDataInput.length === 0 && prevSavedUnstruckKeys.size === 0 && prevSavedStruckKeys.size === 0 && ketuaActionsLog.length === 0 && activeScheduleId) {
         setConfirmedScoreBiru(0);
         setConfirmedScoreMerah(0);
-        // If activeScheduleId exists but all scores are zero and logs empty, it means it's a fresh/reset match, not loading.
-        // This check for activeScheduleId prevents setting loading to false too early if there's simply no active match.
         return;
     }
     
@@ -458,33 +469,32 @@ export default function ScoringTandingDewanSatuPage() {
           }).catch(err => console.error(`[Dewan-1] Error updating Firestore logs at path '${matchDocPath}':`, err));
       }
     }
-  }, [juri1Scores, juri2Scores, juri3Scores, activeScheduleId, matchDetailsLoaded, prevSavedUnstruckKeys, prevSavedStruckKeys, ketuaActionsLog, configMatchId, isLoading]); 
+  }, [juri1Scores, juri2Scores, juri3Scores, activeScheduleId, matchDetailsLoaded, prevSavedUnstruckKeys, prevSavedStruckKeys, ketuaActionsLog, configMatchId, isLoading]); // isLoading removed from deps of Effect B
 
 
   useEffect(() => {
     let interval: NodeJS.Timeout | null = null;
     if (timerStatus.isTimerRunning && timerStatus.timerSeconds > 0 && activeScheduleId) {
       interval = setInterval(async () => {
-        if (activeScheduleId) { // Check activeScheduleId again inside interval, as it might change
+        if (activeScheduleId) { 
             try {
                 const matchDocPath = `${MATCHES_TANDING_COLLECTION}/${activeScheduleId}`;
                 const matchDocRef = doc(db, MATCHES_TANDING_COLLECTION, activeScheduleId);
                 const currentDBDoc = await getDoc(matchDocRef);
 
-                if (!currentDBDoc.exists()) { // Document might have been deleted
+                if (!currentDBDoc.exists()) { 
                     if(interval) clearInterval(interval);
-                    setTimerStatus(prev => ({ ...prev, isTimerRunning: false })); // Stop local timer if doc is gone
+                    setTimerStatus(prev => ({ ...prev, isTimerRunning: false })); 
                     return;
                 }
 
                 const currentDBTimerStatus = currentDBDoc.data()?.timer_status as TimerStatus | undefined;
 
-                // Stop if dewan is no longer running the timer or if local state is out of sync
                 if (!currentDBTimerStatus || !currentDBTimerStatus.isTimerRunning) {
                     setTimerStatus(prev => ({
                         ...prev,
                         isTimerRunning: false,
-                        ...(currentDBTimerStatus && { // Sync with DB if it exists
+                        ...(currentDBTimerStatus && { 
                             timerSeconds: currentDBTimerStatus.timerSeconds,
                             matchStatus: currentDBTimerStatus.matchStatus,
                             currentRound: currentDBTimerStatus.currentRound
@@ -493,7 +503,6 @@ export default function ScoringTandingDewanSatuPage() {
                     if(interval) clearInterval(interval);
                     return;
                 }
-                 // Additional check: if the local component timer is not supposed to be running, clear interval.
                  if (!timerStatus.isTimerRunning) { 
                     if (interval) clearInterval(interval);
                     return;
@@ -505,7 +514,7 @@ export default function ScoringTandingDewanSatuPage() {
                 let newIsTimerRunning = currentDBTimerStatus.isTimerRunning;
 
                 if (newSeconds === 0) {
-                    newIsTimerRunning = false; // Timer stops when it hits 0
+                    newIsTimerRunning = false; 
                     newMatchStatus = `FinishedRound${currentDBTimerStatus.currentRound}` as TimerMatchStatus;
                     if (currentDBTimerStatus.currentRound === TOTAL_ROUNDS) {
                         newMatchStatus = 'MatchFinished';
@@ -520,20 +529,19 @@ export default function ScoringTandingDewanSatuPage() {
                 };
 
                 await setDoc(matchDocRef, { timer_status: updatedStatusForFirestore }, { merge: true });
-                // Local state timerStatus will be updated by the onSnapshot listener for matchDocRef
             } catch (e) {
                 console.error(`[Dewan-1] Error updating timer in interval for path '${MATCHES_TANDING_COLLECTION}/${activeScheduleId}': `, e);
-                 if(interval) clearInterval(interval); // Stop on error
-                 setTimerStatus(prev => ({ ...prev, isTimerRunning: false })); // Ensure local timer stops
+                 if(interval) clearInterval(interval); 
+                 setTimerStatus(prev => ({ ...prev, isTimerRunning: false })); 
             }
         } else {
-             if(interval) clearInterval(interval); // activeScheduleId became null, stop.
+             if(interval) clearInterval(interval); 
         }
       }, 1000);
-    } else if (!timerStatus.isTimerRunning || timerStatus.timerSeconds === 0) { // Ensure interval is cleared if not running or time is up
+    } else if (!timerStatus.isTimerRunning || timerStatus.timerSeconds === 0) { 
         if(interval) clearInterval(interval);
     }
-    return () => { // Cleanup function
+    return () => { 
       if (interval) clearInterval(interval);
     };
   }, [timerStatus.isTimerRunning, timerStatus.timerSeconds, activeScheduleId]);
@@ -545,30 +553,27 @@ export default function ScoringTandingDewanSatuPage() {
     try {
       const matchDocRef = doc(db, MATCHES_TANDING_COLLECTION, activeScheduleId);
       const docSnap = await getDoc(matchDocRef);
-      // Use current Firestore state as base if available, otherwise use local state
       const currentDBTimerStatus = docSnap.exists() && docSnap.data()?.timer_status
                                    ? docSnap.data()?.timer_status as TimerStatus
-                                   : timerStatus; // Fallback to local timerStatus if doc doesn't exist or has no timer_status
+                                   : timerStatus; 
 
       const newFullStatus: TimerStatus = { 
-        ...currentDBTimerStatus, // Base on DB or local if DB not available
+        ...currentDBTimerStatus, 
         ...newStatusUpdates,
-        roundDuration: currentDBTimerStatus.roundDuration || ROUND_DURATION_SECONDS // Ensure roundDuration is preserved or defaulted
+        roundDuration: currentDBTimerStatus.roundDuration || ROUND_DURATION_SECONDS 
       };
       await setDoc(matchDocRef, { timer_status: newFullStatus }, { merge: true });
-      // Local state (timerStatus) will be updated by the onSnapshot listener
     } catch (e) {
       console.error(`[Dewan-1] Error updating timer status in Firestore at path '${matchDocPath}':`, e);
       setError("Gagal memperbarui status timer di server.");
     }
-  }, [activeScheduleId, timerStatus]); // timerStatus is a dep because it's used as fallback
+  }, [activeScheduleId, timerStatus]); 
 
   const handleTimerControl = (action: 'start' | 'pause') => {
     if (!activeScheduleId || !timerStatus || timerStatus.matchStatus === 'MatchFinished' || isLoading) return;
 
     if (action === 'start') {
       if (timerStatus.timerSeconds > 0 && !timerStatus.isTimerRunning) {
-         // Ensure we are not in a "PausedForVerification" state before starting
          if (timerStatus.matchStatus.startsWith('PausedForVerificationRound')) {
             alert("Verifikasi sedang berlangsung. Timer tidak bisa dimulai.");
             return;
@@ -591,7 +596,6 @@ export default function ScoringTandingDewanSatuPage() {
   const handleSetBabak = (round: 1 | 2 | 3) => {
     if (!activeScheduleId || !timerStatus || timerStatus.matchStatus === 'MatchFinished' || isLoading) return;
 
-    // Prevent changing round if current round is running or paused for verification
     if (timerStatus.isTimerRunning && timerStatus.currentRound === round) {
         alert("Babak sedang berjalan. Jeda dulu untuk pindah babak atau reset.");
         return;
@@ -605,35 +609,28 @@ export default function ScoringTandingDewanSatuPage() {
     let newMatchStatus: TimerMatchStatus = 'Pending';
     let newTimerSeconds = ROUND_DURATION_SECONDS;
 
-    // If the match is already finished, and we are trying to set a round
     if (timerStatus.matchStatus === 'MatchFinished' && round <= TOTAL_ROUNDS) {
-        newMatchStatus = `FinishedRound${round}` as TimerMatchStatus; // Reflect it as finished for that round
-        newTimerSeconds = 0; // Time should be 0 for a finished round
+        newMatchStatus = `FinishedRound${round}` as TimerMatchStatus; 
+        newTimerSeconds = 0; 
     } 
-    // If the current status is 'FinishedRoundX'
     else if (timerStatus.matchStatus.startsWith('FinishedRound')) {
         const finishedRoundNumber = parseInt(timerStatus.matchStatus.replace('FinishedRound', ''));
-        if (round <= finishedRoundNumber) { // Setting to a round that is already marked as finished or an earlier one
+        if (round <= finishedRoundNumber) { 
              newMatchStatus = `FinishedRound${round}` as TimerMatchStatus;
              newTimerSeconds = 0;
-        } else { // Setting to a future round after a previous one was finished
-            newMatchStatus = 'Pending'; // New round, should be pending
+        } else { 
+            newMatchStatus = 'Pending'; 
             newTimerSeconds = ROUND_DURATION_SECONDS;
         }
     }
-    // If it's paused (not for verification), and we're setting a new round
-    // or resetting the current round
     else if (timerStatus.matchStatus.startsWith('PausedRound')) {
-        // If setting to a different round, or the same round, reset to pending
         newMatchStatus = 'Pending';
         newTimerSeconds = ROUND_DURATION_SECONDS;
     }
-    // If it's 'Pending' or 'Ongoing' for a *different* round than what's being set
     else if ((timerStatus.matchStatus === 'Pending' || timerStatus.matchStatus.startsWith('OngoingRound')) && timerStatus.currentRound !== round) {
         newMatchStatus = 'Pending';
         newTimerSeconds = ROUND_DURATION_SECONDS;
     }
-    // If it's 'Pending' or 'Ongoing' for the *same* round, reset its timer and status to Pending
     else if ((timerStatus.matchStatus === 'Pending' || timerStatus.matchStatus.startsWith('OngoingRound')) && timerStatus.currentRound === round) {
         newMatchStatus = 'Pending';
         newTimerSeconds = ROUND_DURATION_SECONDS;
@@ -643,7 +640,7 @@ export default function ScoringTandingDewanSatuPage() {
      updateTimerStatusInFirestore({
       currentRound: round,
       timerSeconds: newTimerSeconds,
-      isTimerRunning: false, // Always stop timer when setting/changing round manually
+      isTimerRunning: false, 
       matchStatus: newMatchStatus,
     });
   };
@@ -651,7 +648,6 @@ export default function ScoringTandingDewanSatuPage() {
   const handleNextAction = () => {
     if (!activeScheduleId || !timerStatus || isLoading) return;
 
-    // If timer is running, make them pause it first
     if (timerStatus.isTimerRunning) {
         alert("Jeda dulu pertandingan sebelum melanjutkan.");
         return;
@@ -661,47 +657,37 @@ export default function ScoringTandingDewanSatuPage() {
     const isPausedForVerification = timerStatus.matchStatus.startsWith('PausedForVerificationRound');
 
 
-    // If current round timer > 0 AND not already 'FinishedRoundX' AND not 'PausedForVerification'
     if (timerStatus.timerSeconds > 0 && !isCurrentRoundActuallyFinished && timerStatus.currentRound <= TOTAL_ROUNDS && timerStatus.matchStatus !== 'MatchFinished' && !isPausedForVerification) {
-        // Confirm if they want to end the current round prematurely
         if (!confirm(`Babak ${timerStatus.currentRound} belum selesai (timer belum 0 atau status belum 'Finished'). Yakin ingin melanjutkan? Ini akan menganggap babak saat ini selesai.`)) {
             return;
         }
-        // If confirmed, update current round to 'FinishedRoundX' and 0 seconds
         updateTimerStatusInFirestore({
             matchStatus: `FinishedRound${timerStatus.currentRound}` as TimerMatchStatus,
             timerSeconds: 0,
             isTimerRunning: false
         });
-        // Then, the next click on "Next Action" will proceed to the next round or finish the match.
-        return; // Exit here, let the user click "Next Action" again.
+        return; 
     }
     
-    // If paused for verification, pressing "Next" (which would be "Lanjutkan Babak X")
-    // should revert the status to 'Pending' for that round, keeping the current timer seconds.
     if (isPausedForVerification && timerStatus.currentRound <= TOTAL_ROUNDS) {
         updateTimerStatusInFirestore({
-            // timerSeconds: timerStatus.timerSeconds, // Keep the current time
-            isTimerRunning: false, // Ensure it's not running
-            matchStatus: 'Pending', // Change status to Pending, Dewan can then start timer
+            isTimerRunning: false, 
+            matchStatus: 'Pending', 
         });
         return;
     }
 
 
-    // If current round is less than total rounds and (it's finished OR it was pending/paused and now being forced next)
     if (timerStatus.currentRound < TOTAL_ROUNDS) {
         const nextRound = (timerStatus.currentRound + 1) as 1 | 2 | 3;
         updateTimerStatusInFirestore({
             currentRound: nextRound,
-            timerSeconds: ROUND_DURATION_SECONDS, // Reset timer for new round
+            timerSeconds: ROUND_DURATION_SECONDS, 
             isTimerRunning: false,
-            matchStatus: 'Pending', // New round starts as pending
+            matchStatus: 'Pending', 
         });
     }
-    // If it's the last round and it's not already marked as MatchFinished
     else if (timerStatus.currentRound === TOTAL_ROUNDS && timerStatus.matchStatus !== 'MatchFinished') {
-        // Mark the match as finished
         updateTimerStatusInFirestore({ matchStatus: 'MatchFinished', isTimerRunning: false, timerSeconds: 0 });
     }
   };
@@ -713,39 +699,35 @@ export default function ScoringTandingDewanSatuPage() {
     }
     if (!confirm("Apakah Anda yakin ingin mereset seluruh pertandingan? Semua skor dan status akan dikembalikan ke awal.")) return;
 
-    setIsLoading(true); // Set loading true during reset
+    setIsLoading(true); 
     const matchDocPath = `${MATCHES_TANDING_COLLECTION}/${activeScheduleId}`;
     try {
         const batch = writeBatch(db);
 
-        // Reset main match document (timer and logs)
         const matchDocRef = doc(db, MATCHES_TANDING_COLLECTION, activeScheduleId);
         batch.set(matchDocRef, {
             timer_status: initialTimerStatus,
             confirmed_unstruck_keys_log: [],
             confirmed_struck_keys_log: []
-        }, { merge: true }); // Use merge true to overwrite specific fields
+        }, { merge: true }); 
 
-        // Reset Juri scores
         const initialJuriDataContent: JuriMatchData = {
             merah: { round1: [], round2: [], round3: [] },
             biru: { round1: [], round2: [], round3: [] },
-            lastUpdated: Timestamp.now(), // or serverTimestamp() if preferred
+            lastUpdated: Timestamp.now(), 
         };
         JURI_IDS.forEach(juriId => {
             const juriDocRef = doc(db, MATCHES_TANDING_COLLECTION, activeScheduleId, 'juri_scores', juriId);
-            batch.set(juriDocRef, initialJuriDataContent); // Overwrite juri scores
+            batch.set(juriDocRef, initialJuriDataContent); 
         });
 
-        // Delete Ketua actions
         const ketuaActionsCollectionRef = collection(db, MATCHES_TANDING_COLLECTION, activeScheduleId, OFFICIAL_ACTIONS_SUBCOLLECTION);
         const ketuaActionsSnapshot = await getDocs(ketuaActionsCollectionRef);
         ketuaActionsSnapshot.forEach((doc) => {
             batch.delete(doc.ref);
         });
         
-        // Delete Verifications
-        const verificationsCollectionRef = collection(db, MATCHES_TANDING_COLLECTION, activeScheduleId, 'verifications');
+        const verificationsCollectionRef = collection(db, MATCHES_TANDING_COLLECTION, activeScheduleId, VERIFICATIONS_SUBCOLLECTION);
         const verificationsSnapshot = await getDocs(verificationsCollectionRef);
         verificationsSnapshot.forEach((doc) => {
             batch.delete(doc.ref);
@@ -753,26 +735,15 @@ export default function ScoringTandingDewanSatuPage() {
 
         await batch.commit();
 
-        // Local state reset is mostly handled by onSnapshot listeners reacting to Firestore changes.
-        // However, explicitly setting some can make UI update faster.
         setTimerStatus(initialTimerStatus);
         setConfirmedScoreMerah(0);
         setConfirmedScoreBiru(0);
-        // setAllContributingEntryKeys(new Set()); // Will be reset by onSnapshot of matchDoc
-        // setPermanentlyStruckEntryKeys(new Set()); // Will be reset by onSnapshot of matchDoc
-        // setPrevSavedUnstruckKeys(new Set()); // Will be reset by onSnapshot of matchDoc
-        // setPrevSavedStruckKeys(new Set()); // Will be reset by onSnapshot of matchDoc
-        // setJuri1Scores(null); // Will be reset by onSnapshot of juriDoc
-        // setJuri2Scores(null); // Will be reset by onSnapshot of juriDoc
-        // setJuri3Scores(null); // Will be reset by onSnapshot of juriDoc
-        // setKetuaActionsLog([]); // Will be reset by onSnapshot of ketuaActions
-
         alert("Pertandingan telah direset.");
     } catch (e) {
       console.error(`[Dewan-1] Error resetting match at path '${matchDocPath}' and its subcollections:`, e);
       setError("Gagal mereset pertandingan.");
     } finally {
-         setIsLoading(false); // Set loading false after reset
+         setIsLoading(false); 
     }
   };
 
@@ -818,7 +789,7 @@ export default function ScoringTandingDewanSatuPage() {
       const entryKey = `${juriData.juriId}_${entryTimestampMillis}_${entry.points}`;
       const isUnstruck = unstruckKeys.has(entryKey);
       const isPermanentlyStruck = struckKeys.has(entryKey);
-      const isGracePeriodForDisplay = (Date.now() - entryTimestampMillis <= JURI_INPUT_VALIDITY_WINDOW_MS); // Visual grace, not decision grace
+      const isGracePeriodForDisplay = (Date.now() - entryTimestampMillis <= JURI_INPUT_VALIDITY_WINDOW_MS); 
 
       const shouldDisplayAsStruck = isPermanentlyStruck || (!isUnstruck && !isGracePeriodForDisplay);
 
@@ -847,7 +818,7 @@ export default function ScoringTandingDewanSatuPage() {
     return total;
   };
 
-  if (isLoading && configMatchId === undefined) { // Only show initial full page loader if config ID is truly unknown
+  if (isLoading && configMatchId === undefined) { 
     return (
         <div className="flex flex-col min-h-screen">
             <Header />
@@ -859,7 +830,7 @@ export default function ScoringTandingDewanSatuPage() {
     );
   }
   
-  if (isLoading && activeScheduleId && !matchDetailsLoaded) { // Loading data for a specific match
+  if (isLoading && activeScheduleId && !matchDetailsLoaded) { 
     return (
         <div className="flex flex-col min-h-screen">
             <Header />
@@ -874,7 +845,7 @@ export default function ScoringTandingDewanSatuPage() {
   }
 
 
-   if (!activeScheduleId && !isLoading && configMatchId === null) { // Config loaded, no active schedule
+   if (!activeScheduleId && !isLoading && configMatchId === null) { 
     return (
       <div className="flex flex-col min-h-screen">
         <Header />
@@ -905,7 +876,7 @@ export default function ScoringTandingDewanSatuPage() {
 
   const isTimerStartDisabled: boolean = !activeScheduleId || isLoading || timerStatus.isTimerRunning || timerStatus.matchStatus === 'MatchFinished' || timerStatus.timerSeconds === 0 || timerStatus.matchStatus.startsWith('FinishedRound') || timerStatus.matchStatus.startsWith('PausedForVerificationRound');
   const isTimerPauseDisabled: boolean = !activeScheduleId || isLoading || !timerStatus.isTimerRunning || timerStatus.matchStatus === 'MatchFinished';
-  const isNextActionDisabledBtn: boolean = !activeScheduleId || isLoading || timerStatus.isTimerRunning || !isNextActionPossible || timerStatus.matchStatus.startsWith("OngoingRound"); // Also disable if ongoing
+  const isNextActionDisabledBtn: boolean = !activeScheduleId || isLoading || timerStatus.isTimerRunning || !isNextActionPossible || timerStatus.matchStatus.startsWith("OngoingRound"); 
   const isResetButtonDisabled: boolean = !activeScheduleId || isLoading;
 
   const isBabakButtonDisabled = (round: number): boolean => {
