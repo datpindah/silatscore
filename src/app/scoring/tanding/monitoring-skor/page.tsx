@@ -4,7 +4,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
-import { Dialog, DialogContent, DialogHeader, DialogTitle as RadixDialogTitle, DialogDescription as DialogVerificationDescription } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogDescription as DialogVerificationDescription } from "@/components/ui/dialog";
 import { ArrowLeft, Eye, Loader2, RadioTower, AlertTriangle, Sun, Moon } from 'lucide-react';
 import type { ScheduleTanding, TimerStatus, VerificationRequest, JuriVoteValue, KetuaActionLogEntry, PesilatColorIdentity, KetuaActionType, TimerMatchStatus } from '@/lib/types';
 import type { ScoreEntry as LibScoreEntryType, RoundScores as LibRoundScoresType } from '@/lib/types';
@@ -479,13 +479,13 @@ export default function MonitoringSkorPage() {
         {/* Baris Atas Grid */}
         <div className="grid grid-cols-[minmax(0,_0.9fr)_minmax(0,_0.8fr)_minmax(0,_0.9fr)] gap-1 md:gap-2 items-stretch mb-2 md:mb-4">
           {/* Pesilat Biru Side (Info, Score, Fouls) */}
-          <div className="flex flex-col items-center flex-1 px-2 sm:px-3 md:px-4">
+          <div className="flex flex-col items-center flex-1 px-1 sm:px-2">
             <div className="text-center mb-1 md:mb-2">
               <div className="font-bold text-sm md:text-xl text-[var(--monitor-pesilat-biru-name-text)]">{pesilatBiruInfo?.name || <Skeleton className="h-6 w-32 bg-[var(--monitor-skeleton-bg)]" />}</div>
               <div className="text-xs md:text-base text-[var(--monitor-pesilat-biru-contingent-text)]">{pesilatBiruInfo?.contingent || <Skeleton className="h-4 w-24 bg-[var(--monitor-skeleton-bg)] mt-1" />}</div>
             </div>
             <div className="flex w-full items-stretch gap-1 md:gap-2 mb-1 md:mb-2 h-56 md:h-72">
-               <div className="flex flex-col gap-1 p-0.5 w-16 md:w-20 h-full">
+               <div className="flex flex-col gap-2 p-0.5 w-16 md:w-20 h-full">
                   <div className="grid grid-cols-2 gap-1 flex-1">
                       <FoulBox label="B1" isActive={getFoulStatus('biru', 'Binaan', 1)} />
                       <FoulBox label="B2" isActive={getFoulStatus('biru', 'Binaan', 2)} />
@@ -532,7 +532,7 @@ export default function MonitoringSkorPage() {
           </div>
 
           {/* Pesilat Merah Side (Info, Score, Fouls) */}
-          <div className="flex flex-col items-center flex-1 px-2 sm:px-3 md:px-4">
+          <div className="flex flex-col items-center flex-1 px-1 sm:px-2">
             <div className="text-center mb-1 md:mb-2">
               <div className="font-bold text-sm md:text-xl text-[var(--monitor-pesilat-merah-name-text)]">{pesilatMerahInfo?.name || <Skeleton className="h-6 w-32 bg-[var(--monitor-skeleton-bg)]" />}</div>
               <div className="text-xs md:text-base text-[var(--monitor-pesilat-merah-contingent-text)]">{pesilatMerahInfo?.contingent || <Skeleton className="h-4 w-24 bg-[var(--monitor-skeleton-bg)] mt-1" />}</div>
@@ -541,7 +541,7 @@ export default function MonitoringSkorPage() {
               <div className="flex-grow h-full bg-[var(--monitor-skor-merah-bg)] flex items-center justify-center text-5xl md:text-8xl font-bold rounded-md text-[var(--monitor-skor-text)]">
                   {confirmedScoreMerah}
               </div>
-               <div className="flex flex-col gap-1 p-0.5 w-16 md:w-20 h-full">
+               <div className="flex flex-col gap-2 p-0.5 w-16 md:w-20 h-full">
                   <div className="grid grid-cols-2 gap-1 flex-1">
                       <FoulBox label="B1" isActive={getFoulStatus('merah', 'Binaan', 1)} />
                       <FoulBox label="B2" isActive={getFoulStatus('merah', 'Binaan', 2)} />
@@ -563,7 +563,7 @@ export default function MonitoringSkorPage() {
         {/* Baris Bawah Grid */}
         <div className="grid grid-cols-[minmax(0,_0.9fr)_minmax(0,_0.8fr)_minmax(0,_0.9fr)] gap-1 md:gap-2 items-start">
           {/* Kolom Kiri Bawah (Juri Indicators Biru) */}
-          <div className="flex flex-col items-center flex-1 px-2 sm:px-3 md:px-4">
+          <div className="flex flex-col items-center flex-1 px-1 sm:px-2">
             <div className="flex flex-col gap-0.5 md:gap-1 w-full">
               <div className="flex gap-0.5 md:gap-1">
                 {JURI_IDS.map(id => <JuriInputIndicator key={`biru-pukulan-${id}`} juri={id} type="pukulan" pesilatColor="biru" />)}
@@ -587,7 +587,7 @@ export default function MonitoringSkorPage() {
           </div>
 
           {/* Kolom Kanan Bawah (Juri Indicators Merah) */}
-          <div className="flex flex-col items-center flex-1 px-2 sm:px-3 md:px-4">
+          <div className="flex flex-col items-center flex-1 px-1 sm:px-2">
             <div className="flex flex-col gap-0.5 md:gap-1 w-full">
               <div className="flex gap-0.5 md:gap-1">
                 {JURI_IDS.map(id => <JuriInputIndicator key={`merah-pukulan-${id}`} juri={id} type="pukulan" pesilatColor="merah" />)}
@@ -612,9 +612,10 @@ export default function MonitoringSkorPage() {
           >
             <DialogTitle className="sr-only">Konfirmasi Verifikasi Juri</DialogTitle>
             <DialogHeader className="text-center">
-              <RadixDialogTitle className="text-2xl md:text-3xl font-bold font-headline text-[var(--monitor-dialog-title-text)]">
+               {/* Menggunakan RadixDialogTitle dari import, bukan DialogTitle dari ui/dialog */}
+              <div className="text-2xl md:text-3xl font-bold font-headline text-[var(--monitor-dialog-title-text)]">
                 Verifikasi Juri
-              </RadixDialogTitle>
+              </div>
             </DialogHeader>
             <div className="py-4 px-2 md:px-6">
                 <div className="text-center mt-2">
@@ -663,3 +664,5 @@ export default function MonitoringSkorPage() {
     </div>
   );
 }
+
+    
