@@ -1,7 +1,7 @@
 
 "use client";
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { ArrowLeft, Loader2, Shield, Swords } from 'lucide-react';
 import type { ScheduleTanding, TimerStatus, KetuaActionLogEntry, PesilatColorIdentity, JuriMatchData as LibJuriMatchData, RoundScores as LibRoundScoresType, KetuaActionType } from '@/lib/types';
 import { db } from '@/lib/firebase';
@@ -225,7 +225,7 @@ export default function DewanDuaPage() {
 
     loadData(activeScheduleId);
     return () => { mounted = false; unsubscribers.forEach(unsub => unsub()); };
-  }, [activeScheduleId, matchDetailsLoaded]); 
+  }, [activeScheduleId, matchDetailsLoaded, resetMatchDisplayData]); 
 
  useEffect(() => {
     if (isLoading && (matchDetailsLoaded || activeScheduleId === null)) {
@@ -288,7 +288,7 @@ export default function DewanDuaPage() {
           <div className="text-left">
             <div className="text-sm md:text-base font-semibold text-red-600">KONTINGEN {pesilatMerahInfo?.contingent.toUpperCase() || (isLoading ? <Skeleton className="h-5 w-24 bg-gray-300 dark:bg-gray-700" /> : '-')}</div>
             <div className="text-lg md:text-2xl font-bold text-red-600">{pesilatMerahInfo?.name.toUpperCase() || (isLoading ? <Skeleton className="h-6 w-32 bg-gray-300 dark:bg-gray-700" /> : 'PESILAT MERAH')}</div>
-            <p className="text-3xl md:text-5xl font-bold text-red-600 mt-1">{confirmedScoreMerah}</p>
+            <div className="text-3xl md:text-5xl font-bold text-red-600 mt-1">{confirmedScoreMerah}</div>
           </div>
           
           <div className="text-4xl md:text-6xl font-mono font-bold text-gray-700 dark:text-gray-300">
@@ -298,7 +298,7 @@ export default function DewanDuaPage() {
           <div className="text-right">
              <div className="text-sm md:text-base font-semibold text-blue-600">KONTINGEN {pesilatBiruInfo?.contingent.toUpperCase() || (isLoading ? <Skeleton className="h-5 w-24 ml-auto bg-gray-300 dark:bg-gray-700" /> : '-')}</div>
              <div className="text-lg md:text-2xl font-bold text-blue-600">{pesilatBiruInfo?.name.toUpperCase() || (isLoading ? <Skeleton className="h-6 w-32 ml-auto bg-gray-300 dark:bg-gray-700" /> : 'PESILAT BIRU')}</div>
-            <p className="text-3xl md:text-5xl font-bold text-blue-600 mt-1">{confirmedScoreBiru}</p>
+            <div className="text-3xl md:text-5xl font-bold text-blue-600 mt-1">{confirmedScoreBiru}</div>
           </div>
         </div>
 
@@ -318,6 +318,7 @@ export default function DewanDuaPage() {
                 <th className="bg-red-400 text-white text-center p-1 md:p-2 border border-black text-xs md:text-sm">Skor Babak Ini</th>
                 <th className="bg-red-400 text-white text-left px-2 py-1 md:px-3 md:py-2 border border-black text-xs md:text-sm">Sumber</th>
                 <th className="bg-red-400 text-white text-center p-1 md:p-2 border border-black text-xs md:text-sm">Nilai</th>
+                {/* Babak cell is covered by row-span */}
                 <th className="bg-blue-400 text-white text-left px-2 py-1 md:px-3 md:py-2 border border-black text-xs md:text-sm">Sumber</th>
                 <th className="bg-blue-400 text-white text-center p-1 md:p-2 border border-black text-xs md:text-sm">Nilai</th>
                 <th className="bg-blue-400 text-white text-center p-1 md:p-2 border border-black text-xs md:text-sm">Skor Babak Ini</th>
@@ -385,5 +386,7 @@ export default function DewanDuaPage() {
     </div>
   );
 }
+
+    
 
     
