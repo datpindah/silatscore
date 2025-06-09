@@ -4,7 +4,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
-import { Dialog, DialogContent, DialogHeader, DialogTitle as RadixDialogTitle, DialogDescription as DialogVerificationDescription } from "@/components/ui/dialog"; // Renamed DialogTitle to avoid conflict
+import { Dialog, DialogContent, DialogHeader, DialogTitle as RadixDialogTitle, DialogDescription as DialogVerificationDescription } from "@/components/ui/dialog";
 import { ArrowLeft, Eye, Loader2, RadioTower, AlertTriangle, Sun, Moon } from 'lucide-react';
 import type { ScheduleTanding, TimerStatus, VerificationRequest, JuriVoteValue, KetuaActionLogEntry, PesilatColorIdentity, KetuaActionType, TimerMatchStatus } from '@/lib/types';
 import type { ScoreEntry as LibScoreEntryType, RoundScores as LibRoundScoresType } from '@/lib/types';
@@ -366,7 +366,7 @@ export default function MonitoringSkorPage() {
         log => log.pesilatColor === pesilatColor &&
                log.round === timerStatus.currentRound &&
                log.actionType === 'Binaan' &&
-               typeof log.originalActionType === 'undefined'
+               typeof log.originalActionType === 'undefined' 
       );
       const convertedBinaanToTeguranActions = ketuaActionsLog.filter(
         log => log.pesilatColor === pesilatColor &&
@@ -395,7 +395,7 @@ export default function MonitoringSkorPage() {
             log => log.pesilatColor === pesilatColor &&
                    log.round === timerStatus.currentRound &&
                    log.actionType === 'Teguran' &&
-                   (typeof log.originalActionType === 'undefined' || log.originalActionType === null) // Only count pure tegurans for T1/T2 display here
+                   (typeof log.originalActionType === 'undefined' || log.originalActionType === null) 
         ).length;
         return teguranCount >= count;
     }
@@ -477,7 +477,7 @@ export default function MonitoringSkorPage() {
 
       <div className="flex-grow flex flex-col p-1 md:p-2">
         {/* Baris Atas Grid */}
-        <div className="grid grid-cols-[minmax(0,_0.9fr)_minmax(0,_1.2fr)_minmax(0,_0.9fr)] gap-1 md:gap-2 items-stretch mb-2 md:mb-4">
+        <div className="grid grid-cols-[minmax(0,_0.9fr)_minmax(0,_0.8fr)_minmax(0,_0.9fr)] gap-1 md:gap-2 items-stretch mb-2 md:mb-4">
           {/* Pesilat Biru Side (Info, Score, Fouls) */}
           <div className="flex flex-col items-center flex-1 px-2 sm:px-3 md:px-4">
             <div className="text-center mb-1 md:mb-2">
@@ -561,7 +561,7 @@ export default function MonitoringSkorPage() {
         </div>
 
         {/* Baris Bawah Grid */}
-        <div className="grid grid-cols-[minmax(0,_0.9fr)_minmax(0,_1.2fr)_minmax(0,_0.9fr)] gap-1 md:gap-2 items-start">
+        <div className="grid grid-cols-[minmax(0,_0.9fr)_minmax(0,_0.8fr)_minmax(0,_0.9fr)] gap-1 md:gap-2 items-start">
           {/* Kolom Kiri Bawah (Juri Indicators Biru) */}
           <div className="flex flex-col items-center flex-1 px-2 sm:px-3 md:px-4">
             <div className="flex flex-col gap-0.5 md:gap-1 w-full">
@@ -574,7 +574,7 @@ export default function MonitoringSkorPage() {
             </div>
           </div>
 
-          {/* Kolom Tengah Bawah (Info Boxes) */}
+          {/* Kolom Tengah Bawah (Info Boxes "Pukulan" / "Tendangan") */}
           <div className="flex flex-col items-center justify-start w-full px-1 md:px-2">
             <div className="w-full max-w-[180px] flex flex-col space-y-1 md:space-y-2">
                 <div className="py-1 md:py-2 border border-[var(--monitor-border)] rounded-md flex items-center justify-center text-xs md:text-sm text-[var(--monitor-text-muted)] bg-[var(--monitor-header-section-bg)] shadow-sm">
@@ -663,4 +663,3 @@ export default function MonitoringSkorPage() {
     </div>
   );
 }
-
