@@ -476,16 +476,16 @@ export default function MonitoringSkorPage() {
 
       <div className="flex-grow flex flex-col p-1 md:p-2">
         {/* Baris Atas Grid */}
-        <div className="grid grid-cols-[minmax(0,_0.9fr)_minmax(0,_0.8fr)_minmax(0,_0.9fr)] gap-1 md:gap-2 items-stretch mb-2 md:mb-4">
-          {/* Pesilat Biru Side (Info, Score, Fouls) */}
+        <div className="grid grid-cols-[minmax(0,_1fr)_minmax(0,_0.6fr)_minmax(0,_1fr)] gap-1 items-stretch mb-2 md:mb-4">
+          {/* Kolom Kiri Atas (Pesilat Biru - Info, Score, Fouls) */}
           <div className="flex flex-col items-center flex-1">
             <div className="text-center mb-1 md:mb-2 w-full px-1 sm:px-2">
               <div className="font-bold text-sm md:text-xl text-[var(--monitor-pesilat-biru-name-text)]">{pesilatBiruInfo?.name || <Skeleton className="h-6 w-32 bg-[var(--monitor-skeleton-bg)]" />}</div>
               <div className="text-xs md:text-base text-[var(--monitor-pesilat-biru-contingent-text)]">{pesilatBiruInfo?.contingent || <Skeleton className="h-4 w-24 bg-[var(--monitor-skeleton-bg)] mt-1" />}</div>
             </div>
             <div className="flex w-full items-stretch gap-1 md:gap-2 mb-1 md:mb-2 h-56 md:h-72">
-              {/* Foul Boxes Biru */}
-              <div className="flex flex-col gap-2 p-0.5 w-16 md:w-20 h-full">
+              {/* Foul Boxes Biru (Order changed to be on the left for Biru) */}
+              <div className="flex flex-col gap-2 p-0.5 w-20 md:w-24 h-full">
                   <div className="grid grid-cols-2 gap-1 flex-1">
                       <FoulBox label="B1" isActive={getFoulStatus('biru', 'Binaan', 1)} />
                       <FoulBox label="B2" isActive={getFoulStatus('biru', 'Binaan', 2)} />
@@ -507,7 +507,7 @@ export default function MonitoringSkorPage() {
             </div>
           </div>
 
-          {/* Central Column (Timer, Babak, Status) */}
+          {/* Kolom Tengah Atas (Timer, Babak, Status) */}
           <div className="flex flex-col items-center justify-start space-y-2 md:space-y-3 pt-2 md:pt-4">
              <div className="text-6xl md:text-8xl font-mono font-bold text-[var(--monitor-timer-text)] mb-2 md:mb-4">
               {formatTime(timerStatus.timerSeconds)}
@@ -532,7 +532,7 @@ export default function MonitoringSkorPage() {
             </div>
           </div>
 
-          {/* Pesilat Merah Side (Info, Score, Fouls) */}
+          {/* Kolom Kanan Atas (Pesilat Merah - Info, Score, Fouls) */}
           <div className="flex flex-col items-center flex-1">
             <div className="text-center mb-1 md:mb-2 w-full px-1 sm:px-2">
               <div className="font-bold text-sm md:text-xl text-[var(--monitor-pesilat-merah-name-text)]">{pesilatMerahInfo?.name || <Skeleton className="h-6 w-32 bg-[var(--monitor-skeleton-bg)]" />}</div>
@@ -544,7 +544,7 @@ export default function MonitoringSkorPage() {
                   {confirmedScoreMerah}
               </div>
               {/* Foul Boxes Merah */}
-              <div className="flex flex-col gap-2 p-0.5 w-16 md:w-20 h-full">
+              <div className="flex flex-col gap-2 p-0.5 w-20 md:w-24 h-full">
                   <div className="grid grid-cols-2 gap-1 flex-1">
                       <FoulBox label="B1" isActive={getFoulStatus('merah', 'Binaan', 1)} />
                       <FoulBox label="B2" isActive={getFoulStatus('merah', 'Binaan', 2)} />
@@ -564,9 +564,9 @@ export default function MonitoringSkorPage() {
         </div>
 
         {/* Baris Bawah Grid */}
-        <div className="grid grid-cols-[minmax(0,_0.9fr)_minmax(0,_0.8fr)_minmax(0,_0.9fr)] gap-1 md:gap-2 items-start">
+        <div className="grid grid-cols-[minmax(0,_1fr)_minmax(0,_0.6fr)_minmax(0,_1fr)] gap-1 items-start">
           {/* Kolom Kiri Bawah (Juri Indicators Biru) */}
-          <div className="flex flex-col items-center flex-1">
+          <div className="flex flex-col items-center flex-1 mt-4">
             <div className="flex flex-col gap-0.5 md:gap-1 w-full">
               <div className="flex gap-0.5 md:gap-1">
                 {JURI_IDS.map(id => <JuriInputIndicator key={`biru-pukulan-${id}`} juri={id} type="pukulan" pesilatColor="biru" />)}
@@ -578,7 +578,7 @@ export default function MonitoringSkorPage() {
           </div>
 
           {/* Kolom Tengah Bawah (Info Boxes "Pukulan" / "Tendangan") */}
-          <div className="flex flex-col items-center justify-start w-full">
+          <div className="flex flex-col items-center justify-start w-full mt-4">
             <div className="w-full max-w-[180px] flex flex-col space-y-1 md:space-y-2">
                 <div className="py-1 md:py-2 border border-[var(--monitor-border)] rounded-md flex items-center justify-center text-xs md:text-sm text-[var(--monitor-text-muted)] bg-[var(--monitor-header-section-bg)] shadow-sm">
                     Pukulan
@@ -590,7 +590,7 @@ export default function MonitoringSkorPage() {
           </div>
 
           {/* Kolom Kanan Bawah (Juri Indicators Merah) */}
-          <div className="flex flex-col items-center flex-1">
+          <div className="flex flex-col items-center flex-1 mt-4">
             <div className="flex flex-col gap-0.5 md:gap-1 w-full">
               <div className="flex gap-0.5 md:gap-1">
                 {JURI_IDS.map(id => <JuriInputIndicator key={`merah-pukulan-${id}`} juri={id} type="pukulan" pesilatColor="merah" />)}
