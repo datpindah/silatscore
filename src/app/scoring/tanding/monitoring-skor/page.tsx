@@ -5,11 +5,11 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle as RadixDialogTitle, DialogDescription as DialogVerificationDescription } from "@/components/ui/dialog";
-import { ArrowLeft, Eye, Loader2, RadioTower, AlertTriangle, Sun, Moon } from 'lucide-react';
+import { ArrowLeft, Eye, Loader2, RadioTower, AlertTriangle, Sun, Moon, ChevronsRight } from 'lucide-react';
 import type { ScheduleTanding, TimerStatus, VerificationRequest, JuriVoteValue, KetuaActionLogEntry, PesilatColorIdentity, KetuaActionType, TimerMatchStatus } from '@/lib/types';
 import type { ScoreEntry as LibScoreEntryType, RoundScores as LibRoundScoresType } from '@/lib/types';
 import { db } from '@/lib/firebase';
-import { doc, onSnapshot, getDoc, collection, query, orderBy, limit, Timestamp } from 'firebase/firestore';
+import { doc, onSnapshot, getDoc, collection, query, orderBy, limit, Timestamp, setDoc, where, getDocs } from 'firebase/firestore';
 import { cn } from '@/lib/utils';
 import { Skeleton } from '@/components/ui/skeleton';
 
@@ -77,6 +77,7 @@ export default function MonitoringSkorPage() {
 
   const [activeDisplayVerificationRequest, setActiveDisplayVerificationRequest] = useState<VerificationRequest | null>(null);
   const [isDisplayVerificationModalOpen, setIsDisplayVerificationModalOpen] = useState(false);
+  const [isNavigatingNextMatch, setIsNavigatingNextMatch] = useState(false);
 
   const resetMatchDisplayData = useCallback(() => {
     setMatchDetails(null);
@@ -96,6 +97,7 @@ export default function MonitoringSkorPage() {
     setActiveDisplayVerificationRequest(null);
     setIsDisplayVerificationModalOpen(false);
     setError(null);
+    setIsNavigatingNextMatch(false);
   }, []);
 
   useEffect(() => {
@@ -441,6 +443,39 @@ export default function MonitoringSkorPage() {
     return timerStatus.matchStatus || "Status Tidak Diketahui";
   };
 
+  const handleNextMatchNavigation = async () => {
+    if (!activeScheduleId || !matchDetails || timerStatus.matchStatus !== 'MatchFinished') {
+        alert("Pertandingan saat ini belum selesai atau detail tidak tersedia.");
+        return;
+    }
+    setIsNavigatingNextMatch(true);
+    try {
+        const currentMatchNumber = matchDetails.matchNumber;
+        const schedulesRef = collection(db, SCHEDULE_TANDING_COLLECTION);
+        const q = query(
+            schedulesRef,
+            where('matchNumber', '>', currentMatchNumber),
+            orderBy('matchNumber', 'asc'),
+            limit(1)
+        );
+        const querySnapshot = await getDocs(q);
+
+        if (querySnapshot.empty) {
+            alert("Ini adalah partai terakhir. Tidak ada partai berikutnya.");
+        } else {
+            const nextMatchDoc = querySnapshot.docs[0];
+            await setDoc(doc(db, ACTIVE_TANDING_SCHEDULE_CONFIG_PATH), { activeScheduleId: nextMatchDoc.id });
+            // alert(`Berpindah ke Partai No. ${nextMatchDoc.data().matchNumber}: ${nextMatchDoc.data().pesilatMerahName} vs ${nextMatchDoc.data().pesilatBiruName}`);
+            // The page will reset due to onSnapshot listening to ACTIVE_TANDING_SCHEDULE_CONFIG_PATH
+        }
+    } catch (err) {
+        console.error("Error navigating to next match:", err);
+        alert("Gagal berpindah ke partai berikutnya.");
+    } finally {
+        setIsNavigatingNextMatch(false);
+    }
+  };
+
 
   if (isLoading && configMatchId === undefined) {
     return (
@@ -468,9 +503,9 @@ export default function MonitoringSkorPage() {
       </Button>
       <div className="bg-[var(--monitor-header-section-bg)] p-5 md:p-6 text-center">
         <div className="grid grid-cols-3 gap-1 md:gap-2 text-base md:text-lg font-semibold">
-          <div>{matchDetails?.place || <Skeleton className="h-4 w-20 inline-block bg-[var(--monitor-skeleton-bg)]" />}</div>
-          <div>{matchDetails?.round || <Skeleton className="h-4 w-20 inline-block bg-[var(--monitor-skeleton-bg)]" />}</div>
-          <div>{matchDetails?.class || <Skeleton className="h-4 w-32 inline-block bg-[var(--monitor-skeleton-bg)]" />}</div>
+          <div>{matchDetails?.place || <Skeleton className="h-5 w-24 md:h-6 md:w-32 inline-block bg-[var(--monitor-skeleton-bg)]" />}</div>
+          <div>{matchDetails?.round || <Skeleton className="h-5 w-24 md:h-6 md:w-32 inline-block bg-[var(--monitor-skeleton-bg)]" />}</div>
+          <div>{matchDetails?.class || <Skeleton className="h-5 w-32 md:h-6 md:w-40 inline-block bg-[var(--monitor-skeleton-bg)]" />}</div>
         </div>
       </div>
 
@@ -479,7 +514,7 @@ export default function MonitoringSkorPage() {
         <div className="grid grid-cols-[minmax(0,_1fr)_minmax(0,_0.6fr)_minmax(0,_1fr)] gap-1 items-stretch mb-2 md:mb-4">
           {/* Kolom Kiri Atas (Pesilat Biru - Info, Score, Fouls) */}
           <div className="flex flex-col items-center flex-1">
-            <div className="text-center mb-1 md:mb-2 w-full px-1 sm:px-2">
+            <div className="text-center mb-1 md:mb-2 w-full">
               <div className="font-bold text-sm md:text-xl text-[var(--monitor-pesilat-biru-name-text)]">{pesilatBiruInfo?.name || <Skeleton className="h-6 w-32 bg-[var(--monitor-skeleton-bg)]" />}</div>
               <div className="text-xs md:text-base text-[var(--monitor-pesilat-biru-contingent-text)]">{pesilatBiruInfo?.contingent || <Skeleton className="h-4 w-24 bg-[var(--monitor-skeleton-bg)] mt-1" />}</div>
             </div>
@@ -534,7 +569,7 @@ export default function MonitoringSkorPage() {
 
           {/* Kolom Kanan Atas (Pesilat Merah - Info, Score, Fouls) */}
           <div className="flex flex-col items-center flex-1">
-            <div className="text-center mb-1 md:mb-2 w-full px-1 sm:px-2">
+            <div className="text-center mb-1 md:mb-2 w-full">
               <div className="font-bold text-sm md:text-xl text-[var(--monitor-pesilat-merah-name-text)]">{pesilatMerahInfo?.name || <Skeleton className="h-6 w-32 bg-[var(--monitor-skeleton-bg)]" />}</div>
               <div className="text-xs md:text-base text-[var(--monitor-pesilat-merah-contingent-text)]">{pesilatMerahInfo?.contingent || <Skeleton className="h-4 w-24 bg-[var(--monitor-skeleton-bg)] mt-1" />}</div>
             </div>
@@ -663,7 +698,24 @@ export default function MonitoringSkorPage() {
             </Button>
          </div>
       )}
+
+        {timerStatus.matchStatus === 'MatchFinished' && (
+            <Button
+                onClick={handleNextMatchNavigation}
+                disabled={isNavigatingNextMatch || isLoading}
+                className="fixed bottom-6 right-6 z-50 shadow-lg bg-green-600 hover:bg-green-700 text-white py-3 px-4 text-sm md:text-base rounded-full"
+                title="Lanjut ke Partai Berikutnya"
+            >
+                {isNavigatingNextMatch ? (
+                    <Loader2 className="mr-2 h-5 w-5 animate-spin" />
+                ) : (
+                    <ChevronsRight className="mr-2 h-5 w-5" />
+                )}
+                Partai Berikutnya
+            </Button>
+        )}
     </div>
   );
 }
+
 
