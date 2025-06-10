@@ -258,11 +258,10 @@ export default function KetuaPertandinganPage() {
         if (binaanAsliCount < 1) { 
           actionTypeToLog = 'Binaan';
           pointsToLog = 0; 
-          // currentOriginalActionType remains undefined for pure Binaan
         } else { 
-          actionTypeToLog = 'Teguran'; // Second Binaan becomes Teguran
+          actionTypeToLog = 'Teguran'; 
           pointsToLog = TEGURAN_POINTS;
-          currentOriginalActionType = 'Binaan'; // Mark that this Teguran originated from a Binaan
+          currentOriginalActionType = 'Binaan'; 
         }
       } else if (actionTypeButtonPressed === 'Peringatan') {
         const peringatanCount = countActionsInRound(ketuaActionsLog, pesilatColor, 'Peringatan', dewanTimerStatus.currentRound);
@@ -273,16 +272,19 @@ export default function KetuaPertandinganPage() {
         actionTypeToLog = 'Jatuhan';
       }
 
-      const actionData: Omit<KetuaActionLogEntry, 'id'> = {
+      const baseActionData = {
         pesilatColor,
         actionType: actionTypeToLog,
-        originalActionType: currentOriginalActionType, // Will be undefined if not set
         round: dewanTimerStatus.currentRound,
-        timestamp: serverTimestamp() as any, // Use serverTimestamp
+        timestamp: serverTimestamp(),
         points: pointsToLog,
       };
 
-      await addDoc(collection(db, MATCHES_TANDING_COLLECTION, activeMatchId, OFFICIAL_ACTIONS_SUBCOLLECTION), actionData);
+      const actionDataWithOptionalField = currentOriginalActionType !== undefined
+        ? { ...baseActionData, originalActionType: currentOriginalActionType }
+        : baseActionData;
+
+      await addDoc(collection(db, MATCHES_TANDING_COLLECTION, activeMatchId, OFFICIAL_ACTIONS_SUBCOLLECTION), actionDataWithOptionalField);
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : String(err);
       console.error(`Error adding official action for match ${activeMatchId}:`, errorMessage, err);
@@ -413,7 +415,7 @@ export default function KetuaPertandinganPage() {
             pesilatColor: ketuaSelectedDecision as PesilatColorIdentity,
             actionType: 'Jatuhan',
             round: activeVerificationDetails.round,
-            timestamp: serverTimestamp() as any, // Use serverTimestamp
+            timestamp: serverTimestamp(),
             points: JATUHAN_POINTS,
         };
         const newActionRef = doc(collection(db, MATCHES_TANDING_COLLECTION, activeMatchId, OFFICIAL_ACTIONS_SUBCOLLECTION));
