@@ -276,10 +276,10 @@ export default function KetuaPertandinganPage() {
       const actionData: Omit<KetuaActionLogEntry, 'id'> = {
         pesilatColor,
         actionType: actionTypeToLog,
+        originalActionType: currentOriginalActionType, // Will be undefined if not set
         round: dewanTimerStatus.currentRound,
-        timestamp: Timestamp.now(),
+        timestamp: serverTimestamp() as any, // Use serverTimestamp
         points: pointsToLog,
-        ...(currentOriginalActionType && { originalActionType: currentOriginalActionType }),
       };
 
       await addDoc(collection(db, MATCHES_TANDING_COLLECTION, activeMatchId, OFFICIAL_ACTIONS_SUBCOLLECTION), actionData);
@@ -413,7 +413,7 @@ export default function KetuaPertandinganPage() {
             pesilatColor: ketuaSelectedDecision as PesilatColorIdentity,
             actionType: 'Jatuhan',
             round: activeVerificationDetails.round,
-            timestamp: Timestamp.now(), 
+            timestamp: serverTimestamp() as any, // Use serverTimestamp
             points: JATUHAN_POINTS,
         };
         const newActionRef = doc(collection(db, MATCHES_TANDING_COLLECTION, activeMatchId, OFFICIAL_ACTIONS_SUBCOLLECTION));
