@@ -1,45 +1,49 @@
 # See https://help.github.com/articles/ignoring-files/ for more about ignoring files.
 
-# dependencies
+# Dependencies
 /node_modules
 /.pnp
-.pnp.*
-.yarn/*
-!.yarn/patches
-!.yarn/plugins
-!.yarn/releases
-!.yarn/versions
+.pnp.js
+.yarn/install-state.gz
 
-# testing
+# Testing
 /coverage
 
-# next.js
+# Next.js
 /.next/
 /out/
 
-# production
+# Production
 /build
 
-# misc
+# Misc
 .DS_Store
 *.pem
 
-# debug
+# Debug files
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
-.pnpm-debug.log*
+pnpm-debug.log*
 
-# vercel
-.vercel
+# Local Environment Variables
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
 
-# typescript
-*.tsbuildinfo
-next-env.d.ts
-
-.genkit/*
-.env*
-
-# firebase
+# Firebase
+*.firebase
+*.firebaserc
 firebase-debug.log
-firestore-debug.log
+firebase-crashlytics-build.json
+apphosting.yaml # For Firebase App Hosting, not needed for Netlify
+
+# Netlify - local build testing/state
+.netlify
+
+# Turbopack
+.turbo
+
+# IDX project files
+.idx
