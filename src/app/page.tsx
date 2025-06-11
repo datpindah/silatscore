@@ -10,7 +10,7 @@ export default function HomePage() {
       <Header />
       <main className="flex-1">
         <div className="container mx-auto px-4 py-8">
-          <PageTitle title="Welcome to SilatScore Digital" description="Your comprehensive solution for Pencak Silat match scoring and management." />
+          <PageTitle title="Selamat Datang Di Silatscore" description="Your comprehensive solution for Pencak Silat match scoring and management." />
           
           <div className="grid md:grid-cols-2 gap-8 items-center">
             <div>
