@@ -16,11 +16,11 @@ export default function HomePage() {
             <div>
               <Image 
                 src="https://placehold.co/600x400.png" 
-                alt="Pencak Silat practitioners" 
+                alt="Gambar Pencak Silat" 
                 width={600} 
                 height={400}
                 className="rounded-lg shadow-lg"
-                data-ai-hint="martial arts silhouette"
+                data-ai-hint="Pencak Silat"
               />
             </div>
             <div className="space-y-6">
