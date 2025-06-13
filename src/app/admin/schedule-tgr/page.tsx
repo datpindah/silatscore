@@ -14,7 +14,7 @@ import { tgrCategoriesList } from '@/lib/types';
 import { TableCell } from '@/components/ui/table';
 import { cn } from '@/lib/utils';
 import { db } from '@/lib/firebase';
-import { collection, addDoc, getDocs, doc, updateDoc, deleteDoc, onSnapshot, setDoc, query, orderBy } from 'firebase/firestore';
+import { collection, addDoc, getDocs, doc, updateDoc, deleteDoc, onSnapshot, setDoc, query, orderBy, Timestamp } from 'firebase/firestore';
 import * as XLSX from 'xlsx'; // Keep for future upload functionality
 
 const SCHEDULE_TGR_COLLECTION = 'schedules_tgr';
@@ -23,6 +23,8 @@ const ACTIVE_TGR_SCHEDULE_CONFIG_PATH = 'app_settings/active_match_tgr';
 const initialFormState: Omit<ScheduleTGR, 'id'> = {
   lotNumber: 1,
   category: 'Tunggal',
+  date: new Date().toISOString().split('T')[0],
+  place: '',
   pesilatMerahName: '',
   pesilatMerahContingent: '',
   pesilatBiruName: '',
@@ -58,8 +60,19 @@ export default function ScheduleTGRPage() {
     const q = query(collection(db, SCHEDULE_TGR_COLLECTION), orderBy("lotNumber", "asc"));
     const unsub = onSnapshot(q, (querySnapshot) => {
       const schedulesData: ScheduleTGR[] = [];
-      querySnapshot.forEach((doc) => {
-        schedulesData.push({ id: doc.id, ...doc.data() } as ScheduleTGR);
+      querySnapshot.forEach((docSnap) => {
+        const data = docSnap.data();
+        schedulesData.push({
+          id: docSnap.id,
+          lotNumber: data.lotNumber,
+          category: data.category,
+          date: data.date instanceof Timestamp ? data.date.toDate().toISOString().split('T')[0] : data.date,
+          place: data.place,
+          pesilatMerahName: data.pesilatMerahName,
+          pesilatMerahContingent: data.pesilatMerahContingent,
+          pesilatBiruName: data.pesilatBiruName,
+          pesilatBiruContingent: data.pesilatBiruContingent,
+        } as ScheduleTGR);
       });
       setSchedules(schedulesData);
       setIsLoading(false);
@@ -86,13 +99,19 @@ export default function ScheduleTGRPage() {
   const handleSubmit = async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     
-    // Basic validation (can be expanded)
     if (!formData.pesilatMerahName || !formData.pesilatMerahContingent) {
         alert("Nama Pesilat Merah dan Kontingen Merah wajib diisi.");
         return;
     }
+    if (!formData.date || !formData.place) {
+        alert("Tanggal dan Gelanggang wajib diisi.");
+        return;
+    }
 
-    const scheduleDataForFirestore = { ...formData };
+    const scheduleDataForFirestore = {
+      ...formData,
+      date: Timestamp.fromDate(new Date(formData.date + "T00:00:00")), // Convert string date to Firestore Timestamp
+    };
 
     try {
       if (isEditing) {
@@ -114,7 +133,13 @@ export default function ScheduleTGRPage() {
   const handleEdit = (id: string) => {
     const scheduleToEdit = schedules.find(s => s.id === id);
     if (scheduleToEdit) {
-      setFormData({...scheduleToEdit}); // The id is not part of Omit<ScheduleTGR, 'id'>
+      const formDate = typeof scheduleToEdit.date === 'string'
+        ? scheduleToEdit.date
+        : (scheduleToEdit.date as any instanceof Timestamp) // Type assertion if necessary
+          ? (scheduleToEdit.date as any as Timestamp).toDate().toISOString().split('T')[0]
+          : new Date().toISOString().split('T')[0]; // Fallback, should not happen if data is consistent
+
+      setFormData({...scheduleToEdit, date: formDate });
       setIsEditing(id);
     }
   };
@@ -151,7 +176,7 @@ export default function ScheduleTGRPage() {
     }
   };
 
-  const tableHeaders = ["No. Partai/Undian", "Kategori", "Pesilat Merah", "Kontingen Merah", "Pesilat Biru", "Kontingen Biru"];
+  const tableHeaders = ["No. Partai/Undian", "Tanggal", "Gelanggang", "Kategori", "Pesilat Merah", "Kontingen Merah", "Pesilat Biru", "Kontingen Biru"];
   
   const categoryIcons: Record<TGRCategoryType, React.ReactNode> = {
     Tunggal: <User className="h-4 w-4 inline mr-1" />,
@@ -193,8 +218,10 @@ export default function ScheduleTGRPage() {
           <CardTitle className="font-headline">{isEditing ? 'Edit Jadwal TGR' : 'Tambah Jadwal TGR Baru'}</CardTitle>
         </CardHeader>
         <form onSubmit={handleSubmit}>
-          <CardContent className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <CardContent className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
             <FormField id="lotNumber" label="No. Partai/Undian" type="number" value={formData.lotNumber} onChange={handleChange} required />
+            <FormField id="date" label="Tanggal" type="date" value={formData.date} onChange={handleChange} required />
+            <FormField id="place" label="Gelanggang" value={formData.place} onChange={handleChange} required />
             <FormField 
               id="category" 
               label="Kategori" 
@@ -206,7 +233,7 @@ export default function ScheduleTGRPage() {
             />
             <FormField id="pesilatMerahName" label="Nama Pesilat Merah" value={formData.pesilatMerahName} onChange={handleChange} placeholder="Nama pesilat/tim utama" required />
             <FormField id="pesilatMerahContingent" label="Kontingen Pesilat Merah" value={formData.pesilatMerahContingent} onChange={handleChange} required />
-            <FormField id="pesilatBiruName" label="Nama Pesilat Biru (Opsional)" value={formData.pesilatBiruName || ''} onChange={handleChange} placeholder="Kosongkan jika tidak ada lawan langsung" />
+            <FormField id="pesilatBiruName" label="Nama Pesilat Biru (Opsional)" value={formData.pesilatBiruName || ''} onChange={handleChange} placeholder="Kosongkan jika tidak ada lawan" />
             <FormField id="pesilatBiruContingent" label="Kontingen Pesilat Biru (Opsional)" value={formData.pesilatBiruContingent || ''} onChange={handleChange} />
           </CardContent>
           <CardFooter>
@@ -234,6 +261,8 @@ export default function ScheduleTGRPage() {
             renderRow={(s) => (
               <>
                 <TableCell>{s.lotNumber}</TableCell>
+                <TableCell>{new Date(s.date + "T00:00:00").toLocaleDateString('id-ID', { year: 'numeric', month: 'long', day: 'numeric' })}</TableCell>
+                <TableCell>{s.place}</TableCell>
                 <TableCell className="flex items-center">
                   {categoryIcons[s.category]} {s.category}
                 </TableCell>
@@ -266,5 +295,3 @@ export default function ScheduleTGRPage() {
     </>
   );
 }
-
-    

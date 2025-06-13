@@ -76,12 +76,12 @@ export interface ScheduleTGR {
   id: string;
   lotNumber: number; // Nomor Partai/Undian
   category: TGRCategoryType;
-  
-  // Fields will now always mirror Tanding style input
+  date: string; // YYYY-MM-DD
+  place: string;
   pesilatMerahName: string;
   pesilatMerahContingent: string;
-  pesilatBiruName?: string; // Optional, as for Tunggal, this might be empty
-  pesilatBiruContingent?: string; // Optional
+  pesilatBiruName?: string; 
+  pesilatBiruContingent?: string;
 }
 
 
