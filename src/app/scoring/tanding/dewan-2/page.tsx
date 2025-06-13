@@ -48,11 +48,6 @@ const initialJuriData = (): JuriMatchDataForPage => ({
   biru: { round1: [], round2: [], round3: [] },
 });
 
-const PlaceholderLogo = ({ className }: { className?: string }) => (
-  <div className={cn("bg-red-500 w-12 h-12 md:w-16 md:h-16 flex items-center justify-center text-white font-bold text-xs md:text-sm rounded", className)}>
-    LOGO
-  </div>
-);
 
 // Calculates SUM of scores for a juri, color, and round. Used for "Total Nilai Juri" row.
 const calculateJuriScoreForRound = (
@@ -395,7 +390,7 @@ export default function DewanDuaPage() {
     <div className="flex flex-col min-h-screen bg-blue-100 dark:bg-gray-900 text-gray-800 dark:text-gray-200">
       <div className="bg-blue-700 text-white p-3 md:p-4">
         <div className="container mx-auto flex items-center justify-between">
-          <PlaceholderLogo />
+          <Swords className="h-8 w-8 md:h-10 md:w-10" />
           <div className="text-center">
             <h1 className="text-xl md:text-3xl font-bold uppercase">
               {matchDetails?.class || (isLoading ? <Skeleton className="h-8 w-48 inline-block bg-blue-500" /> : "Detail Pertandingan")}
@@ -404,7 +399,7 @@ export default function DewanDuaPage() {
               {matchDetails?.round || (isLoading ? <Skeleton className="h-5 w-32 inline-block mt-1 bg-blue-500" /> : "Babak")}
             </div>
           </div>
-          <PlaceholderLogo className="bg-blue-500" />
+          <Shield className="h-8 w-8 md:h-10 md:w-10" />
         </div>
       </div>
 
@@ -512,3 +507,4 @@ export default function DewanDuaPage() {
   );
 }
 
+    
