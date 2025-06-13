@@ -65,14 +65,14 @@ export default function ScheduleTGRPage() {
         schedulesData.push({
           id: docSnap.id,
           lotNumber: data.lotNumber,
-          category: data.category,
-          date: data.date instanceof Timestamp ? data.date.toDate().toISOString().split('T')[0] : data.date,
-          place: data.place,
-          pesilatMerahName: data.pesilatMerahName,
-          pesilatMerahContingent: data.pesilatMerahContingent,
-          pesilatBiruName: data.pesilatBiruName,
-          pesilatBiruContingent: data.pesilatBiruContingent,
-        } as ScheduleTGR);
+          category: data.category as TGRCategoryType,
+          date: data.date instanceof Timestamp ? data.date.toDate().toISOString().split('T')[0] : data.date as string,
+          place: data.place as string,
+          pesilatMerahName: data.pesilatMerahName as string,
+          pesilatMerahContingent: data.pesilatMerahContingent as string,
+          pesilatBiruName: (data.pesilatBiruName as string | undefined) || '',
+          pesilatBiruContingent: (data.pesilatBiruContingent as string | undefined) || '',
+        });
       });
       setSchedules(schedulesData);
       setIsLoading(false);
@@ -91,14 +91,14 @@ export default function ScheduleTGRPage() {
       [name]: type === 'number' ? parseInt(value) || 0 : value,
     }));
   };
-  
+
   const handleSelectChange = (name: string) => (value: string) => {
      setFormData(prev => ({ ...prev, [name]: value as TGRCategoryType }));
   };
 
   const handleSubmit = async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
-    
+
     if (!formData.pesilatMerahName || !formData.pesilatMerahContingent) {
         alert("Nama Pesilat Merah dan Kontingen Merah wajib diisi.");
         return;
@@ -135,9 +135,9 @@ export default function ScheduleTGRPage() {
     if (scheduleToEdit) {
       const formDate = typeof scheduleToEdit.date === 'string'
         ? scheduleToEdit.date
-        : (scheduleToEdit.date as any instanceof Timestamp) // Type assertion if necessary
+        : (scheduleToEdit.date as any instanceof Timestamp) 
           ? (scheduleToEdit.date as any as Timestamp).toDate().toISOString().split('T')[0]
-          : new Date().toISOString().split('T')[0]; // Fallback, should not happen if data is consistent
+          : new Date().toISOString().split('T')[0]; 
 
       setFormData({...scheduleToEdit, date: formDate });
       setIsEditing(id);
@@ -177,7 +177,7 @@ export default function ScheduleTGRPage() {
   };
 
   const tableHeaders = ["No. Partai/Undian", "Tanggal", "Gelanggang", "Kategori", "Pesilat Merah", "Kontingen Merah", "Pesilat Biru", "Kontingen Biru"];
-  
+
   const categoryIcons: Record<TGRCategoryType, React.ReactNode> = {
     Tunggal: <User className="h-4 w-4 inline mr-1" />,
     Ganda: <Users className="h-4 w-4 inline mr-1" />,
@@ -200,7 +200,7 @@ export default function ScheduleTGRPage() {
       </>
     );
   }
-  
+
   return (
     <>
       <PageTitle title="Jadwal Pertandingan TGR" description="Kelola jadwal pertandingan kategori Tunggal, Ganda, Regu, dan Jurus Tunggal Bebas.">
@@ -222,18 +222,18 @@ export default function ScheduleTGRPage() {
             <FormField id="lotNumber" label="No. Partai/Undian" type="number" value={formData.lotNumber} onChange={handleChange} required />
             <FormField id="date" label="Tanggal" type="date" value={formData.date} onChange={handleChange} required />
             <FormField id="place" label="Gelanggang" value={formData.place} onChange={handleChange} required />
-            <FormField 
-              id="category" 
-              label="Kategori" 
-              as="select" 
-              value={formData.category} 
+            <FormField
+              id="category"
+              label="Kategori"
+              as="select"
+              value={formData.category}
               onSelectChange={handleSelectChange('category')}
               options={tgrCategoriesList.map(cat => ({ value: cat, label: cat }))}
-              required 
+              required
             />
             <FormField id="pesilatMerahName" label="Nama Pesilat Merah" value={formData.pesilatMerahName} onChange={handleChange} placeholder="Nama pesilat/tim utama" required />
             <FormField id="pesilatMerahContingent" label="Kontingen Pesilat Merah" value={formData.pesilatMerahContingent} onChange={handleChange} required />
-            <FormField id="pesilatBiruName" label="Nama Pesilat Biru (Opsional)" value={formData.pesilatBiruName || ''} onChange={handleChange} placeholder="Kosongkan jika tidak ada lawan" />
+            <FormField id="pesilatBiruName" label="Nama Pesilat Biru (Opsional)" value={formData.pesilatBiruName || ''} onChange={handleChange} placeholder="Kosongkan jika tidak relevan" />
             <FormField id="pesilatBiruContingent" label="Kontingen Pesilat Biru (Opsional)" value={formData.pesilatBiruContingent || ''} onChange={handleChange} />
           </CardContent>
           <CardFooter>

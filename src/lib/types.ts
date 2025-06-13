@@ -56,7 +56,7 @@ export interface Match {
 }
 
 export interface ScheduleTanding {
-  id: string;
+  id:string;
   date: string; // YYYY-MM-DD
   place: string;
   pesilatMerahName: string;
@@ -80,8 +80,8 @@ export interface ScheduleTGR {
   place: string;
   pesilatMerahName: string;
   pesilatMerahContingent: string;
-  pesilatBiruName?: string; 
-  pesilatBiruContingent?: string;
+  pesilatBiruName: string;
+  pesilatBiruContingent: string;
 }
 
 
@@ -97,7 +97,7 @@ export interface KetuaActionLogEntry {
   actionType: KetuaActionType;
   originalActionType?: KetuaActionType;
   round: 1 | 2 | 3;
-  timestamp: any; 
+  timestamp: any;
   points: number;
 }
 
@@ -133,11 +133,11 @@ export interface VerificationRequest {
 // --- END VERIFICATION TYPES ---
 
 // --- TIMER STATUS for DEWAN 1 ---
-export type TimerMatchStatus = 
-  | 'Pending' 
-  | `OngoingRound${number}` 
-  | `PausedRound${number}` 
-  | `FinishedRound${number}` 
+export type TimerMatchStatus =
+  | 'Pending'
+  | `OngoingRound${number}`
+  | `PausedRound${number}`
+  | `FinishedRound${number}`
   | `PausedForVerificationRound${number}`
   | 'MatchFinished';
 
@@ -177,4 +177,3 @@ export interface JuriMatchData {
   biru: RoundScores;
   lastUpdated?: any; // Firestore Timestamp
 }
-
