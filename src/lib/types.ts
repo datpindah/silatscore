@@ -68,14 +68,28 @@ export interface ScheduleTanding {
   matchNumber: number;
 }
 
+export type TGRCategoryType = 'Tunggal' | 'Ganda' | 'Regu' | 'Jurus Tunggal Bebas';
+export const tgrCategoriesList: TGRCategoryType[] = ['Tunggal', 'Ganda', 'Regu', 'Jurus Tunggal Bebas'];
+
+
 export interface ScheduleTGR {
   id: string;
-  group: string; // Pool
-  lotNumber: number;
-  category: 'Tunggal' | 'Ganda' | 'Regu';
-  participantNames: string[];
-  contingent: string;
+  lotNumber: number; // Nomor Partai/Undian
+  category: TGRCategoryType;
+  
+  // Fields for Tunggal, Ganda, Regu
+  group?: string; // Pool (opsional jika tidak relevan untuk semua kategori)
+  participantNamesStr?: string; // Comma-separated for form input
+  participantNames?: string[]; // Actual array for data storage
+  contingent?: string; // Kontingen tunggal untuk tim/individu TGR
+
+  // Fields for Jurus Tunggal Bebas (match-like)
+  pesilatMerahName?: string;
+  pesilatMerahContingent?: string;
+  pesilatBiruName?: string;
+  pesilatBiruContingent?: string;
 }
+
 
 export type AgeCategory = 'Pra-Usia Dini' | 'Usia Dini' | 'Pra-Remaja' | 'Remaja' | 'Dewasa' | 'Master';
 export const ageCategories: AgeCategory[] = ['Pra-Usia Dini', 'Usia Dini', 'Pra-Remaja', 'Remaja', 'Dewasa', 'Master'];
@@ -152,3 +166,20 @@ export const foulIcons: Record<string, string> = {
   'Peringatan Ketua': 'Megaphone',
 };
 
+// Juri Tanding Types
+export interface ScoreEntry {
+  points: 1 | 2;
+  timestamp: any; // Firestore Timestamp
+}
+
+export interface RoundScores {
+  round1: ScoreEntry[];
+  round2: ScoreEntry[];
+  round3: ScoreEntry[];
+}
+
+export interface JuriMatchData {
+  merah: RoundScores;
+  biru: RoundScores;
+  lastUpdated?: any; // Firestore Timestamp
+}
