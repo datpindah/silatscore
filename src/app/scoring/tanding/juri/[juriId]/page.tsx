@@ -1,7 +1,7 @@
 
 "use client";
 
-import { use, useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import Link from 'next/link';
 import { Header } from '@/components/layout/Header';
 import { PageTitle } from '@/components/shared/PageTitle';
@@ -60,8 +60,7 @@ const initialJuriMatchData = (): JuriMatchData => ({
   biru: initialRoundScores(),
 });
 
-export default function JuriDynamicPage({ params: paramsPromise }: { params: Promise<{ juriId: string }> }) {
-  const params = use(paramsPromise);
+export default function JuriDynamicPage({ params }: { params: { juriId: string } }) {
   const { juriId } = params;
   const juriDisplayName = `Juri ${juriId?.split('-')[1] || 'Tidak Dikenal'}`;
 
