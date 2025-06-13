@@ -77,17 +77,11 @@ export interface ScheduleTGR {
   lotNumber: number; // Nomor Partai/Undian
   category: TGRCategoryType;
   
-  // Fields for Tunggal, Ganda, Regu
-  group?: string; // Pool (opsional jika tidak relevan untuk semua kategori)
-  participantNamesStr?: string; // Comma-separated for form input
-  participantNames?: string[]; // Actual array for data storage
-  contingent?: string; // Kontingen tunggal untuk tim/individu TGR
-
-  // Fields for Jurus Tunggal Bebas (match-like)
-  pesilatMerahName?: string;
-  pesilatMerahContingent?: string;
-  pesilatBiruName?: string;
-  pesilatBiruContingent?: string;
+  // Fields will now always mirror Tanding style input
+  pesilatMerahName: string;
+  pesilatMerahContingent: string;
+  pesilatBiruName?: string; // Optional, as for Tunggal, this might be empty
+  pesilatBiruContingent?: string; // Optional
 }
 
 
@@ -183,3 +177,4 @@ export interface JuriMatchData {
   biru: RoundScores;
   lastUpdated?: any; // Firestore Timestamp
 }
+

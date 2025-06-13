@@ -17,9 +17,6 @@ import { cn } from '@/lib/utils';
 const initialFormState: Omit<ScheduleTGR, 'id'> = {
   lotNumber: 1,
   category: 'Tunggal',
-  group: '',
-  participantNamesStr: '',
-  contingent: '',
   pesilatMerahName: '',
   pesilatMerahContingent: '',
   pesilatBiruName: '',
@@ -46,38 +43,14 @@ export default function ScheduleTGRPage() {
   const handleSubmit = (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     
-    let scheduleData: Omit<ScheduleTGR, 'id'> = {
+    const scheduleData: Omit<ScheduleTGR, 'id'> = {
       lotNumber: formData.lotNumber,
       category: formData.category,
+      pesilatMerahName: formData.pesilatMerahName,
+      pesilatMerahContingent: formData.pesilatMerahContingent,
+      pesilatBiruName: formData.pesilatBiruName || '', // Ensure empty string if not provided
+      pesilatBiruContingent: formData.pesilatBiruContingent || '', // Ensure empty string if not provided
     };
-
-    if (formData.category === 'Jurus Tunggal Bebas') {
-      scheduleData = {
-        ...scheduleData,
-        pesilatMerahName: formData.pesilatMerahName,
-        pesilatMerahContingent: formData.pesilatMerahContingent,
-        pesilatBiruName: formData.pesilatBiruName,
-        pesilatBiruContingent: formData.pesilatBiruContingent,
-        group: undefined, // Clear non-relevant fields
-        participantNamesStr: undefined,
-        participantNames: undefined,
-        contingent: undefined,
-      };
-    } else {
-      const participantNames = formData.participantNamesStr?.split(',').map(name => name.trim()).filter(name => name) || [];
-      scheduleData = {
-        ...scheduleData,
-        group: formData.group,
-        participantNamesStr: formData.participantNamesStr,
-        participantNames,
-        contingent: formData.contingent,
-        pesilatMerahName: undefined, // Clear non-relevant fields
-        pesilatMerahContingent: undefined,
-        pesilatBiruName: undefined,
-        pesilatBiruContingent: undefined,
-      };
-    }
-
 
     if (isEditing) {
       setSchedules(schedules.map(s => s.id === isEditing ? { ...scheduleData, id: isEditing } : s));
@@ -94,9 +67,6 @@ export default function ScheduleTGRPage() {
       setFormData({
         lotNumber: scheduleToEdit.lotNumber,
         category: scheduleToEdit.category,
-        group: scheduleToEdit.group || '',
-        participantNamesStr: scheduleToEdit.participantNames?.join(', ') || '',
-        contingent: scheduleToEdit.contingent || '',
         pesilatMerahName: scheduleToEdit.pesilatMerahName || '',
         pesilatMerahContingent: scheduleToEdit.pesilatMerahContingent || '',
         pesilatBiruName: scheduleToEdit.pesilatBiruName || '',
@@ -116,7 +86,7 @@ export default function ScheduleTGRPage() {
     alert('Fungsi unggah XLS belum diimplementasikan.');
   };
 
-  const tableHeaders = ["No. Partai/Undian", "Kategori", "Peserta/Tim Merah", "Kontingen Merah", "Peserta/Tim Biru", "Kontingen Biru", "Pool/Grup"];
+  const tableHeaders = ["No. Partai/Undian", "Kategori", "Pesilat Merah", "Kontingen Merah", "Pesilat Biru", "Kontingen Biru"];
   
   const categoryIcons: Record<TGRCategoryType, React.ReactNode> = {
     Tunggal: <User className="h-4 w-4 inline mr-1" />,
@@ -125,8 +95,6 @@ export default function ScheduleTGRPage() {
     'Jurus Tunggal Bebas': <Swords className="h-4 w-4 inline mr-1" />,
   };
   
-  const isJurusTunggalBebas = formData.category === 'Jurus Tunggal Bebas';
-
   return (
     <>
       <PageTitle title="Jadwal Pertandingan TGR" description="Kelola jadwal pertandingan kategori Tunggal, Ganda, Regu, dan Jurus Tunggal Bebas.">
@@ -154,29 +122,10 @@ export default function ScheduleTGRPage() {
               options={tgrCategoriesList.map(cat => ({ value: cat, label: cat }))}
               required 
             />
-
-            {isJurusTunggalBebas ? (
-              <>
-                <FormField id="pesilatMerahName" label="Nama Pesilat Merah" value={formData.pesilatMerahName || ''} onChange={handleChange} required />
-                <FormField id="pesilatMerahContingent" label="Kontingen Pesilat Merah" value={formData.pesilatMerahContingent || ''} onChange={handleChange} required />
-                <FormField id="pesilatBiruName" label="Nama Pesilat Biru" value={formData.pesilatBiruName || ''} onChange={handleChange} required />
-                <FormField id="pesilatBiruContingent" label="Kontingen Pesilat Biru" value={formData.pesilatBiruContingent || ''} onChange={handleChange} required />
-              </>
-            ) : (
-              <>
-                <FormField id="group" label="Pool/Grup" value={formData.group || ''} onChange={handleChange} placeholder="cth: A, B" required />
-                <FormField 
-                  id="participantNamesStr" 
-                  label="Nama Peserta/Tim (pisahkan dengan koma)" 
-                  value={formData.participantNamesStr || ''} 
-                  onChange={handleChange} 
-                  placeholder="cth: Atlet 1, Atlet 2 (untuk Ganda/Regu)"
-                  required 
-                  className="md:col-span-2"
-                />
-                <FormField id="contingent" label="Kontingen" value={formData.contingent || ''} onChange={handleChange} required className="md:col-span-2"/>
-              </>
-            )}
+            <FormField id="pesilatMerahName" label="Nama Pesilat Merah" value={formData.pesilatMerahName} onChange={handleChange} placeholder="Nama pesilat/tim utama" required />
+            <FormField id="pesilatMerahContingent" label="Kontingen Pesilat Merah" value={formData.pesilatMerahContingent} onChange={handleChange} required />
+            <FormField id="pesilatBiruName" label="Nama Pesilat Biru (Opsional)" value={formData.pesilatBiruName || ''} onChange={handleChange} placeholder="Kosongkan jika tidak ada lawan langsung" />
+            <FormField id="pesilatBiruContingent" label="Kontingen Pesilat Biru (Opsional)" value={formData.pesilatBiruContingent || ''} onChange={handleChange} />
           </CardContent>
           <CardFooter>
             <Button type="submit" className="bg-primary hover:bg-primary/90 text-primary-foreground">
@@ -206,23 +155,10 @@ export default function ScheduleTGRPage() {
                 <TableCell className="flex items-center">
                   {categoryIcons[s.category]} {s.category}
                 </TableCell>
-                {s.category === 'Jurus Tunggal Bebas' ? (
-                  <>
-                    <TableCell>{s.pesilatMerahName || 'N/A'}</TableCell>
-                    <TableCell>{s.pesilatMerahContingent || 'N/A'}</TableCell>
-                    <TableCell>{s.pesilatBiruName || 'N/A'}</TableCell>
-                    <TableCell>{s.pesilatBiruContingent || 'N/A'}</TableCell>
-                    <TableCell>N/A</TableCell> 
-                  </>
-                ) : (
-                  <>
-                    <TableCell>{s.participantNames?.join(', ') || 'N/A'}</TableCell>
-                    <TableCell>{s.contingent || 'N/A'}</TableCell>
-                    <TableCell>N/A</TableCell>
-                    <TableCell>N/A</TableCell>
-                    <TableCell>{s.group || 'N/A'}</TableCell>
-                  </>
-                )}
+                <TableCell>{s.pesilatMerahName || 'N/A'}</TableCell>
+                <TableCell>{s.pesilatMerahContingent || 'N/A'}</TableCell>
+                <TableCell>{s.pesilatBiruName || 'N/A'}</TableCell>
+                <TableCell>{s.pesilatBiruContingent || 'N/A'}</TableCell>
               </>
             )}
             onEdit={handleEdit}
@@ -233,3 +169,4 @@ export default function ScheduleTGRPage() {
     </>
   );
 }
+
