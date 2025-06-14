@@ -6,9 +6,9 @@ import Link from 'next/link';
 import { Header } from '@/components/layout/Header';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription as DialogVerificationDescriptionElement } from "@/components/ui/dialog"; // Renamed to avoid conflict
+import { Dialog, DialogContent, DialogHeader, DialogTitle as RadixDialogTitle, DialogDescription as DialogVerificationDescriptionElement } from "@/components/ui/dialog"; // Renamed to avoid conflict
 import { ArrowLeft, Play, Pause, RotateCcw, ChevronRight, CheckCircle2, RadioTower, Loader2, Vote, Settings, TimerIcon, ChevronsRight } from 'lucide-react';
-import type { ScheduleTanding, KetuaActionLogEntry, TimerStatus, TimerMatchStatus, VerificationRequest, JuriVoteValue } from '@/lib/types';
+import type { ScheduleTanding, KetuaActionLogEntry, TimerStatus, TimerMatchStatus, VerificationRequest, JuriVoteValue, JuriMatchData as LibJuriMatchData, RoundScores as LibRoundScores, ScoreEntry as LibScoreEntry } from '@/lib/types';
 import { db } from '@/lib/firebase';
 import { doc, onSnapshot, setDoc, getDoc, Timestamp, updateDoc, writeBatch, collection, query, orderBy, getDocs, deleteDoc, limit, where, serverTimestamp } from 'firebase/firestore';
 import { cn } from '@/lib/utils';
@@ -31,29 +31,12 @@ interface PesilatInfo {
   contingent: string;
 }
 
-interface ScoreEntry {
-  points: 1 | 2;
-  timestamp: Timestamp;
-}
+interface ScoreEntry extends LibScoreEntry {} // Uses type from lib/types
 
-interface CombinedScoreEntry extends ScoreEntry {
-  juriId: string;
-  key: string;
-  round: keyof JuriRoundScores;
-  color: 'merah' | 'biru';
-}
+interface JuriRoundScores extends LibRoundScores {} // Uses type from lib/types
 
-interface JuriRoundScores {
-  round1: ScoreEntry[];
-  round2: ScoreEntry[];
-  round3: ScoreEntry[];
-}
+interface JuriMatchData extends LibJuriMatchData {} // Uses type from lib/types
 
-interface JuriMatchData {
-  merah: JuriRoundScores;
-  biru: JuriRoundScores;
-  lastUpdated?: Timestamp;
-}
 
 interface JuriMatchDataWithId extends JuriMatchData {
   juriId: string;
@@ -66,6 +49,22 @@ const initialTimerStatus: TimerStatus = {
   matchStatus: 'Pending',
   roundDuration: DEFAULT_ROUND_DURATION_SECONDS,
 };
+
+const formatLastUpdatedTimestamp = (timestamp: JuriMatchData['lastUpdated']): string => {
+    if (!timestamp) return '';
+    if (timestamp instanceof Date) {
+        return timestamp.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+    }
+    if (timestamp instanceof Timestamp) { // Firestore Timestamp
+        return timestamp.toDate().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+    }
+    if (typeof timestamp === 'object' && timestamp !== null && typeof timestamp.seconds === 'number') { // Plain object
+        return new Date(timestamp.seconds * 1000).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+    }
+    console.warn("Unknown lastUpdated timestamp format:", timestamp);
+    return 'Invalid Date';
+};
+
 
 export default function ScoringTandingDewanSatuPage() {
   const [configMatchId, setConfigMatchId] = useState<string | null | undefined>(undefined);
@@ -285,7 +284,12 @@ export default function ScoringTandingDewanSatuPage() {
             if (!mounted) return;
             const actions: KetuaActionLogEntry[] = [];
             querySnapshot.forEach((doc) => {
-                actions.push({ id: doc.id, ...doc.data() } as KetuaActionLogEntry);
+                const data = doc.data();
+                actions.push({ 
+                    id: doc.id, 
+                    ...data,
+                    timestamp: data.timestamp // Keep as Firestore Timestamp or plain object
+                } as KetuaActionLogEntry);
             });
             if (mounted) setKetuaActionsLog(actions);
         }, (err) => {
@@ -396,25 +400,42 @@ export default function ScoringTandingDewanSatuPage() {
       (['merah', 'biru'] as const).forEach(pesilatColor => {
         (['round1', 'round2', 'round3'] as const).forEach(roundKey => {
           juriData[pesilatColor]?.[roundKey]?.forEach(entry => {
-            // Ensure timestamp is valid and has toMillis method
-            if (entry && entry.timestamp && typeof entry.timestamp.toMillis === 'function') {
-              const entryKey = `${juriData.juriId}_${entry.timestamp.toMillis()}_${entry.points}`;
+            let entryTimestampMillis: number | null = null;
+            if (entry.timestamp) {
+                if (entry.timestamp instanceof Timestamp) { // Firestore Timestamp
+                    entryTimestampMillis = entry.timestamp.toMillis();
+                } else if (entry.timestamp instanceof Date) { // JS Date
+                    entryTimestampMillis = entry.timestamp.getTime();
+                } else if (typeof entry.timestamp === 'object' && entry.timestamp !== null && typeof entry.timestamp.seconds === 'number') { // Plain object
+                    entryTimestampMillis = entry.timestamp.seconds * 1000 + (entry.timestamp.nanoseconds || 0) / 1000000;
+                }
+            }
+
+            if (entryTimestampMillis !== null) {
+              const entryKey = `${juriData.juriId}_${entryTimestampMillis}_${entry.points}`;
               allRawEntries.push({
                 ...entry,
                 juriId: juriData.juriId,
                 key: entryKey,
                 round: roundKey,
-                color: pesilatColor
+                color: pesilatColor,
+                timestamp: entry.timestamp // Keep original timestamp for sorting if needed
               });
             } else {
-              // Log or handle invalid entry if necessary
               console.warn(`[Dewan-1] Skipping entry due to invalid timestamp. Juri: ${juriData.juriId}, Color: ${pesilatColor}, Round: ${roundKey}`);
             }
           });
         });
       });
     });
-    allRawEntries.sort((a, b) => a.timestamp.toMillis() - b.timestamp.toMillis());
+
+    // Sort by a comparable timestamp value
+    allRawEntries.sort((a, b) => {
+        const tsA = a.timestamp instanceof Timestamp ? a.timestamp.toMillis() : (a.timestamp instanceof Date ? a.timestamp.getTime() : (a.timestamp as {seconds: number}).seconds * 1000);
+        const tsB = b.timestamp instanceof Timestamp ? b.timestamp.toMillis() : (b.timestamp instanceof Date ? b.timestamp.getTime() : (b.timestamp as {seconds: number}).seconds * 1000);
+        return tsA - tsB;
+    });
+
 
     // Determine unstruck and struck keys
     const newlyProcessedInThisCycle = new Set<string>(); // To avoid double-processing within this same calculation cycle
@@ -424,6 +445,8 @@ export default function ScoringTandingDewanSatuPage() {
       if (currentUnstruckKeys.has(e1.key) || currentStruckKeys.has(e1.key) || newlyProcessedInThisCycle.has(e1.key)) {
         continue; // Already processed or part of a confirmed pair/strike
       }
+      const ts1 = e1.timestamp instanceof Timestamp ? e1.timestamp.toMillis() : (e1.timestamp instanceof Date ? e1.timestamp.getTime() : (e1.timestamp as {seconds: number}).seconds * 1000);
+
 
       // Check for agreeing partners
       for (let j = i + 1; j < allRawEntries.length; j++) {
@@ -431,12 +454,14 @@ export default function ScoringTandingDewanSatuPage() {
         if (currentUnstruckKeys.has(e2.key) || currentStruckKeys.has(e2.key) || newlyProcessedInThisCycle.has(e2.key)) {
           continue;
         }
+        const ts2 = e2.timestamp instanceof Timestamp ? e2.timestamp.toMillis() : (e2.timestamp instanceof Date ? e2.timestamp.getTime() : (e2.timestamp as {seconds: number}).seconds * 1000);
+
 
         if (e1.juriId !== e2.juriId &&
             e1.round === e2.round &&
             e1.color === e2.color &&
             e1.points === e2.points &&
-            Math.abs(e1.timestamp.toMillis() - e2.timestamp.toMillis()) <= JURI_INPUT_VALIDITY_WINDOW_MS) {
+            Math.abs(ts1 - ts2) <= JURI_INPUT_VALIDITY_WINDOW_MS) {
 
           // Found a pair
           currentUnstruckKeys.add(e1.key);
@@ -447,10 +472,12 @@ export default function ScoringTandingDewanSatuPage() {
           for (let k = j + 1; k < allRawEntries.length; k++) {
               const e3 = allRawEntries[k];
               if (currentUnstruckKeys.has(e3.key) || currentStruckKeys.has(e3.key) || newlyProcessedInThisCycle.has(e3.key)) continue;
+              const ts3 = e3.timestamp instanceof Timestamp ? e3.timestamp.toMillis() : (e3.timestamp instanceof Date ? e3.timestamp.getTime() : (e3.timestamp as {seconds: number}).seconds * 1000);
+
               if (e3.juriId !== e1.juriId && e3.juriId !== e2.juriId &&
                   e3.round === e1.round && e3.color === e1.color && e3.points === e1.points &&
-                  Math.abs(e3.timestamp.toMillis() - e1.timestamp.toMillis()) <= JURI_INPUT_VALIDITY_WINDOW_MS &&
-                  Math.abs(e3.timestamp.toMillis() - e2.timestamp.toMillis()) <= JURI_INPUT_VALIDITY_WINDOW_MS) {
+                  Math.abs(ts3 - ts1) <= JURI_INPUT_VALIDITY_WINDOW_MS &&
+                  Math.abs(ts3 - ts2) <= JURI_INPUT_VALIDITY_WINDOW_MS) {
                   currentUnstruckKeys.add(e3.key);
                   newlyProcessedInThisCycle.add(e3.key);
                   break; // Found a third, no need to look further for this pair
@@ -465,7 +492,8 @@ export default function ScoringTandingDewanSatuPage() {
     const now = Date.now();
     allRawEntries.forEach(entry => {
       if (!currentUnstruckKeys.has(entry.key) && !currentStruckKeys.has(entry.key)) { // Not unstruck and not already struck
-        if (now - entry.timestamp.toMillis() > GRACE_PERIOD_FOR_STRIKE_DECISION) {
+        const tsEntry = entry.timestamp instanceof Timestamp ? entry.timestamp.toMillis() : (entry.timestamp instanceof Date ? entry.timestamp.getTime() : (entry.timestamp as {seconds: number}).seconds * 1000);
+        if (now - tsEntry > GRACE_PERIOD_FOR_STRIKE_DECISION) {
           currentStruckKeys.add(entry.key);
         }
       }
@@ -486,17 +514,21 @@ export default function ScoringTandingDewanSatuPage() {
     for (let i = 0; i < unstruckEntries.length; i++) {
         const e1 = unstruckEntries[i];
         if (scoredPairKeys.has(e1.key)) continue; // Already part of a scored group
+        const ts1 = e1.timestamp instanceof Timestamp ? e1.timestamp.toMillis() : (e1.timestamp instanceof Date ? e1.timestamp.getTime() : (e1.timestamp as {seconds: number}).seconds * 1000);
+
 
         const agreeingPartners = [e1];
         for (let j = i + 1; j < unstruckEntries.length; j++) {
             const e2 = unstruckEntries[j];
             if (scoredPairKeys.has(e2.key)) continue;
+            const ts2 = e2.timestamp instanceof Timestamp ? e2.timestamp.toMillis() : (e2.timestamp instanceof Date ? e2.timestamp.getTime() : (e2.timestamp as {seconds: number}).seconds * 1000);
+
 
             if (e1.juriId !== e2.juriId &&
                 e1.round === e2.round &&
                 e1.color === e2.color &&
                 e1.points === e2.points &&
-                Math.abs(e1.timestamp.toMillis() - e2.timestamp.toMillis()) <= JURI_INPUT_VALIDITY_WINDOW_MS) {
+                Math.abs(ts1 - ts2) <= JURI_INPUT_VALIDITY_WINDOW_MS) {
                 agreeingPartners.push(e2);
             }
         }
@@ -809,7 +841,7 @@ export default function ScoringTandingDewanSatuPage() {
         const initialJuriDataContent: JuriMatchData = {
             merah: { round1: [], round2: [], round3: [] },
             biru: { round1: [], round2: [], round3: [] },
-            lastUpdated: serverTimestamp() as any,
+            lastUpdated: serverTimestamp() as Timestamp,
         };
         JURI_IDS.forEach(juriId => {
             const juriDocRef = doc(db, MATCHES_TANDING_COLLECTION, activeScheduleId, 'juri_scores', juriId);
@@ -893,13 +925,20 @@ export default function ScoringTandingDewanSatuPage() {
     if (!scoresForRound || !Array.isArray(scoresForRound) || scoresForRound.length === 0) return '0';
 
     return scoresForRound.map((entry, index) => {
-      let entryTimestampMillis: number;
-      if (entry.timestamp && typeof entry.timestamp.toMillis === 'function') {
-        entryTimestampMillis = entry.timestamp.toMillis();
-      } else {
-        console.warn(`[Dewan-1] Invalid timestamp in getJuriScoreForDisplay. Entry:`, JSON.stringify(entry));
-        return <span key={`${juriId}-${round}-${pesilatColor}-${index}-invalid`} className="mr-1.5 text-red-500">Inv!</span>;
+      let entryTimestampMillis: number | null = null;
+      if (entry.timestamp) {
+        if (entry.timestamp instanceof Timestamp) { entryTimestampMillis = entry.timestamp.toMillis(); }
+        else if (entry.timestamp instanceof Date) { entryTimestampMillis = entry.timestamp.getTime(); }
+        else if (typeof entry.timestamp === 'object' && entry.timestamp !== null && typeof entry.timestamp.seconds === 'number') {
+            entryTimestampMillis = entry.timestamp.seconds * 1000 + (entry.timestamp.nanoseconds || 0) / 1000000;
+        }
       }
+
+      if (entryTimestampMillis === null) {
+         console.warn(`[Dewan-1] Invalid timestamp in getJuriScoreForDisplay. Entry:`, JSON.stringify(entry));
+         return <span key={`${juriId}-${round}-${pesilatColor}-${index}-invalid`} className="mr-1.5 text-red-500">Inv!</span>;
+      }
+
 
       const entryKey = `${juriData.juriId}_${entryTimestampMillis}_${entry.points}`;
       const isUnstruck = unstruckKeys.has(entryKey);
@@ -1199,6 +1238,7 @@ export default function ScoringTandingDewanSatuPage() {
             <CardContent className="text-xs md:text-sm grid grid-cols-1 sm:grid-cols-3 gap-3 md:gap-4">
                 {juriDataArray.map((jS, idx) => {
                     const juriId = JURI_IDS[idx];
+                    const lastUpdatedString = jS?.lastUpdated ? formatLastUpdatedTimestamp(jS.lastUpdated) : '';
                     return (
                         <div key={`juri-status-${juriId}`} className="border border-gray-200 dark:border-gray-700 p-2 md:p-3 rounded-md bg-gray-50 dark:bg-gray-700/50">
                             <p className="font-semibold text-primary mb-1">Juri {idx + 1}: {jS && jS.lastUpdated ? <CheckCircle2 className="inline h-4 w-4 text-green-500"/> : <span className="text-yellow-600 italic">Menunggu data...</span>}</p>
@@ -1206,7 +1246,7 @@ export default function ScoringTandingDewanSatuPage() {
                                 <div className="space-y-0.5 text-gray-700 dark:text-gray-300">
                                     <p><span className='font-medium text-red-500'>Merah:</span> R1:[{getJuriScoreForDisplay(juriId, jS, 'merah', 1, allContributingEntryKeys, permanentlyStruckEntryKeys)}] R2:[{getJuriScoreForDisplay(juriId, jS, 'merah', 2, allContributingEntryKeys, permanentlyStruckEntryKeys)}] R3:[{getJuriScoreForDisplay(juriId, jS, 'merah', 3, allContributingEntryKeys, permanentlyStruckEntryKeys)}] = <span className='font-semibold'>{getTotalJuriRawScoreForDisplay(jS, 'merah')}</span></p>
                                     <p><span className='font-medium text-blue-500'>Biru:</span> R1:[{getJuriScoreForDisplay(juriId, jS, 'biru', 1, allContributingEntryKeys, permanentlyStruckEntryKeys)}] R2:[{getJuriScoreForDisplay(juriId, jS, 'biru', 2, allContributingEntryKeys, permanentlyStruckEntryKeys)}] R3:[{getJuriScoreForDisplay(juriId, jS, 'biru', 3, allContributingEntryKeys, permanentlyStruckEntryKeys)}] = <span className='font-semibold'>{getTotalJuriRawScoreForDisplay(jS, 'biru')}</span></p>
-                                    {jS.lastUpdated && <p className="text-gray-400 dark:text-gray-500 text-xxs">Update: {jS.lastUpdated.toDate().toLocaleTimeString()}</p>}
+                                    {lastUpdatedString && <p className="text-gray-400 dark:text-gray-500 text-xxs">Update: {lastUpdatedString}</p>}
                                 </div>
                             )}
                             {!jS && <p className="italic text-gray-500 dark:text-gray-400">Belum ada input dari Juri {idx+1} untuk pertandingan ini.</p>}
@@ -1218,11 +1258,11 @@ export default function ScoringTandingDewanSatuPage() {
 
         <Dialog open={isDisplayVerificationModalOpen} onOpenChange={(isOpen) => { if (!isOpen && activeDisplayVerificationRequest?.status === 'pending') return; setIsDisplayVerificationModalOpen(isOpen); }}>
           <DialogContent className="sm:max-w-lg md:max-w-xl" onPointerDownOutside={(e) => {if (activeDisplayVerificationRequest?.status === 'pending') e.preventDefault();}} onEscapeKeyDown={(e) => {if (activeDisplayVerificationRequest?.status === 'pending') e.preventDefault();}}>
-            <DialogTitle className="sr-only">Detail Verifikasi Juri</DialogTitle>
+            <RadixDialogTitle className="sr-only">Detail Verifikasi Juri</RadixDialogTitle>
             <DialogHeader>
-              <DialogTitle className="text-2xl md:text-3xl font-bold font-headline text-center">
+              <RadixDialogTitle className="text-2xl md:text-3xl font-bold font-headline text-center">
                 Verifikasi Juri
-              </DialogTitle>
+              </RadixDialogTitle>
             </DialogHeader>
             <div className="py-4 px-2 md:px-6">
               <div className="mb-6">

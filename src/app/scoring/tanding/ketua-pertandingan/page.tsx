@@ -86,6 +86,22 @@ const formatTime = (seconds: number): string => {
     return `${minutes.toString().padStart(2, '0')}:${remainingSeconds.toString().padStart(2, '0')}`;
 };
 
+const formatFirestoreTimestamp = (timestamp: KetuaActionLogEntry['timestamp']): string => {
+  if (!timestamp) return '-';
+  if (timestamp instanceof Date) {
+    return timestamp.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+  }
+  if (timestamp instanceof Timestamp) { // Firestore Timestamp
+    return timestamp.toDate().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+  }
+  if (typeof timestamp === 'object' && timestamp !== null && typeof timestamp.seconds === 'number') { // Plain object
+    return new Date(timestamp.seconds * 1000).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+  }
+  console.warn("Unknown timestamp format in formatFirestoreTimestamp:", timestamp);
+  return 'Invalid Date';
+};
+
+
 export default function KetuaPertandinganPage() {
   const [configMatchId, setConfigMatchId] = useState<string | null | undefined>(undefined);
   const [activeMatchId, setActiveMatchId] = useState<string | null>(null);
@@ -193,7 +209,14 @@ export default function KetuaPertandinganPage() {
     const unsubActions = onSnapshot(actionsQuery, (snap) => {
       if (!mounted) return;
       const actions: KetuaActionLogEntry[] = [];
-      snap.forEach((doc) => actions.push({ id: doc.id, ...doc.data() } as KetuaActionLogEntry));
+      snap.forEach((doc) => {
+        const data = doc.data();
+        actions.push({ 
+            id: doc.id, 
+            ...data,
+            timestamp: data.timestamp // Keep as Firestore Timestamp or plain object
+        } as KetuaActionLogEntry)
+    });
       setKetuaActionsLog(actions);
     }, (err) => { if (!mounted) return; console.error("Error fetching official actions:", err); setError("Gagal memuat log tindakan."); });
     unsubscribers.push(unsubActions);
@@ -272,13 +295,14 @@ export default function KetuaPertandinganPage() {
         actionTypeToLog = 'Jatuhan';
       }
 
-      const baseActionData = {
+      const baseActionData: Omit<KetuaActionLogEntry, 'id' | 'timestamp'> & { timestamp: any } = {
         pesilatColor,
         actionType: actionTypeToLog,
         round: dewanTimerStatus.currentRound,
         timestamp: serverTimestamp(),
         points: pointsToLog,
       };
+      
 
       const actionDataWithOptionalField = currentOriginalActionType !== undefined
         ? { ...baseActionData, originalActionType: currentOriginalActionType }
@@ -350,7 +374,7 @@ export default function KetuaPertandinganPage() {
 
     setIsCreatingVerification(true);
     try {
-      const verificationData: Omit<VerificationRequest, 'id'> = {
+      const verificationData: Omit<VerificationRequest, 'id' | 'timestamp'> & {timestamp: any} = {
         matchId: activeMatchId,
         type: selectedVerificationTypeForCreation,
         status: 'pending',
@@ -411,7 +435,7 @@ export default function KetuaPertandinganPage() {
 
       let pointsAwardedMessage = "";
       if (activeVerificationDetails.type === 'jatuhan' && (ketuaSelectedDecision === 'merah' || ketuaSelectedDecision === 'biru')) {
-        const actionData: Omit<KetuaActionLogEntry, 'id'> = {
+        const actionData: Omit<KetuaActionLogEntry, 'id' | 'timestamp'> & { timestamp: any } = {
             pesilatColor: ketuaSelectedDecision as PesilatColorIdentity,
             actionType: 'Jatuhan',
             round: activeVerificationDetails.round,
@@ -544,6 +568,48 @@ export default function KetuaPertandinganPage() {
             </TableBody>
           </Table>
         </div>
+        
+        {/* Log Tindakan Ketua */}
+        <Card className="mb-6">
+          <CardHeader>
+            <CardTitle className="text-lg">Log Tindakan Ketua</CardTitle>
+          </CardHeader>
+          <CardContent>
+            {ketuaActionsLog.length === 0 ? (
+              <p className="text-muted-foreground">Belum ada tindakan tercatat.</p>
+            ) : (
+              <div className="max-h-48 overflow-y-auto">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead className="w-[100px]">Waktu</TableHead>
+                      <TableHead>Babak</TableHead>
+                      <TableHead>Pesilat</TableHead>
+                      <TableHead>Tindakan</TableHead>
+                      <TableHead className="text-right">Poin</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {ketuaActionsLog.map((action) => (
+                      <TableRow key={action.id}>
+                        <TableCell>{formatFirestoreTimestamp(action.timestamp)}</TableCell>
+                        <TableCell>{action.round}</TableCell>
+                        <TableCell>
+                          <Badge variant={action.pesilatColor === 'merah' ? 'destructive' : 'default'} className={action.pesilatColor === 'biru' ? 'bg-blue-500 text-white' : ''}>
+                            {action.pesilatColor === 'merah' ? pesilatMerahInfo?.name || 'Merah' : pesilatBiruInfo?.name || 'Biru'}
+                          </Badge>
+                        </TableCell>
+                        <TableCell>{action.actionType}{action.originalActionType ? ` (dari ${action.originalActionType})` : ''}</TableCell>
+                        <TableCell className="text-right">{action.points}</TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+
 
         <div className="grid grid-cols-1 md:grid-cols-[1fr_auto_1fr] gap-4 md:gap-8 items-start">
           <div className="space-y-2">

@@ -1,7 +1,7 @@
 
 "use client";
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, use } from 'react';
 import Link from 'next/link';
 import { Header } from '@/components/layout/Header';
 import { PageTitle } from '@/components/shared/PageTitle';
@@ -9,7 +9,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogFooter, DialogClose } from "@/components/ui/dialog";
 import { ArrowLeft, MinusSquare, Target, Shield, Lock, Unlock, Loader2, Vote } from 'lucide-react';
-import type { ScheduleTanding, VerificationRequest, JuriVoteValue } from '@/lib/types';
+import type { ScheduleTanding, VerificationRequest, JuriVoteValue, JuriMatchData as LibJuriMatchData, RoundScores as LibRoundScoresType, ScoreEntry as LibScoreEntryType } from '@/lib/types';
 import { db } from '@/lib/firebase';
 import { doc, onSnapshot, getDoc, Timestamp, setDoc, updateDoc, collection, query, where, orderBy, limit, serverTimestamp } from 'firebase/firestore';
 import { cn } from '@/lib/utils';
@@ -26,22 +26,14 @@ interface PesilatInfo {
   contingent: string;
 }
 
-interface ScoreEntry {
-  points: 1 | 2;
-  timestamp: Timestamp; 
-}
+interface ScoreEntry extends LibScoreEntryType {}
 
-interface RoundScores {
-  round1: ScoreEntry[];
-  round2: ScoreEntry[];
-  round3: ScoreEntry[];
-}
 
-interface JuriMatchData {
-  merah: RoundScores;
-  biru: RoundScores;
-  lastUpdated?: Timestamp; 
-}
+interface RoundScores extends LibRoundScoresType {}
+
+
+interface JuriMatchData extends LibJuriMatchData {}
+
 
 interface TimerStatusFromDewan {
   currentRound: 1 | 2 | 3;
@@ -58,9 +50,11 @@ const initialRoundScores = (): RoundScores => ({
 const initialJuriMatchData = (): JuriMatchData => ({
   merah: initialRoundScores(),
   biru: initialRoundScores(),
+  lastUpdated: null,
 });
 
-export default function JuriDynamicPage({ params }: { params: { juriId: string } }) {
+export default function JuriDynamicPage({ params: paramsPromise }: { params: Promise<{ juriId: string }> }) {
+  const params = use(paramsPromise);
   const { juriId } = params;
   const juriDisplayName = `Juri ${juriId?.split('-')[1] || 'Tidak Dikenal'}`;
 
@@ -278,7 +272,7 @@ export default function JuriDynamicPage({ params }: { params: { juriId: string }
     try {
       const dataToSave: JuriMatchData = {
         ...newScoresData,
-        lastUpdated: serverTimestamp() as any, 
+        lastUpdated: serverTimestamp() as Timestamp, 
       };
       await setDoc(juriScoreDocRef, dataToSave, { merge: true });
     } catch (error) {
@@ -341,10 +335,18 @@ export default function JuriDynamicPage({ params }: { params: { juriId: string }
   const renderRoundScoresDisplay = (roundData: ScoreEntry[] | undefined) => {
     if (!roundData || roundData.length === 0) return '-';
     return roundData.map((entry, index) => {
-      let entryTimestampMillis: number;
-      if (entry.timestamp && typeof (entry.timestamp as unknown as Timestamp).toMillis === 'function') {
-        entryTimestampMillis = (entry.timestamp as unknown as Timestamp).toMillis();
-      } else { 
+      let entryTimestampMillis: number | null = null;
+      if (entry.timestamp) {
+        if (entry.timestamp instanceof Timestamp) { // Firestore Timestamp
+          entryTimestampMillis = entry.timestamp.toMillis();
+        } else if (entry.timestamp instanceof Date) { // JS Date
+          entryTimestampMillis = entry.timestamp.getTime();
+        } else if (typeof entry.timestamp === 'object' && entry.timestamp !== null && typeof (entry.timestamp as {seconds: number}).seconds === 'number') { // Plain object
+          entryTimestampMillis = (entry.timestamp as {seconds: number}).seconds * 1000 + ((entry.timestamp as {nanoseconds: number}).nanoseconds || 0) / 1000000;
+        }
+      }
+
+      if (entryTimestampMillis === null) {
         return <span key={`${juriId}-roundEntry-${index}-pending`} className="mr-1.5 text-yellow-500 italic">Baru!</span>;
       }
 

@@ -1,4 +1,6 @@
 
+import type { Timestamp as FirebaseTimestamp } from 'firebase/firestore';
+
 export type PesilatColor = 'Merah' | 'Biru';
 
 export interface Pesilat {
@@ -97,7 +99,7 @@ export interface KetuaActionLogEntry {
   actionType: KetuaActionType;
   originalActionType?: KetuaActionType;
   round: 1 | 2 | 3;
-  timestamp: any;
+  timestamp: FirebaseTimestamp | Date | { seconds: number; nanoseconds: number };
   points: number;
 }
 
@@ -125,7 +127,7 @@ export interface VerificationRequest {
   type: VerificationType;
   status: VerificationStatus;
   round: 1 | 2 | 3;
-  timestamp: any; // Firestore Timestamp
+  timestamp: FirebaseTimestamp | Date | { seconds: number; nanoseconds: number }; // Firestore Timestamp
   votes: JuriVotes;
   result?: JuriVoteValue | 'tie'; // Final result of the verification
   requestingOfficial: 'ketua'; // Initially only Ketua can request
@@ -163,7 +165,7 @@ export const foulIcons: Record<string, string> = {
 // Juri Tanding Types
 export interface ScoreEntry {
   points: 1 | 2;
-  timestamp: any; // Firestore Timestamp
+  timestamp: FirebaseTimestamp | Date | { seconds: number; nanoseconds: number }; 
 }
 
 export interface RoundScores {
@@ -175,7 +177,7 @@ export interface RoundScores {
 export interface JuriMatchData {
   merah: RoundScores;
   biru: RoundScores;
-  lastUpdated?: any; // Firestore Timestamp
+  lastUpdated?: FirebaseTimestamp | Date | { seconds: number; nanoseconds: number } | null;
 }
 
 // --- TGR Scoring Types ---
@@ -193,7 +195,7 @@ export interface TGRJuriScore {
   staminaKemantapanBonus: number; // 0.00 to 0.10
   calculatedScore: number; // baseScore - (gerakanSalahCount * 0.01) + staminaKemantapanBonus
   isReady?: boolean; // Juri status kesiapan
-  lastUpdated?: any; // Firestore Timestamp
+  lastUpdated?: FirebaseTimestamp | Date | { seconds: number; nanoseconds: number } | null;
 }
 
 export type TGRDewanPenaltyType = 'weapon_drop' | 'time_violation' | 'costume_violation' | 'arena_out';
@@ -203,7 +205,7 @@ export interface TGRDewanPenalty {
   type: TGRDewanPenaltyType;
   description: string;
   pointsDeducted: number; // e.g., -0.50
-  timestamp: any; // Firestore Timestamp
+  timestamp: FirebaseTimestamp | Date | { seconds: number; nanoseconds: number };
 }
 
 export interface TGRMatchData {
