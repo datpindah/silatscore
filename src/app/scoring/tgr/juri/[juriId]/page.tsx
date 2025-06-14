@@ -6,10 +6,8 @@ import Link from 'next/link';
 import { Header } from '@/components/layout/Header';
 import { PageTitle } from '@/components/shared/PageTitle';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import { ArrowLeft, PlusCircle, MinusCircle, Loader2, Info, CheckSquare, Square } from 'lucide-react';
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
+import { ArrowLeft, Loader2, Info, CheckSquare, Square, XIcon, Check, AlertCircle } from 'lucide-react';
 import type { ScheduleTGR, TGRJuriScore, TGRTimerStatus } from '@/lib/types';
 import { db } from '@/lib/firebase';
 import { doc, onSnapshot, getDoc, setDoc, serverTimestamp, Timestamp } from 'firebase/firestore';
@@ -23,18 +21,18 @@ const JURI_SCORES_TGR_SUBCOLLECTION = 'juri_scores_tgr';
 
 const BASE_SCORE_TGR = 9.90;
 const GERAKAN_SALAH_DEDUCTION = 0.01;
-const MIN_STAMINA_BONUS = 0.00;
-const MAX_STAMINA_BONUS = 0.10;
+const STAMINA_BONUS_OPTIONS = [0.01, 0.02, 0.03, 0.04, 0.05, 0.06, 0.07, 0.08, 0.09, 0.10];
 
 const initialJuriScore: TGRJuriScore = {
   baseScore: BASE_SCORE_TGR,
   gerakanSalahCount: 0,
   staminaKemantapanBonus: 0.00,
   calculatedScore: BASE_SCORE_TGR,
+  isReady: false,
 };
 
 const initialTgrTimerStatus: TGRTimerStatus = {
-  timerSeconds: 180, // Default for Tunggal
+  timerSeconds: 180, 
   isTimerRunning: false,
   matchStatus: 'Pending',
   performanceDuration: 180,
@@ -61,7 +59,6 @@ export default function JuriTGRPage({ params }: { params: { juriId: string } }) 
     return BASE_SCORE_TGR - (gsCount * GERAKAN_SALAH_DEDUCTION) + staminaBonus;
   }, []);
 
-  // Effect to listen for active TGR schedule config
   useEffect(() => {
     const unsub = onSnapshot(doc(db, ACTIVE_TGR_SCHEDULE_CONFIG_PATH), (docSnap) => {
       const newDbConfigId = docSnap.exists() ? docSnap.data()?.activeScheduleId : null;
@@ -74,7 +71,6 @@ export default function JuriTGRPage({ params }: { params: { juriId: string } }) 
     return () => unsub();
   }, [juriDisplayName]);
 
-  // Effect to handle activeMatchId changes and reset data
   useEffect(() => {
     if (configMatchId === undefined) { setIsLoading(true); return; }
     if (configMatchId !== activeMatchId) {
@@ -90,7 +86,6 @@ export default function JuriTGRPage({ params }: { params: { juriId: string } }) 
     }
   }, [configMatchId, activeMatchId, isLoading]);
 
-  // Effect to load schedule details and juri's score for the active match
   useEffect(() => {
     if (!activeMatchId) {
       if(isLoading) setIsLoading(false);
@@ -106,7 +101,6 @@ export default function JuriTGRPage({ params }: { params: { juriId: string } }) 
       if (!mounted) return;
       setIsLoading(true);
       try {
-        // Load Schedule Details
         const scheduleDocRef = doc(db, SCHEDULE_TGR_COLLECTION, activeMatchId);
         unsubSchedule = onSnapshot(scheduleDocRef, (docSnap) => {
           if (!mounted) return;
@@ -122,7 +116,6 @@ export default function JuriTGRPage({ params }: { params: { juriId: string } }) 
           if (mounted) setError(`Gagal memuat detail jadwal TGR: ${err.message}`);
         });
 
-        // Load Juri Score or initialize if not exists
         const juriScoreDocRef = doc(db, MATCHES_TGR_COLLECTION, activeMatchId, JURI_SCORES_TGR_SUBCOLLECTION, juriId);
         unsubJuriScore = onSnapshot(juriScoreDocRef, (docSnap) => {
           if (!mounted) return;
@@ -130,17 +123,16 @@ export default function JuriTGRPage({ params }: { params: { juriId: string } }) 
             const data = docSnap.data() as TGRJuriScore;
             setJuriScore({
               ...data,
+              isReady: data.isReady || false,
               calculatedScore: calculateScore(data.gerakanSalahCount, data.staminaKemantapanBonus)
             });
           } else {
-            // Initialize if document doesn't exist for this juri for this match
             setJuriScore({...initialJuriScore, calculatedScore: calculateScore(initialJuriScore.gerakanSalahCount, initialJuriScore.staminaKemantapanBonus) });
           }
         }, (err) => {
           if (mounted) setError(`Gagal memuat skor juri: ${err.message}`);
         });
-
-        // Load TGR Match Data (for timer status)
+        
         const matchDataDocRef = doc(db, MATCHES_TGR_COLLECTION, activeMatchId);
         unsubMatchData = onSnapshot(matchDataDocRef, (docSnap) => {
             if(!mounted) return;
@@ -179,11 +171,11 @@ export default function JuriTGRPage({ params }: { params: { juriId: string } }) 
      }
   }, [isLoading, matchDetailsLoaded]);
 
-  const saveJuriScore = async (updatedScore: TGRJuriScore) => {
+  const saveJuriScore = async (updatedScore: Partial<TGRJuriScore>) => {
     if (!activeMatchId || isSaving) return;
     setIsSaving(true);
     try {
-      const scoreToSave = {
+      const scoreToSave: Partial<TGRJuriScore> = {
         ...updatedScore,
         lastUpdated: serverTimestamp(),
       };
@@ -197,9 +189,9 @@ export default function JuriTGRPage({ params }: { params: { juriId: string } }) 
     }
   };
 
-  const handleGerakanSalahChange = (increment: boolean) => {
+  const handleGerakanSalah = () => {
     setJuriScore(prev => {
-      const newCount = Math.max(0, prev.gerakanSalahCount + (increment ? 1 : -1));
+      const newCount = prev.gerakanSalahCount + 1;
       const newCalculated = calculateScore(newCount, prev.staminaKemantapanBonus);
       const updatedScore = { ...prev, gerakanSalahCount: newCount, calculatedScore: newCalculated };
       saveJuriScore(updatedScore);
@@ -207,17 +199,32 @@ export default function JuriTGRPage({ params }: { params: { juriId: string } }) 
     });
   };
 
-  const handleStaminaBonusChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    let value = parseFloat(e.target.value);
-    if (isNaN(value)) value = 0;
-    value = Math.max(MIN_STAMINA_BONUS, Math.min(MAX_STAMINA_BONUS, value));
-    
+  const handleStaminaBonusChange = (bonusValue: number) => {
     setJuriScore(prev => {
-      const newCalculated = calculateScore(prev.gerakanSalahCount, value);
-      const updatedScore = { ...prev, staminaKemantapanBonus: value, calculatedScore: newCalculated };
+      const newCalculated = calculateScore(prev.gerakanSalahCount, bonusValue);
+      const updatedScore = { ...prev, staminaKemantapanBonus: bonusValue, calculatedScore: newCalculated };
       saveJuriScore(updatedScore);
       return updatedScore;
     });
+  };
+
+  const toggleJuriReady = () => {
+    setJuriScore(prev => {
+        const newReadyState = !prev.isReady;
+        const updatedScore = { ...prev, isReady: newReadyState };
+        saveJuriScore({ isReady: newReadyState }); // Only save the isReady state
+        return updatedScore;
+    });
+  };
+  
+  const formatDisplayDate = (dateString: string | undefined) => {
+    if (!dateString) return 'Tanggal tidak tersedia';
+    try {
+      const date = new Date(dateString + 'T00:00:00'); // Ensure parsing as local date
+      return new Intl.DateTimeFormat('id-ID', { day: 'numeric', month: 'long', year: 'numeric' }).format(date);
+    } catch (e) {
+      return dateString; // Fallback to original string if formatting fails
+    }
   };
 
   const isInputDisabled = isLoading || isSaving || !activeMatchId || !matchDetailsLoaded || tgrTimerStatus.matchStatus === 'Finished' || !tgrTimerStatus.isTimerRunning;
@@ -234,120 +241,120 @@ export default function JuriTGRPage({ params }: { params: { juriId: string } }) 
     return "";
   };
 
-  const pageDescription = () => {
-    if (configMatchId === undefined && isLoading) return "Memuat...";
-    if (isLoading && activeMatchId) return "Memuat data...";
-    if (!activeMatchId && !isLoading) return "Tidak ada jadwal aktif.";
-    if (matchDetailsLoaded && scheduleDetails) {
-        const performer = scheduleDetails.category === 'Jurus Tunggal Bebas' 
-            ? `${scheduleDetails.pesilatMerahName} (Merah) vs ${scheduleDetails.pesilatBiruName} (Biru)`
-            : `${scheduleDetails.pesilatMerahName}`;
-        return `${scheduleDetails.category} - ${performer} (${scheduleDetails.pesilatMerahContingent})`;
-    }
-    return "Menunggu info pertandingan...";
-  };
-
   return (
-    <div className="flex flex-col min-h-screen">
+    <div className="flex flex-col min-h-screen bg-gray-100 dark:bg-gray-900">
       <Header />
-      <main className="flex-1 container mx-auto px-4 py-8">
-        <PageTitle title={`${juriDisplayName} - Penilaian TGR`} description={pageDescription()}>
-          <div className="flex items-center gap-2">
-            {isLoading ? <Loader2 className="h-5 w-5 text-yellow-500 animate-spin"/> : 
-             isInputDisabled ? <Info className="h-5 w-5 text-red-500"/> : 
-             <CheckSquare className="h-5 w-5 text-green-500"/>}
-            <span className={cn("text-sm font-medium", 
-                isLoading ? "text-yellow-600" : 
-                isInputDisabled ? "text-red-600" : 
-                "text-green-600")}>
-              {inputDisabledReason() || "Input Terbuka"}
-            </span>
-            <Button variant="outline" asChild>
-              <Link href="/scoring/tgr"><ArrowLeft className="mr-2 h-4 w-4" /> Kembali</Link>
+      <main className="flex-1 container mx-auto px-2 py-4 md:p-6">
+        {/* Header Info */}
+        <Card className="mb-4 shadow-md">
+          <CardContent className="p-3 md:p-4 space-y-1">
+            <div className="flex justify-between items-start">
+              <div>
+                <p className="text-sm font-semibold text-primary">{scheduleDetails?.pesilatMerahContingent || <Skeleton className="h-5 w-24" />}</p>
+                <p className="text-xs text-muted-foreground">
+                  {scheduleDetails?.category || <Skeleton className="h-4 w-20" />}
+                  {scheduleDetails?.category === 'Jurus Tunggal Bebas' && scheduleDetails.pesilatBiruName && ` vs ${scheduleDetails.pesilatBiruName} (${scheduleDetails.pesilatBiruContingent})`}
+                </p>
+              </div>
+              <div className="text-right">
+                <p className="text-sm text-muted-foreground">{scheduleDetails?.place || <Skeleton className="h-5 w-20" />}</p>
+                <p className="text-xs text-muted-foreground">{formatDisplayDate(scheduleDetails?.date) || <Skeleton className="h-4 w-24" />}</p>
+              </div>
+            </div>
+            <div className="text-center">
+                 <p className="text-lg font-semibold">
+                  {scheduleDetails?.pesilatMerahName ? 
+                    (scheduleDetails.category === 'Jurus Tunggal Bebas' ? `Tunggal Jurus Bebas` : scheduleDetails.pesilatMerahName) 
+                    : <Skeleton className="h-6 w-40 inline-block" />}
+                </p>
+                 <p className="text-sm text-muted-foreground">Babak: Penyisihan (Contoh)</p> {/* Placeholder, needs dynamic data */}
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Main Interaction Area */}
+        <div className="grid grid-cols-1 md:grid-cols-[2fr_1fr] gap-4 mb-4">
+          {/* Kesalahan Gerakan Button */}
+          <Button 
+            variant="default" 
+            className="h-40 md:h-64 text-5xl md:text-7xl bg-blue-600 hover:bg-blue-700 text-white shadow-lg"
+            onClick={handleGerakanSalah}
+            disabled={isInputDisabled}
+          >
+            <XIcon className="w-20 h-20 md:w-28 md:h-28" />
+          </Button>
+
+          {/* Detail Gerakan & Siap Button */}
+          <div className="flex flex-col gap-3">
+            <Card className="flex-grow shadow">
+              <CardHeader className="p-2 pb-1 md:p-3 md:pb-2">
+                <CardTitle className="text-sm font-medium">Detail Gerakan (Placeholder)</CardTitle>
+              </CardHeader>
+              <CardContent className="p-2 md:p-3 text-xs">
+                <p>Urutan Gerakan: ...</p>
+                <p>Gerakan yang Terlewat: ...</p>
+              </CardContent>
+            </Card>
+            <Button 
+              onClick={toggleJuriReady} 
+              disabled={isLoading || isSaving || !activeMatchId || !matchDetailsLoaded}
+              className={cn(
+                "w-full py-3 text-base font-semibold shadow-md",
+                juriScore.isReady ? "bg-blue-500 hover:bg-blue-600 text-white" : "bg-gray-300 hover:bg-gray-400 text-gray-700 dark:bg-gray-600 dark:hover:bg-gray-500 dark:text-gray-200"
+              )}
+            >
+              {isSaving && juriScore.isReady !== undefined ? <Loader2 className="mr-2 h-5 w-5 animate-spin" /> : (juriScore.isReady ? <Check className="mr-2 h-5 w-5"/> : <Square className="mr-2 h-5 w-5"/> )}
+              {juriScore.isReady ? "Juri Siap" : "Tandai Siap"}
             </Button>
           </div>
-        </PageTitle>
+        </div>
+        
+        {/* Skor Akurasi & Stamina */}
+        <Card className="mb-4 shadow-md">
+          <CardContent className="p-3 md:p-4">
+            <div className="text-center mb-3">
+              <p className="text-sm font-semibold text-muted-foreground">TOTAL AKURASI SKOR</p>
+              <p className="text-5xl md:text-6xl font-bold text-primary">{juriScore.calculatedScore.toFixed(2)}</p>
+            </div>
+            
+            <div className="mb-2 text-center">
+              <p className="text-xs font-medium text-muted-foreground">FLOW OF MOVEMENT / STAMINA (RANGE SKOR : 0.01 - 0.10)</p>
+            </div>
+            <div className="grid grid-cols-5 sm:grid-cols-10 gap-1 md:gap-2">
+              {STAMINA_BONUS_OPTIONS.map(bonus => (
+                <Button
+                  key={bonus}
+                  variant={juriScore.staminaKemantapanBonus === bonus ? "default" : "outline"}
+                  className={cn("text-xs md:text-sm h-9 md:h-10", juriScore.staminaKemantapanBonus === bonus && "bg-primary text-primary-foreground")}
+                  onClick={() => handleStaminaBonusChange(bonus)}
+                  disabled={isInputDisabled}
+                >
+                  {bonus.toFixed(2)}
+                </Button>
+              ))}
+            </div>
+            <p className="text-xs text-center mt-1 text-muted-foreground">Pengurangan: {juriScore.gerakanSalahCount} x {GERAKAN_SALAH_DEDUCTION.toFixed(2)} = {(juriScore.gerakanSalahCount * GERAKAN_SALAH_DEDUCTION).toFixed(2)}. Bonus Stamina: {juriScore.staminaKemantapanBonus.toFixed(2)}</p>
+          </CardContent>
+        </Card>
+        
+        {/* Footer Buttons */}
+        <div className="flex flex-col sm:flex-row justify-between items-center gap-3">
+           <div className="w-full sm:w-auto">
+            {error && <p className="text-sm text-red-500 flex items-center"><AlertCircle className="mr-1 h-4 w-4"/> {error}</p>}
+             {inputDisabledReason() && !error && (
+                <p className="text-sm text-yellow-700 dark:text-yellow-400 flex items-center"><Info className="mr-1 h-4 w-4"/> {inputDisabledReason()}</p>
+             )}
+          </div>
+          <div className="flex gap-3 w-full sm:w-auto">
+            <Button variant="outline" asChild className="flex-1 sm:flex-none">
+                <Link href="/scoring/tgr"><ArrowLeft className="mr-2 h-4 w-4" /> Kembali</Link>
+            </Button>
+            <Button className="flex-1 sm:flex-none bg-green-600 hover:bg-green-700 text-white" disabled={isInputDisabled || tgrTimerStatus.matchStatus !== 'Finished'}>
+              Jurus Selanjutnya
+            </Button>
+          </div>
+        </div>
 
-        {isLoading && !matchDetailsLoaded && (
-          <Card>
-            <CardHeader><CardTitle><Skeleton className="h-8 w-48" /></CardTitle></CardHeader>
-            <CardContent className="space-y-4">
-              <Skeleton className="h-10 w-full" />
-              <Skeleton className="h-10 w-full" />
-              <Skeleton className="h-10 w-full" />
-              <Skeleton className="h-12 w-32 mt-4" />
-            </CardContent>
-          </Card>
-        )}
-
-        {!isLoading && activeMatchId && matchDetailsLoaded && scheduleDetails && (
-          <Card className="shadow-xl">
-            <CardHeader>
-                <CardTitle className="font-headline text-2xl text-primary">
-                    Skor untuk: {scheduleDetails.category === 'Jurus Tunggal Bebas' ? `${scheduleDetails.pesilatMerahName} vs ${scheduleDetails.pesilatBiruName}` : scheduleDetails.pesilatMerahName}
-                </CardTitle>
-                 <p className="text-muted-foreground">Kontingen: {scheduleDetails.pesilatMerahContingent}</p>
-                 <p className="text-muted-foreground">Kategori: {scheduleDetails.category} | No. Undian: {scheduleDetails.lotNumber}</p>
-            </CardHeader>
-            <CardContent className="space-y-6">
-              <div className="bg-accent/10 p-4 rounded-lg text-center">
-                <Label className="text-sm font-medium text-muted-foreground">SKOR AKHIR JURI</Label>
-                <div className="text-6xl font-bold text-accent">{juriScore.calculatedScore.toFixed(2)}</div>
-                <p className="text-xs text-muted-foreground">Dasar: {BASE_SCORE_TGR.toFixed(2)} - ({juriScore.gerakanSalahCount} x {GERAKAN_SALAH_DEDUCTION.toFixed(2)}) + {juriScore.staminaKemantapanBonus.toFixed(2)}</p>
-              </div>
-
-              <div className="space-y-4">
-                <div>
-                  <Label htmlFor="gerakanSalah" className="text-lg font-semibold font-headline">Pengurangan Kesalahan Gerakan</Label>
-                  <div className="flex items-center gap-3 mt-1">
-                    <Button variant="outline" size="icon" onClick={() => handleGerakanSalahChange(false)} disabled={isInputDisabled || juriScore.gerakanSalahCount <= 0}>
-                      <MinusCircle />
-                    </Button>
-                    <Input 
-                      id="gerakanSalah" 
-                      type="number" 
-                      readOnly 
-                      value={juriScore.gerakanSalahCount} 
-                      className="w-20 text-center text-xl font-bold"
-                    />
-                    <Button variant="outline" size="icon" onClick={() => handleGerakanSalahChange(true)} disabled={isInputDisabled}>
-                      <PlusCircle />
-                    </Button>
-                    <span className="text-sm text-muted-foreground">({(juriScore.gerakanSalahCount * GERAKAN_SALAH_DEDUCTION).toFixed(2)} poin)</span>
-                  </div>
-                  <p className="text-xs text-muted-foreground mt-1">Setiap kesalahan gerakan mengurangi {GERAKAN_SALAH_DEDUCTION} poin.</p>
-                </div>
-
-                <div>
-                  <Label htmlFor="staminaBonus" className="text-lg font-semibold font-headline">Bonus Stamina & Kemantapan</Label>
-                  <Input 
-                    id="staminaBonus" 
-                    type="number"
-                    value={juriScore.staminaKemantapanBonus}
-                    onChange={handleStaminaBonusChange}
-                    min={MIN_STAMINA_BONUS}
-                    max={MAX_STAMINA_BONUS}
-                    step="0.01"
-                    disabled={isInputDisabled}
-                    className="mt-1 w-full md:w-1/2 text-xl"
-                  />
-                  <p className="text-xs text-muted-foreground mt-1">Nilai antara {MIN_STAMINA_BONUS.toFixed(2)} sampai {MAX_STAMINA_BONUS.toFixed(2)}.</p>
-                </div>
-              </div>
-              {isSaving && <p className="text-sm text-primary flex items-center"><Loader2 className="mr-2 h-4 w-4 animate-spin" />Menyimpan...</p>}
-              {error && <p className="text-sm text-destructive">{error}</p>}
-            </CardContent>
-          </Card>
-        )}
-        {!isLoading && !activeMatchId && (
-            <Card>
-                <CardContent className="p-6 text-center">
-                    <Info className="mx-auto h-12 w-12 text-blue-500 mb-4" />
-                    <p className="text-lg font-medium text-muted-foreground">Tidak ada Pertandingan TGR yang Aktif</p>
-                    <p className="text-sm text-muted-foreground">Silakan tunggu Ketua Pertandingan mengaktifkan jadwal TGR.</p>
-                </CardContent>
-            </Card>
-        )}
       </main>
     </div>
   );

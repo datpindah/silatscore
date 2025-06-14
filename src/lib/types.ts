@@ -80,8 +80,8 @@ export interface ScheduleTGR {
   place: string;
   pesilatMerahName: string;
   pesilatMerahContingent: string;
-  pesilatBiruName: string; // Now required string
-  pesilatBiruContingent: string; // Now required string
+  pesilatBiruName: string; 
+  pesilatBiruContingent: string; 
 }
 
 
@@ -192,6 +192,7 @@ export interface TGRJuriScore {
   gerakanSalahCount: number;
   staminaKemantapanBonus: number; // 0.00 to 0.10
   calculatedScore: number; // baseScore - (gerakanSalahCount * 0.01) + staminaKemantapanBonus
+  isReady?: boolean; // Juri status kesiapan
   lastUpdated?: any; // Firestore Timestamp
 }
 
