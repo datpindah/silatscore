@@ -1,7 +1,7 @@
 
 "use client";
 
-import { useState, useEffect, useCallback } from 'react'; // Removed 'use'
+import { useState, useEffect, useCallback, use } from 'react';
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
 import { ArrowLeft, Loader2, Info, XIcon, AlertCircle, CheckCircle2 } from 'lucide-react';
@@ -36,8 +36,8 @@ const initialTgrTimerStatus: TGRTimerStatus = {
   performanceDuration: 180,
 };
 
-export default function JuriTGRPage({ params }: { params: { juriId: string } }) { 
-  const { juriId } = params; // Directly access juriId from params object
+export default function JuriTGRPage({ params: paramsPromise }: { params: Promise<{ juriId: string }> }) { 
+  const { juriId } = use(paramsPromise);
   const juriDisplayName = `Juri ${juriId?.split('-')[1] || 'TGR Tidak Dikenal'}`;
 
   const [configMatchId, setConfigMatchId] = useState<string | null | undefined>(undefined);
@@ -411,3 +411,5 @@ export default function JuriTGRPage({ params }: { params: { juriId: string } }) 
     </div>
   );
 }
+
+    
