@@ -39,8 +39,8 @@ const initialTgrTimerStatus: TGRTimerStatus = {
 };
 
 export default function JuriTGRPage({ params: paramsPromise }: { params: Promise<{ juriId: string }> }) { 
-  const params = use(paramsPromise); 
-  const { juriId } = params; 
+  const resolvedParams = use(paramsPromise); 
+  const { juriId } = resolvedParams; 
   const juriDisplayName = `Juri ${juriId?.split('-')[1] || 'TGR Tidak Dikenal'}`;
 
   const [configMatchId, setConfigMatchId] = useState<string | null | undefined>(undefined);
@@ -119,7 +119,7 @@ export default function JuriTGRPage({ params: paramsPromise }: { params: Promise
                 console.warn(`[${juriDisplayName}] Schedule TGR date is in unexpected format or missing for ID ${activeMatchId}. Defaulting to today.`);
                 processedDate = new Date().toISOString().split('T')[0]; 
             }
-            setScheduleDetails({ ...rawData, date: processedDate } as ScheduleTGR);
+            setScheduleDetails({ ...rawData, id: docSnap.id, date: processedDate } as ScheduleTGR);
             setMatchDetailsLoaded(true);
           } else {
             setError(`Detail Jadwal TGR (ID: ${activeMatchId}) tidak ditemukan.`);
@@ -134,11 +134,18 @@ export default function JuriTGRPage({ params: paramsPromise }: { params: Promise
         unsubJuriScore = onSnapshot(juriScoreDocRef, (docSnap) => {
           if (!mounted) return;
           if (docSnap.exists()) {
-            const data = docSnap.data() as TGRJuriScore;
+            const data = docSnap.data() as Partial<TGRJuriScore>;
+            const gsCount = data.gerakanSalahCount ?? initialJuriScore.gerakanSalahCount;
+            const staminaBonus = data.staminaKemantapanBonus ?? initialJuriScore.staminaKemantapanBonus;
+            const baseScore = data.baseScore ?? initialJuriScore.baseScore;
+            
             setJuriScore({
-              ...data,
-              isReady: data.isReady || false,
-              calculatedScore: calculateScore(data.gerakanSalahCount, data.staminaKemantapanBonus)
+              baseScore: baseScore,
+              gerakanSalahCount: gsCount,
+              staminaKemantapanBonus: staminaBonus,
+              calculatedScore: calculateScore(gsCount, staminaBonus),
+              isReady: data.isReady ?? initialJuriScore.isReady,
+              lastUpdated: data.lastUpdated // Keep as is, can be null/undefined if not set
             });
           } else {
             setJuriScore({...initialJuriScore, calculatedScore: calculateScore(initialJuriScore.gerakanSalahCount, initialJuriScore.staminaKemantapanBonus) });
@@ -189,7 +196,7 @@ export default function JuriTGRPage({ params: paramsPromise }: { params: Promise
     if (!activeMatchId || isSaving) return;
     setIsSaving(true);
     try {
-      const scoreToSave: Partial<TGRJuriScore> = {
+      const scoreToSave: Partial<TGRJuriScore> & { lastUpdated: any } = {
         ...updatedScore,
         lastUpdated: serverTimestamp(),
       };

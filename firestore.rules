@@ -3,79 +3,89 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
-    /* ──────────────
-       🔒 DEFAULT DENY
-       ──────────────
-       Aktifkan blok di bawah ini nanti
-       supaya semua akses ditolak
-       kecuali yang diizinkan eksplisit.
-    ----------------------------------------------------------------
+    // 🔒 DEFAULT: Tolak semua akses kecuali yang diizinkan eksplisit
     match /{document=**} {
       allow read, write: if false;
     }
-    ----------------------------------------------------------------*/
 
-    /* ───────────────────────────────
-       📁 1. app_settings (root)
-       ─────────────────────────────── */
+    // ──────────────────────────────
+    // 📁 1. APP SETTINGS
+    // ──────────────────────────────
     match /app_settings/{settingId} {
-      allow read : if true ;                // publik baca
-      allow write: if true ;                // ⛔ ubah ke aturan admin
+      allow read: if true; // Publik boleh membaca pengaturan aplikasi
+      allow write: if request.auth != null && request.auth.token.admin == true; // Hanya admin
     }
 
-    /* ───────────────────────────────
-       📁 2. schedules (root)
-       ─────────────────────────────── */
+    // Khusus untuk dokumen "active_match_tgr"
+    match /app_settings/active_match_tgr {
+      allow read: if true;
+      allow write: if request.auth != null && request.auth.token.admin == true;
+    }
+
+    // ──────────────────────────────
+    // 📁 2. JADWAL TANDING & TGR
+    // ──────────────────────────────
     match /schedules_tanding/{scheduleId} {
-      allow read , write: if true ;         // ⛔ ubah ke aturan admin
+      allow read: if true;
+      allow write: if request.auth != null && request.auth.token.admin == true;
     }
+
     match /schedules_tgr/{scheduleId} {
-      allow read , write: if true ;         // ⛔ ubah ke aturan admin
+      allow read: if true;
+      allow write: if request.auth != null && request.auth.token.admin == true;
     }
 
-    /* ───────────────────────────────────────
-       📁 3. matches_tanding (root → subkoleksi)
-       ─────────────────────────────────────── */
-    match /matches_tanding/{matchId} {
-
-      /* Dokumen matchId itu sendiri */
-      allow read , write: if true ;         // ⛔ kunci di produksi
-
-      /* Subkoleksi juri_scores    → matches_tanding/{matchId}/juri_scores/{juriId} */
-      match /juri_scores/{juriId} {
-        allow read , write: if true ;       // ⛔ batasi ke juri terkait
-      }
-
-      /* Subkoleksi official_actions → matches_tanding/{matchId}/official_actions/{actionId} */
-      match /official_actions/{actionId} {
-        allow read , write: if true ;       // ⛔ batasi ke ketua
-      }
-
-      /* Subkoleksi verifications   → matches_tanding/{matchId}/verifications/{verificationId} */
-      match /verifications/{verificationId} {
-        allow read , write: if true ;       // ⛔ batasi sesuai peran
-      }
-    }
-
-    /* ───────────────────────────────────────
-       📁 4. matches_tgr (root → subkoleksi)
-       ─────────────────────────────────────── */
+    // ──────────────────────────────
+    // 📁 3. MATCHES TGR
+    // ──────────────────────────────
     match /matches_tgr/{matchId} {
+      allow read: if true; // Untuk juri dan monitor membaca status
+      allow write: if request.auth != null && request.auth.token.role in ["admin", "ketua"];
 
-      allow read , write: if true ;         // ⛔ kunci di produksi
+      // Subkoleksi skor juri TGR
+      match /juri_scores_tgr/{juriId} {
+        allow read: if true; // Bisa dibaca juri lain, monitor, ketua
+        allow write: if request.auth != null && request.auth.uid == juriId;
+      }
 
+      // Contoh untuk hukuman dari Dewan
+      // match /dewan_penalties_tgr/{penaltyId} {
+      //   allow read: if true;
+      //   allow write: if request.auth != null && request.auth.token.role == "dewan";
+      // }
+    }
+
+    // ──────────────────────────────
+    // 📁 4. MATCHES TANDING
+    // ──────────────────────────────
+    match /matches_tanding/{matchId} {
+      allow read: if request.auth != null; // Hanya user login
+      allow write: if request.auth.token.role in ["admin", "ketua"];
+
+      // Subkoleksi skor juri tanding
       match /juri_scores/{juriId} {
-        allow read , write: if true ;       // ⛔ batasi ke juri terkait
+        allow read: if request.auth != null;
+        allow write: if request.auth != null && request.auth.uid == juriId;
+      }
+
+      // Subkoleksi aksi official
+      match /official_actions/{actionId} {
+        allow read, write: if request.auth != null && request.auth.token.role == "official";
+      }
+
+      // Subkoleksi verifikasi data pertandingan
+      match /verifications/{verificationId} {
+        allow read, write: if request.auth.token.role in ["admin", "ketua"];
       }
     }
 
-    /* ───────────────────────────────
-       📁 5. users (opsional contoh)
-       ───────────────────────────────
+    // ──────────────────────────────
+    // 📁 5. USERS (Data pengguna)
+    // ──────────────────────────────
     match /users/{userId} {
-      allow read : if request.auth != null;                 // hanya user login
-      allow write: if request.auth != null
-                    && request.auth.uid == userId;          // hanya diri sendiri
-    } */
+      allow read: if request.auth != null;
+      allow write: if request.auth != null && request.auth.uid == userId;
+    }
+
   }
 }
