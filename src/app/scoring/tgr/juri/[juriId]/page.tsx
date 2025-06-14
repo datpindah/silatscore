@@ -1,7 +1,7 @@
 
 "use client";
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, use } from 'react'; // Added use
 import Link from 'next/link';
 import { Header } from '@/components/layout/Header';
 import { PageTitle } from '@/components/shared/PageTitle';
@@ -38,8 +38,9 @@ const initialTgrTimerStatus: TGRTimerStatus = {
   performanceDuration: 180,
 };
 
-export default function JuriTGRPage({ params }: { params: { juriId: string } }) {
-  const { juriId } = params;
+export default function JuriTGRPage({ params: paramsPromise }: { params: Promise<{ juriId: string }> }) { // Changed params to paramsPromise and its type
+  const params = use(paramsPromise); // Unwrap the promise using use()
+  const { juriId } = params; // Destructure from the resolved params
   const juriDisplayName = `Juri ${juriId?.split('-')[1] || 'TGR Tidak Dikenal'}`;
 
   const [configMatchId, setConfigMatchId] = useState<string | null | undefined>(undefined);
@@ -340,9 +341,9 @@ export default function JuriTGRPage({ params }: { params: { juriId: string } }) 
         {/* Footer Buttons */}
         <div className="flex flex-col sm:flex-row justify-between items-center gap-3">
            <div className="w-full sm:w-auto">
-            {error && <p className="text-sm text-red-500 flex items-center"><AlertCircle className="mr-1 h-4 w-4"/> {error}</p>}
+            {error && <div className="text-sm text-red-500 flex items-center"><AlertCircle className="mr-1 h-4 w-4"/> {error}</div>}
              {inputDisabledReason() && !error && (
-                <p className="text-sm text-yellow-700 dark:text-yellow-400 flex items-center"><Info className="mr-1 h-4 w-4"/> {inputDisabledReason()}</p>
+                <div className="text-sm text-yellow-700 dark:text-yellow-400 flex items-center"><Info className="mr-1 h-4 w-4"/> {inputDisabledReason()}</div>
              )}
           </div>
           <div className="flex gap-3 w-full sm:w-auto">
@@ -359,3 +360,4 @@ export default function JuriTGRPage({ params }: { params: { juriId: string } }) 
     </div>
   );
 }
+
