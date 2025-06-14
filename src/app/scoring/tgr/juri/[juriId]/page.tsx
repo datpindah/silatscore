@@ -29,12 +29,23 @@ const initialJuriScore: TGRJuriScore = {
   lastUpdated: null,
 };
 
-const initialTgrTimerStatus: TGRTimerStatus = {
-  timerSeconds: 180,
+// Default initial timer status, durations will be overridden by round logic
+const defaultInitialTgrTimerStatus: TGRTimerStatus = {
+  timerSeconds: 180, 
   isTimerRunning: false,
   matchStatus: 'Pending',
   performanceDuration: 180,
 };
+
+const getPerformanceDurationForRound = (roundName: string | undefined): number => {
+  const round = roundName?.toLowerCase() || '';
+  if (round.includes('penyisihan')) return 80; // 1 min 20 sec
+  if (round.includes('perempat final')) return 80; // 1 min 20 sec
+  if (round.includes('semi final')) return 100; // 1 min 40 sec
+  if (round.includes('final')) return 180; // 3 min
+  return 180; // Default if round name is not recognized
+};
+
 
 export default function JuriTGRPage({ params: paramsPromise }: { params: Promise<{ juriId: string }> }) {
   const resolvedParams = use(paramsPromise);
@@ -48,7 +59,7 @@ export default function JuriTGRPage({ params: paramsPromise }: { params: Promise
   const [matchDetailsLoaded, setMatchDetailsLoaded] = useState(false);
 
   const [juriScore, setJuriScore] = useState<TGRJuriScore>(initialJuriScore);
-  const [tgrTimerStatus, setTgrTimerStatus] = useState<TGRTimerStatus>(initialTgrTimerStatus);
+  const [tgrTimerStatus, setTgrTimerStatus] = useState<TGRTimerStatus>(defaultInitialTgrTimerStatus);
   const [isJuriReady, setIsJuriReady] = useState(false);
 
   const [isLoading, setIsLoading] = useState(true);
@@ -76,7 +87,7 @@ export default function JuriTGRPage({ params: paramsPromise }: { params: Promise
     if (configMatchId !== activeMatchId) {
       setScheduleDetails(null);
       setJuriScore(initialJuriScore);
-      setTgrTimerStatus(initialTgrTimerStatus);
+      setTgrTimerStatus(defaultInitialTgrTimerStatus);
       setIsJuriReady(false);
       setActiveMatchId(configMatchId);
       setMatchDetailsLoaded(false);
@@ -101,34 +112,40 @@ export default function JuriTGRPage({ params: paramsPromise }: { params: Promise
     const loadData = async () => {
       if (!mounted) return;
       setIsLoading(true);
+      let currentScheduleDetails: ScheduleTGR | null = null;
+
       try {
         const scheduleDocRef = doc(db, SCHEDULE_TGR_COLLECTION, activeMatchId);
-        unsubSchedule = onSnapshot(scheduleDocRef, (docSnap) => {
-          if (!mounted) return;
-          if (docSnap.exists()) {
-            const rawData = docSnap.data();
-            let processedDate: string;
+        const scheduleDocSnap = await getDoc(scheduleDocRef); // Use getDoc for one-time fetch of schedule
 
-            if (rawData.date instanceof Timestamp) {
-                processedDate = rawData.date.toDate().toISOString().split('T')[0];
-            } else if (typeof rawData.date === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(rawData.date)) {
-                processedDate = rawData.date;
-            } else if (rawData.date && typeof rawData.date.seconds === 'number' && typeof rawData.date.nanoseconds === 'number') {
-                processedDate = new Date(rawData.date.seconds * 1000).toISOString().split('T')[0];
-            } else {
-                console.warn(`[${juriDisplayName}] Schedule TGR date is in unexpected format or missing for ID ${activeMatchId}. Defaulting to today.`);
-                processedDate = new Date().toISOString().split('T')[0];
-            }
-            setScheduleDetails({ ...rawData, id: docSnap.id, date: processedDate } as ScheduleTGR);
-            setMatchDetailsLoaded(true);
+        if (!mounted) return;
+
+        if (scheduleDocSnap.exists()) {
+          const rawData = scheduleDocSnap.data();
+          let processedDate: string;
+
+          if (rawData.date instanceof Timestamp) {
+              processedDate = rawData.date.toDate().toISOString().split('T')[0];
+          } else if (typeof rawData.date === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(rawData.date)) {
+              processedDate = rawData.date;
+          } else if (rawData.date && typeof rawData.date.seconds === 'number' && typeof rawData.date.nanoseconds === 'number') {
+              processedDate = new Date(rawData.date.seconds * 1000).toISOString().split('T')[0];
           } else {
-            setError(`Detail Jadwal TGR (ID: ${activeMatchId}) tidak ditemukan.`);
-            setScheduleDetails(null);
-            setMatchDetailsLoaded(false);
+              console.warn(`[${juriDisplayName}] Schedule TGR date is in unexpected format or missing for ID ${activeMatchId}. Defaulting to today.`);
+              processedDate = new Date().toISOString().split('T')[0];
           }
-        }, (err) => {
-          if (mounted) setError(`Gagal memuat detail jadwal TGR: ${err.message}`);
-        });
+          currentScheduleDetails = { ...rawData, id: scheduleDocSnap.id, date: processedDate } as ScheduleTGR;
+          setScheduleDetails(currentScheduleDetails);
+          setMatchDetailsLoaded(true);
+        } else {
+          setError(`Detail Jadwal TGR (ID: ${activeMatchId}) tidak ditemukan.`);
+          setScheduleDetails(null);
+          setMatchDetailsLoaded(false);
+           // If schedule not found, we can't determine round-specific duration. Still set loading to false later.
+        }
+
+        // Determine default duration based on fetched schedule (or fallback)
+        const defaultDurationForCurrentRound = getPerformanceDurationForRound(currentScheduleDetails?.round);
 
         const juriScoreDocRef = doc(db, MATCHES_TGR_COLLECTION, activeMatchId, JURI_SCORES_TGR_SUBCOLLECTION, juriId);
         unsubJuriScore = onSnapshot(juriScoreDocRef, (docSnap) => {
@@ -166,10 +183,22 @@ export default function JuriTGRPage({ params: paramsPromise }: { params: Promise
                 if (data?.timerStatus) {
                     setTgrTimerStatus(data.timerStatus as TGRTimerStatus);
                 } else {
-                    setTgrTimerStatus(initialTgrTimerStatus);
+                    // Timer status not yet set by Dewan, initialize with round-specific duration
+                    setTgrTimerStatus({
+                        timerSeconds: defaultDurationForCurrentRound,
+                        isTimerRunning: false,
+                        matchStatus: 'Pending',
+                        performanceDuration: defaultDurationForCurrentRound,
+                    });
                 }
             } else {
-                 setTgrTimerStatus(initialTgrTimerStatus);
+                 // Match document not yet created by Dewan, initialize locally
+                 setTgrTimerStatus({
+                    timerSeconds: defaultDurationForCurrentRound,
+                    isTimerRunning: false,
+                    matchStatus: 'Pending',
+                    performanceDuration: defaultDurationForCurrentRound,
+                });
             }
         }, (err) => {
             if (mounted) setError(`Gagal sinkronisasi status timer TGR: ${err.message}`);
@@ -177,6 +206,8 @@ export default function JuriTGRPage({ params: paramsPromise }: { params: Promise
 
       } catch (err) {
         if (mounted) setError(`Error utama saat memuat data: ${err instanceof Error ? err.message : String(err)}`);
+      } finally {
+        // setIsLoading(false) will be handled by the useEffect watching matchDetailsLoaded
       }
     };
 
@@ -184,17 +215,17 @@ export default function JuriTGRPage({ params: paramsPromise }: { params: Promise
 
     return () => {
       mounted = false;
-      if (unsubSchedule) unsubSchedule();
+      if (unsubSchedule) unsubSchedule(); // This was getDoc, so no unsub needed if changed
       if (unsubJuriScore) unsubJuriScore();
       if (unsubMatchData) unsubMatchData();
     };
   }, [activeMatchId, juriId, calculateScore, juriDisplayName]);
 
   useEffect(() => {
-     if (isLoading && matchDetailsLoaded) {
+     if (isLoading && (matchDetailsLoaded || activeMatchId === null) ) { // Ensure loading stops if activeMatchId becomes null
        setIsLoading(false);
      }
-  }, [isLoading, matchDetailsLoaded]);
+  }, [isLoading, matchDetailsLoaded, activeMatchId]);
 
   const saveJuriScore = async (updatedScoreFields: Partial<TGRJuriScore>) => {
     if (!activeMatchId || isSaving) return;
@@ -252,11 +283,11 @@ export default function JuriTGRPage({ params: paramsPromise }: { params: Promise
   const formatDisplayDate = (dateString: string | undefined) => {
     if (!dateString) return <Skeleton className="h-4 w-28 inline-block" />;
     try {
-      const date = new Date(dateString + 'T00:00:00'); // Assume YYYY-MM-DD is local, ensure it's parsed as such
+      const date = new Date(dateString + 'T00:00:00'); 
       return new Intl.DateTimeFormat('id-ID', { day: 'numeric', month: 'long', year: 'numeric' }).format(date);
     } catch (e) {
       console.warn("Error formatting date in TGR Juri:", e, "Original date string:", dateString);
-      return dateString; // Fallback to original string if formatting fails
+      return dateString; 
     }
   };
 
@@ -300,11 +331,12 @@ export default function JuriTGRPage({ params: paramsPromise }: { params: Promise
           <div className="text-xs md:text-sm text-gray-500 dark:text-gray-600">
             {scheduleDetails?.place || <Skeleton className="h-4 w-20 inline-block" />}
             , {formatDisplayDate(scheduleDetails?.date)} | Partai No: {scheduleDetails?.lotNumber || <Skeleton className="h-4 w-8 inline-block" />}
+             | Babak: {scheduleDetails?.round || <Skeleton className="h-4 w-16 inline-block" />}
           </div>
         </div>
 
         {/* Main Interaction Area */}
-         <div className="flex flex-col md:flex-row items-stretch gap-2 md:gap-4 mb-4 md:mb-6">
+        <div className="flex flex-col md:flex-row items-stretch gap-2 md:gap-4 mb-4 md:mb-6">
           <Button
             variant="default"
             className="w-full md:w-auto h-40 md:h-64 text-5xl md:text-7xl bg-blue-600 hover:bg-blue-700 text-white shadow-lg rounded-lg flex items-center justify-center p-2 md:flex-[2_2_0%]"
@@ -315,10 +347,10 @@ export default function JuriTGRPage({ params: paramsPromise }: { params: Promise
             <XIcon className="w-36 h-36 md:w-60 md:h-60" strokeWidth={3} />
           </Button>
           
-          <div className="w-full md:w-auto flex flex-col items-center justify-center text-center p-2 md:p-4 rounded-lg bg-gray-200 dark:bg-gray-800/50 md:h-auto md:flex-[1_1_0%] my-auto">
-            <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-300">Detail Gerakan</h3>
-            <p className="text-xs text-gray-600 dark:text-gray-400 mt-1">Urutan Gerakan</p>
-            <p className="text-xs text-gray-600 dark:text-gray-400">Gerakan yang terlewat</p>
+          <div className="w-full md:w-auto flex flex-col items-center justify-center text-center p-3 md:p-4 rounded-lg bg-gray-200 dark:bg-gray-800/50 md:h-auto md:flex-[1_1_0%] my-auto">
+            <h3 className="text-sm md:text-base font-semibold text-gray-700 dark:text-gray-300">Detail Gerakan</h3>
+            <p className="text-xs md:text-sm text-gray-600 dark:text-gray-400 mt-1">Urutan Gerakan</p>
+            <p className="text-xs md:text-sm text-gray-600 dark:text-gray-400">Gerakan yang terlewat</p>
           </div>
 
           <Button
