@@ -3,59 +3,74 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
-    // App Settings (e.g., active match IDs)
-    // Admin typically sets this. For production, you'd check for an admin role.
-    match /app_settings/{settingId} {
-      allow read, write: if request.auth != null; // Placeholder: replace with admin check for write
+    // --- App Settings (Global Config) ---
+    // Typically read by many, written by admin.
+    // For production: restrict write to admin (e.g., request.auth.token.isAdmin == true)
+    match /app_settings/{setting} {
+      allow read: if request.auth != null;
+      allow write: if request.auth != null; // DEVELOPER NOTE: Restrict to admin in production
     }
 
-    // Schedules - Created and managed by Admin
-    // For production, write access should be restricted to users with an admin role.
-    // Example: allow write: if request.auth != null && request.auth.token.isAdmin == true;
+    // --- Schedules (Tanding & TGR) ---
+    // Created and managed by Admin. Read by authenticated users.
+    // For production: restrict write to admin (e.g., request.auth.token.isAdmin == true)
     match /schedules_tanding/{scheduleId} {
-      allow read: if request.auth != null; // Allow authenticated users to read schedules
-      allow write: if request.auth != null; // Placeholder for development: allows any authenticated user to write.
-                                        // For production, use: if request.auth != null && request.auth.token.isAdmin == true;
+      allow read: if request.auth != null;
+      allow write: if request.auth != null; // DEVELOPER NOTE: Restrict to admin in production
     }
     match /schedules_tgr/{scheduleId} {
-      allow read: if request.auth != null;   // Allow authenticated users to read schedules
-      allow write: if request.auth != null; // Placeholder for development: allows any authenticated user to write.
-                                        // For production, use: if request.auth != null && request.auth.token.isAdmin == true;
+      allow read: if request.auth != null;
+      allow write: if request.auth != null; // DEVELOPER NOTE: Restrict to admin in production
     }
 
-    // Live Match Data for Tanding
+    // --- Live Match Data (Tanding) ---
+    // Accessed by Juri, Dewan, Ketua.
     match /matches_tanding/{matchId} {
-      allow read, write: if request.auth != null; // Dewan controls timer, logs
+      allow read, write: if request.auth != null; // Base document for timer, logs
+
       // Juri scores for Tanding
+      // Juri should only write to their own document. Read by Dewan, Ketua.
+      // For production: allow write: if request.auth.uid == juriId && /* other conditions */;
       match /juri_scores/{juriId} {
-        // For production, ensure juriId in path matches request.auth.uid or a specific claim
-        allow read, write: if request.auth != null; 
+        allow read, write: if request.auth != null; // DEVELOPER NOTE: Refine write access in production
       }
-      // Official actions by Ketua Pertandingan for Tanding
+
+      // Official actions by Ketua Pertandingan (Tanding)
+      // For production: restrict write to Ketua (e.g., request.auth.token.isKetua == true)
       match /official_actions/{actionId} {
-        // For production, ensure only Ketua Pertandingan can write
-        allow read, write: if request.auth != null;
+        allow read, write: if request.auth != null; // DEVELOPER NOTE: Restrict write access in production
       }
+
       // Verification requests for Tanding
+      // Requested by Ketua, Juri vote.
+      // For production: complex rules based on roles and status.
       match /verifications/{verificationId} {
-        // For production, refine who can read/write based on roles (Ketua creates, Juri updates votes)
-        allow read, write: if request.auth != null; 
+        allow read, write: if request.auth != null; // DEVELOPER NOTE: Refine access in production
       }
     }
 
-    // Live Match Data for TGR
+    // --- Live Match Data (TGR) ---
+    // Accessed by Juri TGR, Dewan TGR, Ketua TGR.
     match /matches_tgr/{matchId} {
-      allow read, write: if request.auth != null; // Dewan controls timer
+      allow read, write: if request.auth != null; // Base document for timer
+
       // Juri scores for TGR
+      // For production: allow write: if request.auth.uid == juriId && /* other conditions */;
       match /juri_scores_tgr/{juriId} {
-        // For production, ensure juriId in path matches request.auth.uid or a specific claim
-        allow read, write: if request.auth != null; 
+        allow read, write: if request.auth != null; // DEVELOPER NOTE: Refine write access in production
       }
+
       // Dewan penalties for TGR
+      // For production: restrict write to Dewan TGR (e.g., request.auth.token.isDewanTGR == true)
       match /dewan_penalties_tgr/{penaltyId} {
-        // For production, ensure only Dewan can write
-        allow read, write: if request.auth != null; 
+        allow read, write: if request.auth != null; // DEVELOPER NOTE: Restrict write access in production
       }
     }
+
+    // Default deny all access if not explicitly allowed by above rules
+    // This line is often implicitly covered, but can be explicit.
+    // match /{document=**} {
+    //  allow read, write: if false;
+    // }
   }
 }
