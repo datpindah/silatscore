@@ -1228,10 +1228,10 @@ export default function ScoringTandingDewanSatuPage() {
                     <RadioTower className="mr-2 h-5 w-5 text-primary"/> Status Juri &amp; Skor Mentah
                 </CardTitle>
                  <CardDescription className="text-gray-600 dark:text-gray-400">
-                    Nilai hanya sah jika dua juri atau lebih memberikan nilai yang sama (poin 1 atau 2) untuk warna dan babak yang sama dalam selang waktu {JURI_INPUT_VALIDITY_WINDOW_MS / 1000} detik.
+                    Nilai hanya sah jika dua juri atau lebih memberikan nilai yang sama (poin 1 atau 2) untuk warna dan babak yang sama dalam selang waktu ${JURI_INPUT_VALIDITY_WINDOW_MS / 1000} detik.
                     Nilai yang SAH akan ditampilkan normal dan dihitung.
-                    Nilai yang baru masuk akan memiliki masa tenggang {JURI_INPUT_VALIDITY_WINDOW_MS / 1000} detik sebelum dicoret jika tidak menemukan pasangan.
-                    Jika sebuah nilai solo (tidak punya pasangan) setelah {GRACE_PERIOD_FOR_STRIKE_DECISION / 1000} detik, nilai tersebut akan DICORET PERMANEN.
+                    Nilai yang baru masuk akan memiliki masa tenggang ${JURI_INPUT_VALIDITY_WINDOW_MS / 1000} detik sebelum dicoret jika tidak menemukan pasangan.
+                    Jika sebuah nilai solo (tidak punya pasangan) setelah ${GRACE_PERIOD_FOR_STRIKE_DECISION / 1000} detik, nilai tersebut akan DICORET PERMANEN.
                     Status TERCORER atau TIDAK TERCORER bersifat final setelah diputuskan.
                  </CardDescription>
             </CardHeader>
