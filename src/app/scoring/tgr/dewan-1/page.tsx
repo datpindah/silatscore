@@ -9,7 +9,7 @@ import { Button } from '@/components/ui/button';
 import { ArrowLeft, Trash2, Loader2, MinusCircle } from 'lucide-react';
 import type { ScheduleTGR, TGRDewanPenalty, TGRDewanPenaltyType } from '@/lib/types';
 import { db } from '@/lib/firebase';
-import { doc, onSnapshot, getDoc, collection, addDoc, query, orderBy, limit, deleteDoc, serverTimestamp, Timestamp } from 'firebase/firestore';
+import { doc, onSnapshot, getDoc, collection, addDoc, query, orderBy, limit, deleteDoc, serverTimestamp, Timestamp, where, getDocs } from 'firebase/firestore';
 import { Skeleton } from '@/components/ui/skeleton';
 
 const ACTIVE_TGR_SCHEDULE_CONFIG_PATH = 'app_settings/active_match_tgr';
@@ -124,7 +124,7 @@ export default function DewanTGRPenaltyPage() {
       mounted = false;
       unsubPenalties();
     };
-  }, [activeMatchId]);
+  }, [activeMatchId, matchDetailsLoaded]); // Added matchDetailsLoaded dependency
 
   useEffect(() => {
     if (isLoading && matchDetailsLoaded) {
@@ -134,7 +134,13 @@ export default function DewanTGRPenaltyPage() {
 
 
   const handleAddPenalty = async (penalty: PenaltyConfig) => {
-    if (!activeMatchId || isProcessing[penalty.id]) return;
+    if (!activeMatchId || activeMatchId.trim() === "" || isProcessing[penalty.id]) {
+      if (!activeMatchId || activeMatchId.trim() === "") {
+        console.error("handleAddPenalty aborted: activeMatchId is invalid.", { activeMatchId });
+        setError("ID pertandingan aktif tidak valid. Tidak dapat menambah pelanggaran.");
+      }
+      return;
+    }
     setIsProcessing(prev => ({ ...prev, [penalty.id]: true }));
     try {
       const penaltyData: Omit<TGRDewanPenalty, 'id' | 'timestamp'> & { timestamp: any } = {
@@ -143,6 +149,7 @@ export default function DewanTGRPenaltyPage() {
         pointsDeducted: penalty.points,
         timestamp: serverTimestamp(),
       };
+      // console.log("Attempting to add penalty:", { activeMatchId, penaltyData }); // Optional: for debugging
       await addDoc(collection(db, MATCHES_TGR_COLLECTION, activeMatchId, DEWAN_PENALTIES_TGR_SUBCOLLECTION), penaltyData);
     } catch (err) {
       setError(`Gagal menambah pelanggaran: ${err instanceof Error ? err.message : String(err)}`);
@@ -152,7 +159,13 @@ export default function DewanTGRPenaltyPage() {
   };
 
   const handleDeleteLastPenalty = async (penaltyType: TGRDewanPenaltyType) => {
-    if (!activeMatchId || isProcessing[penaltyType]) return;
+     if (!activeMatchId || activeMatchId.trim() === "" || isProcessing[penaltyType]) {
+        if (!activeMatchId || activeMatchId.trim() === "") {
+          console.error("handleDeleteLastPenalty aborted: activeMatchId is invalid.", { activeMatchId });
+          setError("ID pertandingan aktif tidak valid. Tidak dapat menghapus pelanggaran.");
+        }
+        return;
+    }
     setIsProcessing(prev => ({ ...prev, [penaltyType]: true }));
     try {
       const q = query(
@@ -288,3 +301,4 @@ export default function DewanTGRPenaltyPage() {
     </div>
   );
 }
+
