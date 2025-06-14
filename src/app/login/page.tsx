@@ -27,7 +27,7 @@ const defaultPartaiOptions = [
 
 const halamanOptions = [
   { value: '/scoring/tanding/dewan-1', label: 'Dewan Juri 1 (Timer & Kontrol)' },
-  { value: '/scoring/tanding/dewan-2', label: 'Dewan Juri 2 (Display Skor)' },
+  { value: '/scoring/tanding/dewan-2', label: 'Dewan Juri 2 (Display Skor Detail)' },
   { value: '/scoring/tanding/juri/juri-1', label: 'Juri 1' },
   { value: '/scoring/tanding/juri/juri-2', label: 'Juri 2' },
   { value: '/scoring/tanding/juri/juri-3', label: 'Juri 3' },
@@ -35,7 +35,7 @@ const halamanOptions = [
   { value: '/scoring/tanding/monitoring-skor', label: 'Monitoring Skor (Display Umum)' },
 ];
 
-const CORRECT_PASSWORD = "123"; // Ganti dengan password yang aman
+const CORRECT_PASSWORD = "123456"; // Password diubah di sini
 
 export default function LoginPage() {
   const router = useRouter();
@@ -81,8 +81,8 @@ export default function LoginPage() {
         setSelectedPartai(NO_ACTIVE_SCHEDULE_VALUE);
       }
       setIsLoading(false);
-    }, (error) => {
-      console.error("Error subscribing to active Tanding schedule config:", error);
+    }, (errorSub) => {
+      console.error("Error subscribing to active Tanding schedule config:", errorSub);
       setPartaiOptions(defaultPartaiOptions);
       setSelectedPartai(NO_ACTIVE_SCHEDULE_VALUE);
       setIsLoading(false);
@@ -94,29 +94,30 @@ export default function LoginPage() {
   const handleSubmit = (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     setError(null);
-    setIsLoading(true);
+    
 
     if (selectedPartai === NO_ACTIVE_SCHEDULE_VALUE) {
       setError('Tidak ada jadwal Tanding aktif yang bisa dipilih. Silakan aktifkan jadwal di halaman Admin.');
-      setIsLoading(false);
+      
       return;
     }
      if (!selectedPartai) {
       setError('Silakan pilih partai Tanding terlebih dahulu.');
-      setIsLoading(false);
+      
       return;
     }
     if (!selectedHalaman) {
       setError('Silakan pilih halaman tujuan terlebih dahulu.');
-      setIsLoading(false);
+      
       return;
     }
     if (!password) {
       setError('Password tidak boleh kosong.');
-      setIsLoading(false);
+      
       return;
     }
-
+    
+    setIsLoading(true); // Pindahkan setIsLoading ke sini setelah validasi awal
     setTimeout(() => {
       if (password === CORRECT_PASSWORD) {
         router.push(selectedHalaman);
@@ -197,7 +198,7 @@ export default function LoginPage() {
             </CardContent>
             <CardFooter>
               <Button type="submit" className="w-full bg-primary hover:bg-primary/90 text-primary-foreground" disabled={isLoading}>
-                {isLoading ? (
+                {isLoading && password ? ( // Tampilkan loader hanya jika isLoading dan ada password (artinya sedang dalam proses setTimeout)
                   <>
                     <LogIn className="mr-2 h-4 w-4 animate-pulse" />
                     Memproses...
