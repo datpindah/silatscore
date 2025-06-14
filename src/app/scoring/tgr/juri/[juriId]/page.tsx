@@ -147,7 +147,7 @@ export default function JuriTGRPage({ params: paramsPromise }: { params: Promise
               lastUpdated: data.lastUpdated 
             });
           } else {
-            setJuriScore({...initialJuriScore, calculatedScore: calculateScore(initialJuriScore.gerakanSalahCount, initialJuriScore.staminaKemantapanBonus) });
+            setJuriScore({...initialJuriScore, staminaKemantapanBonus: initialJuriScore.staminaKemantapanBonus, gerakanSalahCount: initialJuriScore.gerakanSalahCount, baseScore: initialJuriScore.baseScore, calculatedScore: calculateScore(initialJuriScore.gerakanSalahCount, initialJuriScore.staminaKemantapanBonus) });
           }
         }, (err) => {
           if (mounted) setError(`Gagal memuat skor juri: ${err.message}`);
@@ -231,8 +231,7 @@ export default function JuriTGRPage({ params: paramsPromise }: { params: Promise
   const formatDisplayDate = (dateString: string | undefined) => {
     if (!dateString) return 'Tanggal tidak tersedia';
     try {
-      // Assuming dateString is "YYYY-MM-DD"
-      const date = new Date(dateString + 'T00:00:00'); // Add time to avoid timezone issues with just date
+      const date = new Date(dateString + 'T00:00:00'); 
       return new Intl.DateTimeFormat('id-ID', { day: 'numeric', month: 'long', year: 'numeric' }).format(date);
     } catch (e) {
       console.warn("Error formatting date in TGR Juri:", e, "Original date string:", dateString);
@@ -268,13 +267,12 @@ export default function JuriTGRPage({ params: paramsPromise }: { params: Promise
           <h1 className="text-2xl md:text-3xl font-bold text-blue-600">
             Kontingen {scheduleDetails?.pesilatMerahContingent || <Skeleton className="h-8 w-40 inline-block" />}
           </h1>
-          <p className="text-sm md:text-base text-gray-600 dark:text-gray-700">
-            {/* Using a placeholder for "Babak Penyisihan" as it's not directly in scheduleDetails */}
+          <div className="text-sm md:text-base text-gray-600 dark:text-gray-700">
             Kategori: {scheduleDetails?.category || <Skeleton className="h-5 w-24 inline-block" />}
-          </p>
-          <p className="text-lg md:text-xl font-semibold text-gray-700 dark:text-gray-800">
+          </div>
+          <div className="text-lg md:text-xl font-semibold text-gray-700 dark:text-gray-800">
             {getCategorySpecificName()}
-          </p>
+          </div>
           <div className="text-xs md:text-sm text-gray-500 dark:text-gray-600">
             {scheduleDetails?.place || <Skeleton className="h-4 w-20 inline-block" />}, {formatDisplayDate(scheduleDetails?.date) || <Skeleton className="h-4 w-28 inline-block" />} | Partai No: {scheduleDetails?.lotNumber || <Skeleton className="h-4 w-8 inline-block" />}
           </div>
@@ -339,7 +337,7 @@ export default function JuriTGRPage({ params: paramsPromise }: { params: Promise
                 </div>
             </div>
             <p className="text-xs text-center mt-1 text-gray-500 dark:text-gray-600">
-                Pengurangan: {juriScore.gerakanSalahCount} x {GERAKAN_SALAH_DEDUCTION.toFixed(2)} = {(juriScore.gerakanSalahCount * GERAKAN_SALAH_DEDUCTION).toFixed(2)}. Bonus Stamina: {juriScore.staminaKemantapanBonus.toFixed(2)}
+                Pengurangan: {juriScore.gerakanSalahCount} x {GERAKAN_SALAH_DEDUCTION.toFixed(2)} = {(juriScore.gerakanSalahCount * GERAKAN_SALAH_DEDUCTION).toFixed(2)}. Bonus Stamina: {juriScore.staminaKemantapanBonus?.toFixed(2) || '0.00'}
             </p>
         </div>
         
