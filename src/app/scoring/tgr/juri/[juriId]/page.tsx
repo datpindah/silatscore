@@ -6,7 +6,7 @@ import Link from 'next/link';
 // import { Header } from '@/components/layout/Header'; // Removed, new design is full-screen specific
 import { Button } from '@/components/ui/button';
 // import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'; // Old UI, removing
-import { ArrowLeft, Loader2, Info, XIcon, AlertCircle } from 'lucide-react'; // Using XIcon for the large button
+import { ArrowLeft, Loader2, Info, XIcon, AlertCircle, CheckCircle2 } from 'lucide-react'; // Using XIcon for the large button, added CheckCircle2
 import type { ScheduleTGR, TGRJuriScore, TGRTimerStatus } from '@/lib/types';
 import { db } from '@/lib/firebase';
 import { doc, onSnapshot, getDoc, setDoc, serverTimestamp, Timestamp } from 'firebase/firestore';
@@ -22,12 +22,13 @@ const BASE_SCORE_TGR = 9.90;
 const GERAKAN_SALAH_DEDUCTION = 0.01;
 const STAMINA_BONUS_OPTIONS = [0.01, 0.02, 0.03, 0.04, 0.05, 0.06, 0.07, 0.08, 0.09, 0.10];
 
-const initialJuriScore: Omit<TGRJuriScore, 'lastUpdated'> = {
+const initialJuriScore: TGRJuriScore = {
   baseScore: BASE_SCORE_TGR,
   gerakanSalahCount: 0,
   staminaKemantapanBonus: 0.00,
   calculatedScore: BASE_SCORE_TGR,
-  isReady: false, // Kept for potential future use, though not in new UI
+  isReady: false,
+  lastUpdated: null,
 };
 
 const initialTgrTimerStatus: TGRTimerStatus = {
@@ -50,6 +51,7 @@ export default function JuriTGRPage({ params: paramsPromise }: { params: Promise
 
   const [juriScore, setJuriScore] = useState<TGRJuriScore>(initialJuriScore);
   const [tgrTimerStatus, setTgrTimerStatus] = useState<TGRTimerStatus>(initialTgrTimerStatus);
+  const [isJuriReady, setIsJuriReady] = useState(false); // New state for Juri readiness
 
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
@@ -77,6 +79,7 @@ export default function JuriTGRPage({ params: paramsPromise }: { params: Promise
       setScheduleDetails(null);
       setJuriScore(initialJuriScore);
       setTgrTimerStatus(initialTgrTimerStatus);
+      setIsJuriReady(false); // Reset Juri readiness on match change
       setActiveMatchId(configMatchId);
       setMatchDetailsLoaded(false);
       setError(null);
@@ -137,17 +140,21 @@ export default function JuriTGRPage({ params: paramsPromise }: { params: Promise
             const gsCount = data.gerakanSalahCount ?? initialJuriScore.gerakanSalahCount;
             const staminaBonus = data.staminaKemantapanBonus ?? initialJuriScore.staminaKemantapanBonus;
             const baseScore = data.baseScore ?? initialJuriScore.baseScore;
+            const juriIsReadyFirestore = data.isReady ?? false;
             
             setJuriScore({
               baseScore: baseScore,
               gerakanSalahCount: gsCount,
               staminaKemantapanBonus: staminaBonus,
               calculatedScore: calculateScore(gsCount, staminaBonus),
-              isReady: data.isReady ?? initialJuriScore.isReady,
+              isReady: juriIsReadyFirestore,
               lastUpdated: data.lastUpdated 
             });
+            setIsJuriReady(juriIsReadyFirestore); // Sync local state with Firestore
           } else {
-            setJuriScore({...initialJuriScore, staminaKemantapanBonus: initialJuriScore.staminaKemantapanBonus, gerakanSalahCount: initialJuriScore.gerakanSalahCount, baseScore: initialJuriScore.baseScore, calculatedScore: calculateScore(initialJuriScore.gerakanSalahCount, initialJuriScore.staminaKemantapanBonus) });
+             const newCalculatedScore = calculateScore(initialJuriScore.gerakanSalahCount, initialJuriScore.staminaKemantapanBonus);
+            setJuriScore({...initialJuriScore, calculatedScore: newCalculatedScore });
+            setIsJuriReady(false); // Reset if no doc
           }
         }, (err) => {
           if (mounted) setError(`Gagal memuat skor juri: ${err.message}`);
@@ -191,12 +198,12 @@ export default function JuriTGRPage({ params: paramsPromise }: { params: Promise
      }
   }, [isLoading, matchDetailsLoaded]);
 
-  const saveJuriScore = async (updatedScore: Partial<TGRJuriScore>) => {
+  const saveJuriScore = async (updatedScoreFields: Partial<TGRJuriScore>) => {
     if (!activeMatchId || isSaving) return;
     setIsSaving(true);
     try {
       const scoreToSave: Partial<TGRJuriScore> & { lastUpdated: any } = {
-        ...updatedScore,
+        ...updatedScoreFields, // Save only the fields that changed, or all fields if that's the intent
         lastUpdated: serverTimestamp(),
       };
       const juriScoreDocRef = doc(db, MATCHES_TGR_COLLECTION, activeMatchId, JURI_SCORES_TGR_SUBCOLLECTION, juriId);
@@ -210,22 +217,38 @@ export default function JuriTGRPage({ params: paramsPromise }: { params: Promise
   };
 
   const handleGerakanSalah = () => {
+    if (isInputDisabled) return;
     setJuriScore(prev => {
       const newCount = prev.gerakanSalahCount + 1;
       const newCalculated = calculateScore(newCount, prev.staminaKemantapanBonus);
       const updatedScore = { ...prev, gerakanSalahCount: newCount, calculatedScore: newCalculated };
-      saveJuriScore(updatedScore);
+      saveJuriScore({ gerakanSalahCount: newCount, calculatedScore: newCalculated });
       return updatedScore;
     });
   };
 
   const handleStaminaBonusChange = (bonusValue: number) => {
+    if (isInputDisabled) return;
     setJuriScore(prev => {
       const newCalculated = calculateScore(prev.gerakanSalahCount, bonusValue);
       const updatedScore = { ...prev, staminaKemantapanBonus: bonusValue, calculatedScore: newCalculated };
-      saveJuriScore(updatedScore);
+      saveJuriScore({ staminaKemantapanBonus: bonusValue, calculatedScore: newCalculated });
       return updatedScore;
     });
+  };
+
+  const handleJuriSiap = () => {
+    if (!activeMatchId || isSaving || isJuriReady) return;
+    setIsJuriReady(true);
+    const scoreUpdateForFirestore: Partial<TGRJuriScore> = {
+        isReady: true,
+        baseScore: juriScore.baseScore,
+        gerakanSalahCount: juriScore.gerakanSalahCount,
+        staminaKemantapanBonus: juriScore.staminaKemantapanBonus,
+        calculatedScore: juriScore.calculatedScore,
+    };
+    saveJuriScore(scoreUpdateForFirestore);
+    setJuriScore(prev => ({...prev, isReady: true}));
   };
   
   const formatDisplayDate = (dateString: string | undefined) => {
@@ -239,7 +262,7 @@ export default function JuriTGRPage({ params: paramsPromise }: { params: Promise
     }
   };
 
-  const isInputDisabled = isLoading || isSaving || !activeMatchId || !matchDetailsLoaded || tgrTimerStatus.matchStatus === 'Finished' || !tgrTimerStatus.isTimerRunning;
+  const isInputDisabled = isLoading || isSaving || !activeMatchId || !matchDetailsLoaded || tgrTimerStatus.matchStatus === 'Finished' || !isJuriReady;
   
   const inputDisabledReason = () => {
     if (configMatchId === undefined && isLoading) return "Memuat konfigurasi global...";
@@ -249,7 +272,8 @@ export default function JuriTGRPage({ params: paramsPromise }: { params: Promise
     if (isSaving) return "Menyimpan skor...";
     if (error) return `Error: ${error}`;
     if (tgrTimerStatus.matchStatus === 'Finished') return "Penampilan telah Selesai.";
-    if (!tgrTimerStatus.isTimerRunning) return "Penampilan belum dimulai atau dijeda oleh Dewan.";
+    if (!isJuriReady && activeMatchId && matchDetailsLoaded && tgrTimerStatus.matchStatus !== 'Finished') return "Tekan tombol 'SIAP' untuk memulai penilaian.";
+    // if (!tgrTimerStatus.isTimerRunning && isJuriReady) return "Penampilan dijeda oleh Dewan."; // This might be too specific if Juri can still prepare
     return "";
   };
   
@@ -259,6 +283,8 @@ export default function JuriTGRPage({ params: paramsPromise }: { params: Promise
     return scheduleDetails.pesilatMerahName || "Nama Pesilat/Tim";
   }
 
+  const buttonSiapDisabled = isLoading || isSaving || !activeMatchId || !matchDetailsLoaded || tgrTimerStatus.matchStatus === 'Finished' || isJuriReady;
+
   return (
     <div className="flex flex-col min-h-screen bg-gray-100 dark:bg-gray-900 text-gray-800 dark:text-gray-900 font-sans">
       <main className="flex-1 container mx-auto px-2 py-4 md:p-6">
@@ -267,10 +293,10 @@ export default function JuriTGRPage({ params: paramsPromise }: { params: Promise
           <h1 className="text-2xl md:text-3xl font-bold text-blue-600">
             Kontingen {scheduleDetails?.pesilatMerahContingent || <Skeleton className="h-8 w-40 inline-block" />}
           </h1>
-          <div className="text-sm md:text-base text-gray-600 dark:text-gray-700">
+          <div className="text-sm md:text-base text-gray-600 dark:text-gray-400">
             Kategori: {scheduleDetails?.category || <Skeleton className="h-5 w-24 inline-block" />}
           </div>
-          <div className="text-lg md:text-xl font-semibold text-gray-700 dark:text-gray-800">
+          <div className="text-lg md:text-xl font-semibold text-gray-700 dark:text-gray-500">
             {getCategorySpecificName()}
           </div>
           <div className="text-xs md:text-sm text-gray-500 dark:text-gray-600">
@@ -343,23 +369,30 @@ export default function JuriTGRPage({ params: paramsPromise }: { params: Promise
         
         {/* Footer Buttons & Info */}
         <div className="flex flex-col items-center gap-3 mt-6">
-          <div className="w-full max-w-xs">
+          <div className="w-full max-w-md">
              {inputDisabledReason() && (
-                <div className={cn("text-xs text-center p-1 rounded-md mb-2", error ? "bg-red-100 text-red-700" : "bg-yellow-100 text-yellow-800")}>
-                    {error ? <AlertCircle className="inline mr-1 h-3 w-3"/> : <Info className="inline mr-1 h-3 w-3"/>} 
+                <div className={cn("text-xs text-center p-2 rounded-md mb-2 shadow", error ? "bg-red-100 text-red-700 border border-red-300" : "bg-yellow-100 text-yellow-800 border border-yellow-300")}>
+                    {error ? <AlertCircle className="inline mr-1 h-4 w-4"/> : <Info className="inline mr-1 h-4 w-4"/>} 
                     {inputDisabledReason()}
                 </div>
              )}
           </div>
-          <div className="flex gap-3 w-full justify-end">
+          <div className="flex flex-col sm:flex-row gap-3 w-full sm:w-auto justify-center">
+            <Button 
+                className="bg-primary hover:bg-primary/80 text-primary-foreground py-3 px-6 text-sm md:text-base rounded-lg shadow-md"
+                onClick={handleJuriSiap}
+                disabled={buttonSiapDisabled}
+            >
+              {isJuriReady ? <><CheckCircle2 className="mr-2 h-5 w-5"/>Sedang Menilai</> : "SIAP"}
+            </Button>
             <Button 
                 className="bg-green-600 hover:bg-green-700 text-white py-3 px-6 text-sm md:text-base rounded-lg shadow-md" 
-                disabled={isInputDisabled || tgrTimerStatus.matchStatus !== 'Finished'}
+                disabled={isLoading || !isJuriReady || tgrTimerStatus.matchStatus !== 'Finished' || isSaving}
             >
               Jurus Selanjutnya
             </Button>
           </div>
-           <Link href="/scoring/tgr" className="text-xs text-blue-600 hover:underline mt-2">
+           <Link href="/scoring/tgr" className="text-xs text-blue-600 hover:underline mt-4">
                 <ArrowLeft className="inline mr-1 h-3 w-3" /> Kembali ke Pemilihan Peran TGR
            </Link>
         </div>
