@@ -58,11 +58,30 @@ export default function ScheduleTandingPage() {
     setIsLoading(true);
     const unsub = onSnapshot(collection(db, SCHEDULE_TANDING_COLLECTION), (querySnapshot) => {
       const schedulesData: ScheduleTanding[] = [];
-      querySnapshot.forEach((doc) => {
-        const data = doc.data();
+      querySnapshot.forEach((docSnap) => {
+        const data = docSnap.data();
+        
+        let processedDate: string;
+        if (data.date instanceof Timestamp) {
+          processedDate = data.date.toDate().toISOString().split('T')[0];
+        } else if (typeof data.date === 'string') {
+          if (/^\d{4}-\d{2}-\d{2}$/.test(data.date)) {
+            processedDate = data.date;
+          } else {
+            console.warn(`[ScheduleTanding] Malformed date string from Firestore: ${data.date}. Defaulting to today.`);
+            processedDate = new Date().toISOString().split('T')[0];
+          }
+        } else if (data.date && typeof data.date.seconds === 'number' && typeof data.date.nanoseconds === 'number') {
+          // Handle plain object {seconds, nanoseconds} representation of a Timestamp
+          processedDate = new Date(data.date.seconds * 1000).toISOString().split('T')[0];
+        } else {
+          console.warn(`[ScheduleTanding] Unexpected date type from Firestore for match ${docSnap.id}: ${typeof data.date}, value: ${JSON.stringify(data.date)}. Defaulting to today.`);
+          processedDate = new Date().toISOString().split('T')[0];
+        }
+
         schedulesData.push({
-          id: doc.id,
-          date: data.date instanceof Timestamp ? data.date.toDate().toISOString().split('T')[0] : data.date,
+          id: docSnap.id,
+          date: processedDate,
           place: data.place,
           pesilatMerahName: data.pesilatMerahName,
           pesilatMerahContingent: data.pesilatMerahContingent,
@@ -119,11 +138,8 @@ export default function ScheduleTandingPage() {
   const handleEdit = (id: string) => {
     const scheduleToEdit = schedules.find(s => s.id === id);
     if (scheduleToEdit) {
-      const formDate = scheduleToEdit.date instanceof Date 
-        ? scheduleToEdit.date.toISOString().split('T')[0]
-        : String(scheduleToEdit.date);
-
-      setFormData({...scheduleToEdit, date: formDate});
+      // scheduleToEdit.date is already guaranteed to be a YYYY-MM-DD string by the fetching logic
+      setFormData({...scheduleToEdit });
       setIsEditing(id);
     }
   };
@@ -212,19 +228,17 @@ export default function ScheduleTandingPage() {
           }
 
           let parsedDate;
+          let originalDateStrForForm: string;
+
           if (typeof dateStr === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(dateStr)) {
             parsedDate = Timestamp.fromDate(new Date(dateStr + "T00:00:00"));
-          } else if (typeof dateStr === 'number') { // Excel date serial number
-             // XLSX library usually converts serial numbers to JS Date objects if { cellDates: true } is used.
-             // If it's raw serial, we need to parse it. For aoa_to_sheet it might be raw.
-             // sheet_to_json with header:1 returns raw values.
-             // Excel stores dates as numbers of days since 1900-01-00.
-             // JS Date is ms since 1970-01-01.
-             // This conversion can be tricky. For now, strict YYYY-MM-DD string is expected.
-             const excelEpoch = new Date(1899, 11, 30); // Excel's epoch starts on Dec 30, 1899 for serial 0
+            originalDateStrForForm = dateStr;
+          } else if (typeof dateStr === 'number') { 
+             const excelEpoch = new Date(1899, 11, 30);
              const jsDate = new Date(excelEpoch.getTime() + dateStr * 24 * 60 * 60 * 1000);
              if (!isNaN(jsDate.getTime())) {
                 parsedDate = Timestamp.fromDate(jsDate);
+                originalDateStrForForm = jsDate.toISOString().split('T')[0];
              } else {
                 errorMessages.push(`Baris ${i + 2}: Format tanggal Excel (angka) tidak bisa diproses: ${dateStr}. Harap gunakan format YYYY-MM-DD.`);
                 errorCount++;
@@ -239,7 +253,7 @@ export default function ScheduleTandingPage() {
 
           const newScheduleData: Omit<ScheduleTanding, 'id'> = {
             matchNumber,
-            date: dateStr, // Store original string for form consistency, convert to TS for Firestore
+            date: originalDateStrForForm, 
             place: String(place),
             pesilatMerahName: String(pMerahName),
             pesilatMerahContingent: String(pMerahCont),
@@ -276,7 +290,6 @@ export default function ScheduleTandingPage() {
         console.error("Error processing file: ", err);
         alert(`Gagal memproses file: ${err instanceof Error ? err.message : String(err)}`);
       } finally {
-        // Reset file input value so the same file can be selected again
         if (fileInputRef.current) {
           fileInputRef.current.value = '';
         }
