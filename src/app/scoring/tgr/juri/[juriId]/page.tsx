@@ -238,7 +238,7 @@ export default function JuriTGRPage({ params: paramsPromise }: { params: Promise
   };
 
   const handleJuriSiap = () => {
-    if (!activeMatchId || isSaving || isJuriReady || buttonSiapDisabled) return; // Added buttonSiapDisabled check
+    if (!activeMatchId || isSaving || isJuriReady || buttonSiapDisabled) return;
     setIsJuriReady(true);
     const scoreUpdateForFirestore: Partial<TGRJuriScore> = {
         isReady: true,
@@ -280,24 +280,25 @@ export default function JuriTGRPage({ params: paramsPromise }: { params: Promise
   
   const getCategorySpecificName = () => {
     if (!scheduleDetails) return <Skeleton className="h-5 w-48 inline-block" />;
-    if (scheduleDetails.category === 'Jurus Tunggal Bebas') return "Tunggal Jurus Bebas";
-    return scheduleDetails.pesilatMerahName || "Nama Pesilat/Tim";
-  }
+    if (scheduleDetails.category === 'Jurus Tunggal Bebas') {
+      return <div className="text-lg md:text-xl font-semibold text-gray-700 dark:text-gray-300">Tunggal Jurus Bebas</div>;
+    }
+    return <div className="text-lg md:text-xl font-semibold text-gray-700 dark:text-gray-300">{scheduleDetails.pesilatMerahName || "Nama Pesilat/Tim"}</div>;
+  };
+  
 
   return (
     <div className="flex flex-col min-h-screen bg-gray-100 dark:bg-gray-900 text-gray-800 dark:text-gray-900 font-sans">
       <main className="flex-1 container mx-auto px-2 py-4 md:p-6">
         {/* Header Info */}
         <div className="mb-4 md:mb-6 text-center">
-          <h1 className="text-2xl md:text-3xl font-bold text-blue-600">
+          <h1 className="text-2xl md:text-3xl font-bold text-blue-600 dark:text-blue-400">
             Kontingen {scheduleDetails?.pesilatMerahContingent || <Skeleton className="h-8 w-40 inline-block" />}
           </h1>
           <div className="text-sm md:text-base text-gray-600 dark:text-gray-400">
             Kategori: {scheduleDetails?.category || <Skeleton className="h-5 w-24 inline-block" />}
           </div>
-          <div className="text-lg md:text-xl font-semibold text-gray-700 dark:text-gray-500">
-            {getCategorySpecificName()}
-          </div>
+          {getCategorySpecificName()}
           <div className="text-xs md:text-sm text-gray-500 dark:text-gray-600">
             {scheduleDetails?.place || <Skeleton className="h-4 w-20 inline-block" />}, {formatDisplayDate(scheduleDetails?.date) || <Skeleton className="h-4 w-28 inline-block" />} | Partai No: {scheduleDetails?.lotNumber || <Skeleton className="h-4 w-8 inline-block" />}
           </div>
@@ -380,16 +381,16 @@ export default function JuriTGRPage({ params: paramsPromise }: { params: Promise
                   {isLoading ? <Skeleton className="h-5 w-16 bg-gray-400 dark:bg-gray-600"/> : juriScore.calculatedScore.toFixed(2)}
                 </div>
             </div>
-            <p className="text-xs text-center mt-1 text-gray-500 dark:text-gray-600">
+            <div className="text-xs text-center mt-1 text-gray-500 dark:text-gray-600">
                 Pengurangan: {juriScore.gerakanSalahCount} x {GERAKAN_SALAH_DEDUCTION.toFixed(2)} = {(juriScore.gerakanSalahCount * GERAKAN_SALAH_DEDUCTION).toFixed(2)}. Bonus Stamina: {juriScore.staminaKemantapanBonus === undefined ? '0.00' : juriScore.staminaKemantapanBonus.toFixed(2)}
-            </p>
+            </div>
         </div>
         
         {/* Footer Buttons & Info */}
         <div className="flex flex-col items-center gap-3 mt-6">
           <div className="w-full max-w-md">
              {inputDisabledReason() && (
-                <div className={cn("text-xs text-center p-2 rounded-md mb-2 shadow", error ? "bg-red-100 text-red-700 border border-red-300" : "bg-yellow-100 text-yellow-800 border border-yellow-300")}>
+                <div className={cn("text-xs text-center p-2 rounded-md mb-2 shadow", error ? "bg-red-100 text-red-700 border border-red-300 dark:bg-red-900/30 dark:text-red-300 dark:border-red-700" : "bg-yellow-100 text-yellow-800 border border-yellow-300 dark:bg-yellow-900/30 dark:text-yellow-300 dark:border-yellow-700")}>
                     {error ? <AlertCircle className="inline mr-1 h-4 w-4"/> : <Info className="inline mr-1 h-4 w-4"/>} 
                     {inputDisabledReason()}
                 </div>
@@ -403,7 +404,7 @@ export default function JuriTGRPage({ params: paramsPromise }: { params: Promise
               Jurus Selanjutnya
             </Button>
           </div>
-           <Link href="/scoring/tgr" className="text-xs text-blue-600 hover:underline mt-4">
+           <Link href="/scoring/tgr" className="text-xs text-blue-600 hover:underline mt-4 dark:text-blue-400">
                 <ArrowLeft className="inline mr-1 h-3 w-3" /> Kembali ke Pemilihan Peran TGR
            </Link>
         </div>
@@ -412,4 +413,3 @@ export default function JuriTGRPage({ params: paramsPromise }: { params: Promise
     </div>
   );
 }
-
