@@ -30,20 +30,20 @@ const initialJuriScore: TGRJuriScore = {
 };
 
 const initialTgrTimerStatus: TGRTimerStatus = {
-  timerSeconds: 180, 
+  timerSeconds: 180,
   isTimerRunning: false,
   matchStatus: 'Pending',
   performanceDuration: 180,
 };
 
-export default function JuriTGRPage({ params: paramsPromise }: { params: Promise<{ juriId: string }> }) { 
+export default function JuriTGRPage({ params: paramsPromise }: { params: Promise<{ juriId: string }> }) {
   const resolvedParams = use(paramsPromise);
   const { juriId } = resolvedParams;
   const juriDisplayName = `Juri ${juriId?.split('-')[1] || 'TGR Tidak Dikenal'}`;
 
   const [configMatchId, setConfigMatchId] = useState<string | null | undefined>(undefined);
   const [activeMatchId, setActiveMatchId] = useState<string | null>(null);
-  
+
   const [scheduleDetails, setScheduleDetails] = useState<ScheduleTGR | null>(null);
   const [matchDetailsLoaded, setMatchDetailsLoaded] = useState(false);
 
@@ -117,7 +117,7 @@ export default function JuriTGRPage({ params: paramsPromise }: { params: Promise
                 processedDate = new Date(rawData.date.seconds * 1000).toISOString().split('T')[0];
             } else {
                 console.warn(`[${juriDisplayName}] Schedule TGR date is in unexpected format or missing for ID ${activeMatchId}. Defaulting to today.`);
-                processedDate = new Date().toISOString().split('T')[0]; 
+                processedDate = new Date().toISOString().split('T')[0];
             }
             setScheduleDetails({ ...rawData, id: docSnap.id, date: processedDate } as ScheduleTGR);
             setMatchDetailsLoaded(true);
@@ -139,14 +139,14 @@ export default function JuriTGRPage({ params: paramsPromise }: { params: Promise
             const gsCount = data.gerakanSalahCount ?? initialJuriScore.gerakanSalahCount;
             const staminaBonus = data.staminaKemantapanBonus ?? initialJuriScore.staminaKemantapanBonus;
             const juriIsReadyFirestore = data.isReady ?? false;
-            
+
             setJuriScore({
               baseScore: baseScore,
               gerakanSalahCount: gsCount,
               staminaKemantapanBonus: staminaBonus,
               calculatedScore: calculateScore(gsCount, staminaBonus),
               isReady: juriIsReadyFirestore,
-              lastUpdated: data.lastUpdated 
+              lastUpdated: data.lastUpdated
             });
             setIsJuriReady(juriIsReadyFirestore);
           } else {
@@ -157,7 +157,7 @@ export default function JuriTGRPage({ params: paramsPromise }: { params: Promise
         }, (err) => {
           if (mounted) setError(`Gagal memuat skor juri: ${err.message}`);
         });
-        
+
         const matchDataDocRef = doc(db, MATCHES_TGR_COLLECTION, activeMatchId);
         unsubMatchData = onSnapshot(matchDataDocRef, (docSnap) => {
             if(!mounted) return;
@@ -179,9 +179,9 @@ export default function JuriTGRPage({ params: paramsPromise }: { params: Promise
         if (mounted) setError(`Error utama saat memuat data: ${err instanceof Error ? err.message : String(err)}`);
       }
     };
-    
+
     loadData();
-    
+
     return () => {
       mounted = false;
       if (unsubSchedule) unsubSchedule();
@@ -201,7 +201,7 @@ export default function JuriTGRPage({ params: paramsPromise }: { params: Promise
     setIsSaving(true);
     try {
       const scoreToSave: Partial<TGRJuriScore> & { lastUpdated: any } = {
-        ...updatedScoreFields, 
+        ...updatedScoreFields,
         lastUpdated: serverTimestamp(),
       };
       const juriScoreDocRef = doc(db, MATCHES_TGR_COLLECTION, activeMatchId, JURI_SCORES_TGR_SUBCOLLECTION, juriId);
@@ -248,20 +248,20 @@ export default function JuriTGRPage({ params: paramsPromise }: { params: Promise
     saveJuriScore(scoreUpdateForFirestore);
     setJuriScore(prev => ({...prev, isReady: true}));
   };
-  
+
   const formatDisplayDate = (dateString: string | undefined) => {
     if (!dateString) return <Skeleton className="h-4 w-28 inline-block" />;
     try {
-      const date = new Date(dateString + 'T00:00:00'); 
+      const date = new Date(dateString + 'T00:00:00');
       return new Intl.DateTimeFormat('id-ID', { day: 'numeric', month: 'long', year: 'numeric' }).format(date);
     } catch (e) {
       console.warn("Error formatting date in TGR Juri:", e, "Original date string:", dateString);
-      return dateString; 
+      return dateString;
     }
   };
 
   const isInputDisabled = isLoading || isSaving || !activeMatchId || !matchDetailsLoaded || tgrTimerStatus.matchStatus === 'Finished' || !isJuriReady;
-  
+
   const buttonSiapDisabled = isLoading || isSaving || !activeMatchId || !matchDetailsLoaded || tgrTimerStatus.matchStatus === 'Finished' || isJuriReady;
 
   const inputDisabledReason = () => {
@@ -275,7 +275,7 @@ export default function JuriTGRPage({ params: paramsPromise }: { params: Promise
     if (!isJuriReady && activeMatchId && matchDetailsLoaded && tgrTimerStatus.matchStatus !== 'Finished') return "Tekan tombol 'SIAP' untuk memulai penilaian.";
     return "";
   };
-  
+
   const getCategorySpecificName = () => {
     if (!scheduleDetails) return <Skeleton className="h-6 w-48 inline-block" />;
     if (scheduleDetails.category === 'Jurus Tunggal Bebas') {
@@ -283,7 +283,7 @@ export default function JuriTGRPage({ params: paramsPromise }: { params: Promise
     }
     return <div className="text-xl md:text-2xl font-semibold text-gray-700 dark:text-gray-300">{scheduleDetails.pesilatMerahName || "Nama Pesilat/Tim"}</div>;
   };
-  
+
 
   return (
     <div className="flex flex-col min-h-screen bg-gray-100 dark:bg-gray-900 text-gray-800 dark:text-gray-900 font-sans">
@@ -304,57 +304,49 @@ export default function JuriTGRPage({ params: paramsPromise }: { params: Promise
         </div>
 
         {/* Main Interaction Area */}
-        <div className="grid grid-cols-1 md:grid-cols-[3fr_2fr] gap-4 md:gap-6 mb-4 md:mb-6 items-stretch">
-          {/* Combined Area for X button and SIAP button */}
-          <div className="flex flex-col sm:flex-row items-stretch gap-2">
-            {/* Kesalahan Gerakan Button */}
-            <Button
-              variant="default"
-              className="flex-grow h-40 md:h-64 text-5xl md:text-7xl bg-blue-600 hover:bg-blue-700 text-white shadow-lg rounded-lg flex items-center justify-center"
-              onClick={handleGerakanSalah}
-              disabled={isInputDisabled}
-              aria-label="Kesalahan Gerakan (-0.01)"
-            >
-              <XIcon className="w-28 h-28 md:w-44 md:h-44" strokeWidth={3}/>
-            </Button>
+        <div className="flex flex-col md:flex-row items-stretch gap-4 md:gap-6 mb-4 md:mb-6">
+          {/* Kesalahan Gerakan Button (X) */}
+          <Button
+            variant="default"
+            className="w-full md:w-auto h-40 md:h-64 text-5xl md:text-7xl bg-blue-600 hover:bg-blue-700 text-white shadow-lg rounded-lg flex items-center justify-center p-2 md:flex-[2_2_0%]"
+            onClick={handleGerakanSalah}
+            disabled={isInputDisabled}
+            aria-label="Kesalahan Gerakan (-0.01)"
+          >
+            <XIcon className="w-28 h-28 md:w-44 md:h-44" strokeWidth={3} />
+          </Button>
 
-            {/* SIAP Button */}
-            <Button
-              id="tombol-siap-juri-tgr"
-              className={cn(
-                "sm:w-32 md:w-40 h-auto sm:h-full text-lg md:text-2xl font-semibold rounded-lg shadow-lg flex flex-col items-center justify-center p-2",
-                isJuriReady ? "bg-green-600 hover:bg-green-700 text-white" : "bg-yellow-500 hover:bg-yellow-600 text-black",
-                buttonSiapDisabled && !isJuriReady ? "opacity-50 cursor-not-allowed" : "",
-                isJuriReady ? "opacity-75 cursor-default" : "" 
-              )}
-              onClick={handleJuriSiap}
-              disabled={buttonSiapDisabled} 
-            >
-              {isJuriReady ? <CheckCircle2 className="w-8 h-8 md:w-12 md:h-12 mb-2" /> : <Info className="w-8 h-8 md:w-12 md:h-12 mb-2"/>}
-              <span className="block text-center">{isJuriReady ? "MENILAI" : "SIAP"}</span>
-            </Button>
+          {/* Detail Gerakan Text Block - Positioned in the middle */}
+          <div className="w-full md:w-auto flex flex-col items-center justify-center text-center p-2 md:p-4 rounded-lg bg-gray-100 dark:bg-gray-800 md:h-64 md:flex-[1_1_0%]">
+            <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-300">Detail Gerakan</h3>
+            <p className="text-xs text-gray-600 dark:text-gray-400 mt-1">Urutan Gerakan</p>
+            <p className="text-xs text-gray-600 dark:text-gray-400">Gerakan yang terlewat</p>
           </div>
 
-          {/* Detail Gerakan & Placeholder Visual */}
-          <div className="flex flex-col bg-gray-200 dark:bg-gray-800 p-3 md:p-4 rounded-lg shadow min-h-[200px] md:h-64">
-            <div className="mb-2">
-              <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-300">Detail Gerakan</h3>
-              <p className="text-xs text-gray-600 dark:text-gray-400">Urutan Gerakan</p>
-              <p className="text-xs text-gray-600 dark:text-gray-400">Gerakan yang terlewat</p>
-            </div>
-            <div className="flex-grow flex items-center justify-center bg-gray-500 dark:bg-gray-700 rounded-md min-h-[100px] md:min-h-[150px]">
-              <div className="w-3/5 h-3/5 bg-white dark:bg-gray-200 rounded-full opacity-50"></div>
-            </div>
-          </div>
+          {/* SIAP Button */}
+          <Button
+            id="tombol-siap-juri-tgr"
+            className={cn(
+              "w-full md:w-auto h-40 md:h-64 text-lg md:text-2xl font-semibold rounded-lg shadow-lg flex flex-col items-center justify-center p-2 sm:p-4 md:flex-[1_1_0%]",
+              isJuriReady ? "bg-green-600 hover:bg-green-700 text-white" : "bg-yellow-500 hover:bg-yellow-600 text-black",
+              buttonSiapDisabled && !isJuriReady ? "opacity-50 cursor-not-allowed" : "",
+              isJuriReady ? "opacity-75 cursor-default" : ""
+            )}
+            onClick={handleJuriSiap}
+            disabled={buttonSiapDisabled}
+          >
+            {isJuriReady ? <CheckCircle2 className="w-8 h-8 md:w-12 md:h-12 mb-1 md:mb-2" /> : <Info className="w-8 h-8 md:w-12 md:h-12 mb-1 md:mb-2" />}
+            <span className="block text-center">{isJuriReady ? "MENILAI" : "SIAP"}</span>
+          </Button>
         </div>
-        
+
         {/* Skor Akurasi & Stamina */}
         <div className="mb-4 md:mb-6 space-y-2">
             <div className="flex items-center justify-between bg-gray-200 dark:bg-gray-800 p-3 md:p-4 rounded-md shadow">
                 <p className="text-sm md:text-base font-semibold text-gray-700 dark:text-gray-300">TOTAL AKURASI SKOR</p>
                 <div className="bg-gray-300 dark:bg-gray-700 h-6 w-16 md:h-8 md:w-20 rounded-sm"></div>
             </div>
-            
+
             <div className="text-center my-1">
               <p className="text-xs font-medium text-gray-600 dark:text-gray-500">FLOW OF MOVEMENT / STAMINA (RANGE SKOR : 0.01 - 0.10)</p>
             </div>
@@ -364,7 +356,7 @@ export default function JuriTGRPage({ params: paramsPromise }: { params: Promise
                   key={bonus}
                   variant={juriScore.staminaKemantapanBonus === bonus ? "default" : "outline"}
                   className={cn(
-                    "text-xs md:text-sm h-8 md:h-9 rounded-md", 
+                    "text-xs md:text-sm h-8 md:h-9 rounded-md",
                     juriScore.staminaKemantapanBonus === bonus ? "bg-gray-600 dark:bg-gray-400 text-white dark:text-black" : "bg-gray-300 dark:bg-gray-700 text-gray-700 dark:text-gray-300 border-gray-400 dark:border-gray-600 hover:bg-gray-400 dark:hover:bg-gray-600"
                   )}
                   onClick={() => handleStaminaBonusChange(bonus)}
@@ -384,20 +376,20 @@ export default function JuriTGRPage({ params: paramsPromise }: { params: Promise
                 Pengurangan: {juriScore.gerakanSalahCount} x {GERAKAN_SALAH_DEDUCTION.toFixed(2)} = {(juriScore.gerakanSalahCount * GERAKAN_SALAH_DEDUCTION).toFixed(2)}. Bonus Stamina: {juriScore.staminaKemantapanBonus === undefined ? '0.00' : juriScore.staminaKemantapanBonus.toFixed(2)}
             </div>
         </div>
-        
+
         {/* Footer Buttons & Info */}
         <div className="flex flex-col items-center gap-3 mt-6">
           <div className="w-full max-w-md">
              {inputDisabledReason() && (
                 <div className={cn("text-xs text-center p-2 rounded-md mb-2 shadow", error ? "bg-red-100 text-red-700 border border-red-300 dark:bg-red-900/30 dark:text-red-300 dark:border-red-700" : "bg-yellow-100 text-yellow-800 border border-yellow-300 dark:bg-yellow-900/30 dark:text-yellow-300 dark:border-yellow-700")}>
-                    {error ? <AlertCircle className="inline mr-1 h-4 w-4"/> : <Info className="inline mr-1 h-4 w-4"/>} 
+                    {error ? <AlertCircle className="inline mr-1 h-4 w-4"/> : <Info className="inline mr-1 h-4 w-4"/>}
                     {inputDisabledReason()}
                 </div>
              )}
           </div>
           <div className="flex flex-col sm:flex-row gap-3 w-full sm:w-auto justify-center">
-            <Button 
-                className="bg-green-600 hover:bg-green-700 text-white py-3 px-6 text-sm md:text-base rounded-lg shadow-md" 
+            <Button
+                className="bg-green-600 hover:bg-green-700 text-white py-3 px-6 text-sm md:text-base rounded-lg shadow-md"
                 disabled={isLoading || !isJuriReady || tgrTimerStatus.matchStatus !== 'Finished' || isSaving}
             >
               Jurus Selanjutnya
