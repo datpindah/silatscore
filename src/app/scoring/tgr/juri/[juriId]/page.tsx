@@ -29,12 +29,11 @@ const initialJuriScore: TGRJuriScore = {
   lastUpdated: null,
 };
 
-// Default initial timer status, durations will be overridden by round logic
 const defaultInitialTgrTimerStatus: TGRTimerStatus = {
-  timerSeconds: 180, 
+  timerSeconds: 0, // Initialize with 0, actual value will be set based on round
   isTimerRunning: false,
   matchStatus: 'Pending',
-  performanceDuration: 180,
+  performanceDuration: 0, // Initialize with 0
 };
 
 const getPerformanceDurationForRound = (roundName: string | undefined): number => {
@@ -43,7 +42,7 @@ const getPerformanceDurationForRound = (roundName: string | undefined): number =
   if (round.includes('perempat final')) return 80; // 1 min 20 sec
   if (round.includes('semi final')) return 100; // 1 min 40 sec
   if (round.includes('final')) return 180; // 3 min
-  return 180; // Default if round name is not recognized
+  return 180; // Default if round name is not recognized or undefined
 };
 
 
@@ -85,12 +84,12 @@ export default function JuriTGRPage({ params: paramsPromise }: { params: Promise
   useEffect(() => {
     if (configMatchId === undefined) { setIsLoading(true); return; }
     if (configMatchId !== activeMatchId) {
-      setScheduleDetails(null);
       setJuriScore(initialJuriScore);
-      setTgrTimerStatus(defaultInitialTgrTimerStatus);
+      setTgrTimerStatus(defaultInitialTgrTimerStatus); // Reset timer to 0 duration
       setIsJuriReady(false);
       setActiveMatchId(configMatchId);
-      setMatchDetailsLoaded(false);
+      setScheduleDetails(null); // Reset schedule details
+      setMatchDetailsLoaded(false); // This will trigger the schedule loading useEffect
       setError(null);
       if (configMatchId) setIsLoading(true); else setIsLoading(false);
     } else if (configMatchId === null && activeMatchId === null && isLoading) {
@@ -98,131 +97,177 @@ export default function JuriTGRPage({ params: paramsPromise }: { params: Promise
     }
   }, [configMatchId, activeMatchId, isLoading]);
 
+
+  // Effect to load schedule details when activeMatchId changes
   useEffect(() => {
     if (!activeMatchId) {
-      if(isLoading) setIsLoading(false);
+      setScheduleDetails(null);
+      setMatchDetailsLoaded(false);
+      setIsLoading(false); // Stop loading if no active match
       return;
     }
 
     let mounted = true;
-    let unsubSchedule: (() => void) | undefined;
-    let unsubJuriScore: (() => void) | undefined;
-    let unsubMatchData: (() => void) | undefined;
+    setIsLoading(true);
 
-    const loadData = async () => {
+    const loadSchedule = async () => {
       if (!mounted) return;
-      setIsLoading(true);
-      let currentScheduleDetails: ScheduleTGR | null = null;
-
       try {
         const scheduleDocRef = doc(db, SCHEDULE_TGR_COLLECTION, activeMatchId);
-        const scheduleDocSnap = await getDoc(scheduleDocRef); // Use getDoc for one-time fetch of schedule
+        const scheduleDocSnap = await getDoc(scheduleDocRef);
 
         if (!mounted) return;
 
         if (scheduleDocSnap.exists()) {
           const rawData = scheduleDocSnap.data();
           let processedDate: string;
-
           if (rawData.date instanceof Timestamp) {
-              processedDate = rawData.date.toDate().toISOString().split('T')[0];
+            processedDate = rawData.date.toDate().toISOString().split('T')[0];
           } else if (typeof rawData.date === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(rawData.date)) {
-              processedDate = rawData.date;
+            processedDate = rawData.date;
           } else if (rawData.date && typeof rawData.date.seconds === 'number' && typeof rawData.date.nanoseconds === 'number') {
-              processedDate = new Date(rawData.date.seconds * 1000).toISOString().split('T')[0];
+            processedDate = new Date(rawData.date.seconds * 1000).toISOString().split('T')[0];
           } else {
-              console.warn(`[${juriDisplayName}] Schedule TGR date is in unexpected format or missing for ID ${activeMatchId}. Defaulting to today.`);
-              processedDate = new Date().toISOString().split('T')[0];
+            console.warn(`[${juriDisplayName}] Schedule TGR date is in unexpected format or missing for ID ${activeMatchId}. Defaulting to today.`);
+            processedDate = new Date().toISOString().split('T')[0];
           }
-          currentScheduleDetails = { ...rawData, id: scheduleDocSnap.id, date: processedDate } as ScheduleTGR;
-          setScheduleDetails(currentScheduleDetails);
+          setScheduleDetails({ ...rawData, id: scheduleDocSnap.id, date: processedDate } as ScheduleTGR);
           setMatchDetailsLoaded(true);
         } else {
           setError(`Detail Jadwal TGR (ID: ${activeMatchId}) tidak ditemukan.`);
           setScheduleDetails(null);
           setMatchDetailsLoaded(false);
-           // If schedule not found, we can't determine round-specific duration. Still set loading to false later.
         }
-
-        // Determine default duration based on fetched schedule (or fallback)
-        const defaultDurationForCurrentRound = getPerformanceDurationForRound(currentScheduleDetails?.round);
-
-        const juriScoreDocRef = doc(db, MATCHES_TGR_COLLECTION, activeMatchId, JURI_SCORES_TGR_SUBCOLLECTION, juriId);
-        unsubJuriScore = onSnapshot(juriScoreDocRef, (docSnap) => {
-          if (!mounted) return;
-          if (docSnap.exists()) {
-            const data = docSnap.data() as Partial<TGRJuriScore>;
-            const baseScore = data.baseScore ?? initialJuriScore.baseScore;
-            const gsCount = data.gerakanSalahCount ?? initialJuriScore.gerakanSalahCount;
-            const staminaBonus = data.staminaKemantapanBonus ?? initialJuriScore.staminaKemantapanBonus;
-            const juriIsReadyFirestore = data.isReady ?? false;
-
-            setJuriScore({
-              baseScore: baseScore,
-              gerakanSalahCount: gsCount,
-              staminaKemantapanBonus: staminaBonus,
-              calculatedScore: calculateScore(gsCount, staminaBonus),
-              isReady: juriIsReadyFirestore,
-              lastUpdated: data.lastUpdated
-            });
-            setIsJuriReady(juriIsReadyFirestore);
-          } else {
-             const newCalculatedScore = calculateScore(initialJuriScore.gerakanSalahCount, initialJuriScore.staminaKemantapanBonus);
-            setJuriScore({...initialJuriScore, calculatedScore: newCalculatedScore });
-            setIsJuriReady(false);
-          }
-        }, (err) => {
-          if (mounted) setError(`Gagal memuat skor juri: ${err.message}`);
-        });
-
-        const matchDataDocRef = doc(db, MATCHES_TGR_COLLECTION, activeMatchId);
-        unsubMatchData = onSnapshot(matchDataDocRef, (docSnap) => {
-            if(!mounted) return;
-            if (docSnap.exists()) {
-                const data = docSnap.data();
-                if (data?.timerStatus) {
-                    setTgrTimerStatus(data.timerStatus as TGRTimerStatus);
-                } else {
-                    // Timer status not yet set by Dewan, initialize with round-specific duration
-                    setTgrTimerStatus({
-                        timerSeconds: defaultDurationForCurrentRound,
-                        isTimerRunning: false,
-                        matchStatus: 'Pending',
-                        performanceDuration: defaultDurationForCurrentRound,
-                    });
-                }
-            } else {
-                 // Match document not yet created by Dewan, initialize locally
-                 setTgrTimerStatus({
-                    timerSeconds: defaultDurationForCurrentRound,
-                    isTimerRunning: false,
-                    matchStatus: 'Pending',
-                    performanceDuration: defaultDurationForCurrentRound,
-                });
-            }
-        }, (err) => {
-            if (mounted) setError(`Gagal sinkronisasi status timer TGR: ${err.message}`);
-        });
-
       } catch (err) {
-        if (mounted) setError(`Error utama saat memuat data: ${err instanceof Error ? err.message : String(err)}`);
-      } finally {
-        // setIsLoading(false) will be handled by the useEffect watching matchDetailsLoaded
+        if (mounted) setError(`Error memuat detail jadwal TGR: ${err instanceof Error ? err.message : String(err)}`);
+        setScheduleDetails(null);
+        setMatchDetailsLoaded(false);
       }
     };
 
-    loadData();
+    loadSchedule();
+    return () => { mounted = false; };
+  }, [activeMatchId, juriDisplayName]);
 
-    return () => {
-      mounted = false;
-      if (unsubSchedule) unsubSchedule(); // This was getDoc, so no unsub needed if changed
-      if (unsubJuriScore) unsubJuriScore();
-      if (unsubMatchData) unsubMatchData();
-    };
-  }, [activeMatchId, juriId, calculateScore, juriDisplayName]);
-
+  // Effect to load JuriScore when activeMatchId or juriId changes
   useEffect(() => {
-     if (isLoading && (matchDetailsLoaded || activeMatchId === null) ) { // Ensure loading stops if activeMatchId becomes null
+    if (!activeMatchId || !juriId) {
+      setJuriScore(initialJuriScore); // Reset if no active match or juriId
+      return;
+    }
+    let mounted = true;
+    const juriScoreDocRef = doc(db, MATCHES_TGR_COLLECTION, activeMatchId, JURI_SCORES_TGR_SUBCOLLECTION, juriId);
+    const unsubJuriScore = onSnapshot(juriScoreDocRef, (docSnap) => {
+      if (!mounted) return;
+      if (docSnap.exists()) {
+        const data = docSnap.data() as Partial<TGRJuriScore>;
+        const baseScore = data.baseScore ?? initialJuriScore.baseScore;
+        const gsCount = data.gerakanSalahCount ?? initialJuriScore.gerakanSalahCount;
+        const staminaBonus = data.staminaKemantapanBonus ?? initialJuriScore.staminaKemantapanBonus;
+        const juriIsReadyFirestore = data.isReady ?? false;
+
+        setJuriScore({
+          baseScore: baseScore,
+          gerakanSalahCount: gsCount,
+          staminaKemantapanBonus: staminaBonus,
+          calculatedScore: calculateScore(gsCount, staminaBonus),
+          isReady: juriIsReadyFirestore,
+          lastUpdated: data.lastUpdated
+        });
+        setIsJuriReady(juriIsReadyFirestore);
+      } else {
+        const newCalculatedScore = calculateScore(initialJuriScore.gerakanSalahCount, initialJuriScore.staminaKemantapanBonus);
+        setJuriScore({...initialJuriScore, calculatedScore: newCalculatedScore });
+        setIsJuriReady(false);
+      }
+    }, (err) => {
+      if (mounted) setError(`Gagal memuat skor juri: ${err.message}`);
+    });
+    return () => { mounted = false; unsubJuriScore(); };
+  }, [activeMatchId, juriId, calculateScore]);
+
+
+  // Effect to handle timer status based on scheduleDetails and Firestore timerStatus
+  useEffect(() => {
+    if (!activeMatchId || !matchDetailsLoaded || !scheduleDetails) {
+      // If essential data isn't ready, or no active match, set a default "empty" timer state
+      if (!activeMatchId) {
+        setTgrTimerStatus(defaultInitialTgrTimerStatus);
+      }
+      // For other cases (e.g. !matchDetailsLoaded), timer will remain defaultInitialTgrTimerStatus until details load
+      return;
+    }
+
+    let mounted = true;
+    const matchDataDocRef = doc(db, MATCHES_TGR_COLLECTION, activeMatchId);
+    const roundSpecificDuration = getPerformanceDurationForRound(scheduleDetails.round);
+
+    const unsubMatchData = onSnapshot(matchDataDocRef, (docSnap) => {
+      if (!mounted) return;
+      if (docSnap.exists()) {
+        const data = docSnap.data();
+        if (data?.timerStatus) {
+          const fsTimerStatus = data.timerStatus as TGRTimerStatus;
+          // If Dewan set a specific performanceDuration, respect it, otherwise use round-specific.
+          const performanceDurationToUse = fsTimerStatus.performanceDuration > 0 ? fsTimerStatus.performanceDuration : roundSpecificDuration;
+          
+          // If timer is pending and its current duration doesn't match the expected for the round, adjust.
+          if (fsTimerStatus.matchStatus === 'Pending' && fsTimerStatus.performanceDuration !== roundSpecificDuration) {
+             setTgrTimerStatus({
+                ...fsTimerStatus,
+                timerSeconds: roundSpecificDuration,
+                performanceDuration: roundSpecificDuration,
+             });
+          } else if (fsTimerStatus.performanceDuration !== performanceDurationToUse && fsTimerStatus.matchStatus === 'Pending') {
+             // A more general case if performanceDuration from Firestore seems off for a pending match
+             setTgrTimerStatus({
+                ...fsTimerStatus,
+                timerSeconds: performanceDurationToUse,
+                performanceDuration: performanceDurationToUse,
+             });
+          }
+          else {
+            setTgrTimerStatus(fsTimerStatus);
+          }
+
+        } else {
+          // Firestore doc exists, but no timerStatus field. Initialize.
+          setTgrTimerStatus({
+            timerSeconds: roundSpecificDuration,
+            isTimerRunning: false,
+            matchStatus: 'Pending',
+            performanceDuration: roundSpecificDuration,
+          });
+        }
+      } else {
+        // Match document doesn't exist in Firestore. Initialize.
+        setTgrTimerStatus({
+          timerSeconds: roundSpecificDuration,
+          isTimerRunning: false,
+          matchStatus: 'Pending',
+          performanceDuration: roundSpecificDuration,
+        });
+      }
+    }, (err) => {
+      if (mounted) {
+        console.error(`[${juriDisplayName}] Error listening to TGR match data:`, err);
+        setError(`Gagal sinkronisasi status timer TGR: ${err.message}`);
+        // Fallback to schedule-derived duration if Firestore listener fails
+        setTgrTimerStatus({
+          timerSeconds: roundSpecificDuration,
+          isTimerRunning: false,
+          matchStatus: 'Pending', 
+          performanceDuration: roundSpecificDuration,
+        });
+      }
+    });
+
+    return () => { mounted = false; unsubMatchData(); };
+  }, [activeMatchId, matchDetailsLoaded, scheduleDetails, juriDisplayName]);
+
+  // Final isLoading state determination
+  useEffect(() => {
+     if (isLoading && (matchDetailsLoaded || activeMatchId === null) ) {
        setIsLoading(false);
      }
   }, [isLoading, matchDetailsLoaded, activeMatchId]);
@@ -314,7 +359,6 @@ export default function JuriTGRPage({ params: paramsPromise }: { params: Promise
     }
     return <div className="text-xl md:text-2xl font-semibold text-gray-700 dark:text-gray-300">{scheduleDetails.pesilatMerahName || "Nama Pesilat/Tim"}</div>;
   };
-
 
   return (
     <div className="flex flex-col min-h-screen bg-gray-100 dark:bg-gray-900 text-gray-800 dark:text-gray-900 font-sans">
@@ -428,7 +472,6 @@ export default function JuriTGRPage({ params: paramsPromise }: { params: Promise
                 <ArrowLeft className="inline mr-1 h-3 w-3" /> Kembali ke Pemilihan Peran TGR
            </Link>
         </div>
-
       </main>
     </div>
   );
