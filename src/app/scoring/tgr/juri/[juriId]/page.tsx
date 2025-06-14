@@ -137,9 +137,9 @@ export default function JuriTGRPage({ params: paramsPromise }: { params: Promise
           if (!mounted) return;
           if (docSnap.exists()) {
             const data = docSnap.data() as Partial<TGRJuriScore>;
+            const baseScore = data.baseScore ?? initialJuriScore.baseScore;
             const gsCount = data.gerakanSalahCount ?? initialJuriScore.gerakanSalahCount;
             const staminaBonus = data.staminaKemantapanBonus ?? initialJuriScore.staminaKemantapanBonus;
-            const baseScore = data.baseScore ?? initialJuriScore.baseScore;
             const juriIsReadyFirestore = data.isReady ?? false;
             
             setJuriScore({
@@ -252,7 +252,7 @@ export default function JuriTGRPage({ params: paramsPromise }: { params: Promise
   };
   
   const formatDisplayDate = (dateString: string | undefined) => {
-    if (!dateString) return 'Tanggal tidak tersedia';
+    if (!dateString) return <Skeleton className="h-4 w-28 inline-block" />;
     try {
       const date = new Date(dateString + 'T00:00:00'); 
       return new Intl.DateTimeFormat('id-ID', { day: 'numeric', month: 'long', year: 'numeric' }).format(date);
@@ -279,11 +279,11 @@ export default function JuriTGRPage({ params: paramsPromise }: { params: Promise
   };
   
   const getCategorySpecificName = () => {
-    if (!scheduleDetails) return <Skeleton className="h-5 w-48 inline-block" />;
+    if (!scheduleDetails) return <Skeleton className="h-6 w-48 inline-block" />;
     if (scheduleDetails.category === 'Jurus Tunggal Bebas') {
-      return <div className="text-lg md:text-xl font-semibold text-gray-700 dark:text-gray-300">Tunggal Jurus Bebas</div>;
+      return <div className="text-xl md:text-2xl font-semibold text-gray-700 dark:text-gray-300">Tunggal Jurus Bebas</div>;
     }
-    return <div className="text-lg md:text-xl font-semibold text-gray-700 dark:text-gray-300">{scheduleDetails.pesilatMerahName || "Nama Pesilat/Tim"}</div>;
+    return <div className="text-xl md:text-2xl font-semibold text-gray-700 dark:text-gray-300">{scheduleDetails.pesilatMerahName || "Nama Pesilat/Tim"}</div>;
   };
   
 
@@ -300,7 +300,8 @@ export default function JuriTGRPage({ params: paramsPromise }: { params: Promise
           </div>
           {getCategorySpecificName()}
           <div className="text-xs md:text-sm text-gray-500 dark:text-gray-600">
-            {scheduleDetails?.place || <Skeleton className="h-4 w-20 inline-block" />}, {formatDisplayDate(scheduleDetails?.date) || <Skeleton className="h-4 w-28 inline-block" />} | Partai No: {scheduleDetails?.lotNumber || <Skeleton className="h-4 w-8 inline-block" />}
+            {scheduleDetails?.place || <Skeleton className="h-4 w-20 inline-block" />}
+            , {formatDisplayDate(scheduleDetails?.date)} | Partai No: {scheduleDetails?.lotNumber || <Skeleton className="h-4 w-8 inline-block" />}
           </div>
         </div>
 
@@ -314,9 +315,9 @@ export default function JuriTGRPage({ params: paramsPromise }: { params: Promise
               className="flex-grow h-40 md:h-64 text-5xl md:text-7xl bg-blue-600 hover:bg-blue-700 text-white shadow-lg rounded-lg flex items-center justify-center"
               onClick={handleGerakanSalah}
               disabled={isInputDisabled}
-              aria-label="Kesalahan Gerakan"
+              aria-label="Kesalahan Gerakan (-0.01)"
             >
-              <XIcon className="w-20 h-20 md:w-28 md:w-28" strokeWidth={3}/>
+              <XIcon className="w-20 h-20 md:w-28 md:h-28" strokeWidth={3}/>
             </Button>
 
             {/* SIAP Button */}
