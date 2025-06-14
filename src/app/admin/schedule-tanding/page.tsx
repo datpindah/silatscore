@@ -368,17 +368,15 @@ export default function ScheduleTandingPage() {
             schedules={schedules}
             caption="Jadwal Pertandingan Tanding Terdaftar"
             headers={tandingTableHeaders}
-            renderRow={(s) => (
-              <>
-                <TableCell>{s.matchNumber}</TableCell>
-                <TableCell>{new Date(s.date + "T00:00:00").toLocaleDateString('id-ID', { year: 'numeric', month: 'long', day: 'numeric' })}</TableCell>
-                <TableCell>{s.place}</TableCell>
-                <TableCell>{s.pesilatMerahName} ({s.pesilatMerahContingent})</TableCell>
-                <TableCell>{s.pesilatBiruName} ({s.pesilatBiruContingent})</TableCell>
-                <TableCell>{s.round}</TableCell>
-                <TableCell>{s.class}</TableCell>
-              </>
-            )}
+            renderRow={(s) => [
+                <TableCell key={`matchNumber-${s.id}`}>{s.matchNumber}</TableCell>,
+                <TableCell key={`date-${s.id}`}>{new Date(s.date + "T00:00:00").toLocaleDateString('id-ID', { year: 'numeric', month: 'long', day: 'numeric' })}</TableCell>,
+                <TableCell key={`place-${s.id}`}>{s.place}</TableCell>,
+                <TableCell key={`merah-${s.id}`}>{s.pesilatMerahName} ({s.pesilatMerahContingent})</TableCell>,
+                <TableCell key={`biru-${s.id}`}>{s.pesilatBiruName} ({s.pesilatBiruContingent})</TableCell>,
+                <TableCell key={`round-${s.id}`}>{s.round}</TableCell>,
+                <TableCell key={`class-${s.id}`}>{s.class}</TableCell>,
+            ]}
             onEdit={handleEdit}
             onDelete={handleDelete}
             renderCustomActions={(schedule) => (

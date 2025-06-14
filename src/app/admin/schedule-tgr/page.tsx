@@ -276,21 +276,19 @@ export default function ScheduleTGRPage() {
             schedules={schedules}
             caption="Jadwal Pertandingan TGR Terdaftar"
             headers={tableHeaders}
-            renderRow={(s) => (
-              <>
-                <TableCell>{s.lotNumber}</TableCell>
-                <TableCell>{new Date(s.date + "T00:00:00").toLocaleDateString('id-ID', { year: 'numeric', month: 'long', day: 'numeric' })}</TableCell>
-                <TableCell>{s.place}</TableCell>
-                <TableCell>{s.round}</TableCell> {/* Added Babak cell */}
-                <TableCell className="flex items-center">
+            renderRow={(s) => [
+                <TableCell key={`lotNumber-${s.id}`}>{s.lotNumber}</TableCell>,
+                <TableCell key={`date-${s.id}`}>{new Date(s.date + "T00:00:00").toLocaleDateString('id-ID', { year: 'numeric', month: 'long', day: 'numeric' })}</TableCell>,
+                <TableCell key={`place-${s.id}`}>{s.place}</TableCell>,
+                <TableCell key={`round-${s.id}`}>{s.round}</TableCell>,
+                <TableCell key={`category-${s.id}`} className="flex items-center">
                   {categoryIcons[s.category]} {s.category}
-                </TableCell>
-                <TableCell>{s.pesilatMerahName || 'N/A'}</TableCell>
-                <TableCell>{s.pesilatMerahContingent || 'N/A'}</TableCell>
-                <TableCell>{s.pesilatBiruName || 'N/A'}</TableCell>
-                <TableCell>{s.pesilatBiruContingent || 'N/A'}</TableCell>
-              </>
-            )}
+                </TableCell>,
+                <TableCell key={`merahName-${s.id}`}>{s.pesilatMerahName || 'N/A'}</TableCell>,
+                <TableCell key={`merahCont-${s.id}`}>{s.pesilatMerahContingent || 'N/A'}</TableCell>,
+                <TableCell key={`biruName-${s.id}`}>{s.pesilatBiruName || 'N/A'}</TableCell>,
+                <TableCell key={`biruCont-${s.id}`}>{s.pesilatBiruContingent || 'N/A'}</TableCell>,
+            ]}
             onEdit={handleEdit}
             onDelete={handleDelete}
             renderCustomActions={(schedule) => (
