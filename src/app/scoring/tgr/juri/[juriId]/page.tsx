@@ -252,11 +252,11 @@ export default function JuriTGRPage({ params: paramsPromise }: { params: Promise
   const formatDisplayDate = (dateString: string | undefined) => {
     if (!dateString) return <Skeleton className="h-4 w-28 inline-block" />;
     try {
-      const date = new Date(dateString + 'T00:00:00');
+      const date = new Date(dateString + 'T00:00:00'); // Assume YYYY-MM-DD is local, ensure it's parsed as such
       return new Intl.DateTimeFormat('id-ID', { day: 'numeric', month: 'long', year: 'numeric' }).format(date);
     } catch (e) {
       console.warn("Error formatting date in TGR Juri:", e, "Original date string:", dateString);
-      return dateString;
+      return dateString; // Fallback to original string if formatting fails
     }
   };
 
@@ -304,7 +304,7 @@ export default function JuriTGRPage({ params: paramsPromise }: { params: Promise
         </div>
 
         {/* Main Interaction Area */}
-         <div className="flex flex-col md:flex-row items-stretch gap-4 md:gap-6 mb-4 md:mb-6">
+         <div className="flex flex-col md:flex-row items-stretch gap-2 md:gap-4 mb-4 md:mb-6">
           <Button
             variant="default"
             className="w-full md:w-auto h-40 md:h-64 text-5xl md:text-7xl bg-blue-600 hover:bg-blue-700 text-white shadow-lg rounded-lg flex items-center justify-center p-2 md:flex-[2_2_0%]"
@@ -312,7 +312,7 @@ export default function JuriTGRPage({ params: paramsPromise }: { params: Promise
             disabled={isInputDisabled}
             aria-label="Kesalahan Gerakan (-0.01)"
           >
-            <XIcon className="w-28 h-28 md:w-44 md:h-44" strokeWidth={3} />
+            <XIcon className="w-36 h-36 md:w-56 md:h-56" strokeWidth={3} />
           </Button>
           
           <div className="w-full md:w-auto flex flex-col items-center justify-center text-center p-2 md:p-4 rounded-lg bg-gray-200 dark:bg-gray-800/50 md:h-auto md:flex-[1_1_0%] my-auto">
@@ -324,7 +324,7 @@ export default function JuriTGRPage({ params: paramsPromise }: { params: Promise
           <Button
             id="tombol-siap-juri-tgr"
             className={cn(
-              "w-full md:w-auto h-40 md:h-64 text-lg md:text-2xl font-semibold rounded-lg shadow-lg flex flex-col items-center justify-center p-2 md:flex-[2_2_0%]",
+              "w-full md:w-auto h-40 md:h-64 text-lg md:text-2xl font-semibold rounded-lg shadow-lg flex flex-col items-center justify-center p-2 sm:p-4 md:flex-[2_2_0%]",
               isJuriReady ? "bg-green-600 hover:bg-green-700 text-white" : "bg-yellow-500 hover:bg-yellow-600 text-black",
               buttonSiapDisabled && !isJuriReady ? "opacity-50 cursor-not-allowed" : "",
               isJuriReady ? "opacity-75 cursor-default" : ""
@@ -341,7 +341,7 @@ export default function JuriTGRPage({ params: paramsPromise }: { params: Promise
         <div className="mb-4 md:mb-6 space-y-2">
             <div className="flex items-center justify-between bg-gray-200 dark:bg-gray-800 p-3 md:p-4 rounded-md shadow">
                 <p className="text-sm md:text-base font-semibold text-gray-700 dark:text-gray-300">TOTAL AKURASI SKOR</p>
-                <div className="bg-gray-300 dark:bg-gray-700 h-6 w-16 md:h-8 md:w-20 rounded-sm"></div>
+                <div className="bg-gray-300 dark:bg-gray-700 h-6 w-16 md:h-8 md:w-20 rounded-sm"></div> {/* Placeholder visual */}
             </div>
 
             <div className="text-center my-1">
@@ -401,4 +401,3 @@ export default function JuriTGRPage({ params: paramsPromise }: { params: Promise
     </div>
   );
 }
-
