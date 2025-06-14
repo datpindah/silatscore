@@ -80,6 +80,7 @@ export interface ScheduleTGR {
   category: TGRCategoryType;
   date: string; // YYYY-MM-DD
   place: string;
+  round: string; // Babak (e.g., Penyisihan, Final)
   pesilatMerahName: string;
   pesilatMerahContingent: string;
   pesilatBiruName: string; 

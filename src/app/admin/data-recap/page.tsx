@@ -58,7 +58,8 @@ export default function DataRecapPage() {
 
     const headers = [
       "Nomor Undian",
-      "Pool/Grup",
+      "Pool/Grup", // This can also be used for Babak if preferred, or we add a specific "Babak" column.
+      "Babak Pertandingan", // New column for Babak
       "Kategori (Tunggal/Ganda/Regu)",
       "Nama Peserta (Pisahkan dengan koma)",
       "Kontingen"
@@ -184,6 +185,7 @@ export default function DataRecapPage() {
                 <TableRow>
                   <TableHead>No. Undian</TableHead>
                   <TableHead>Pool/Grup</TableHead>
+                  <TableHead>Babak</TableHead> {/* Added Babak Header */}
                   <TableHead>Kategori</TableHead>
                   <TableHead>Nama Peserta/Tim</TableHead>
                   <TableHead>Kontingen</TableHead>
@@ -191,8 +193,8 @@ export default function DataRecapPage() {
               </TableHeader>
               <TableBody>
                 <TableRow>
-                  <TableCell colSpan={5} className="text-center text-muted-foreground py-4">
-                    Template akan berisi header: Nomor Undian, Pool/Grup, Kategori, Nama Peserta, Kontingen.
+                  <TableCell colSpan={6} className="text-center text-muted-foreground py-4"> {/* Colspan updated */}
+                    Template akan berisi header: Nomor Undian, Pool/Grup, Babak Pertandingan, Kategori, Nama Peserta, Kontingen.
                   </TableCell>
                 </TableRow>
               </TableBody>

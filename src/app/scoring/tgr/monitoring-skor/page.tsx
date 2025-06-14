@@ -217,10 +217,11 @@ export default function MonitoringSkorTGRPage() {
 
       {/* Header Bar */}
       <div className="bg-[var(--monitor-header-section-bg)] p-3 md:p-4 text-center text-sm md:text-base font-semibold text-[var(--monitor-text)]">
-        <div className="grid grid-cols-3 gap-1 items-center">
+        <div className="grid grid-cols-4 gap-1 items-center"> {/* Updated to 4 columns */}
           <div>{mainParticipantName}</div>
           <div>Partai/Pool: {scheduleDetails?.lotNumber || <Skeleton className="h-5 w-16 inline-block bg-[var(--monitor-skeleton-bg)]" />}</div>
           <div>{scheduleDetails?.category || <Skeleton className="h-5 w-20 inline-block bg-[var(--monitor-skeleton-bg)]" />}</div>
+          <div>Babak: {scheduleDetails?.round || <Skeleton className="h-5 w-20 inline-block bg-[var(--monitor-skeleton-bg)]" />}</div> {/* Added Babak */}
         </div>
       </div>
 

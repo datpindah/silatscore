@@ -25,6 +25,7 @@ const initialFormState: Omit<ScheduleTGR, 'id'> = {
   category: 'Tunggal',
   date: new Date().toISOString().split('T')[0],
   place: '',
+  round: '', // Added round
   pesilatMerahName: '',
   pesilatMerahContingent: '',
   pesilatBiruName: '',
@@ -88,6 +89,7 @@ export default function ScheduleTGRPage() {
           category: data.category as TGRCategoryType,
           date: processedDate,
           place: data.place as string,
+          round: data.round as string, // Added round
           pesilatMerahName: data.pesilatMerahName as string,
           pesilatMerahContingent: data.pesilatMerahContingent as string,
           pesilatBiruName: (data.pesilatBiruName as string | undefined) || '',
@@ -123,8 +125,8 @@ export default function ScheduleTGRPage() {
         alert("Nama Pesilat Merah dan Kontingen Merah wajib diisi.");
         return;
     }
-    if (!formData.date || !formData.place) {
-        alert("Tanggal dan Gelanggang wajib diisi.");
+    if (!formData.date || !formData.place || !formData.round) { // Added round check
+        alert("Tanggal, Gelanggang, dan Babak wajib diisi.");
         return;
     }
 
@@ -191,7 +193,7 @@ export default function ScheduleTGRPage() {
     }
   };
 
-  const tableHeaders = ["No. Partai/Undian", "Tanggal", "Gelanggang", "Kategori", "Pesilat Merah", "Kontingen Merah", "Pesilat Biru", "Kontingen Biru"];
+  const tableHeaders = ["No. Partai/Undian", "Tanggal", "Gelanggang", "Babak", "Kategori", "Pesilat Merah", "Kontingen Merah", "Pesilat Biru", "Kontingen Biru"]; // Added Babak
 
   const categoryIcons: Record<TGRCategoryType, React.ReactNode> = {
     Tunggal: <User className="h-4 w-4 inline mr-1" />,
@@ -237,6 +239,7 @@ export default function ScheduleTGRPage() {
             <FormField id="lotNumber" label="No. Partai/Undian" type="number" value={formData.lotNumber} onChange={handleChange} required />
             <FormField id="date" label="Tanggal" type="date" value={formData.date} onChange={handleChange} required />
             <FormField id="place" label="Gelanggang" value={formData.place} onChange={handleChange} required />
+            <FormField id="round" label="Babak" value={formData.round} onChange={handleChange} placeholder="cth: Penyisihan, Final" required /> {/* Added Babak field */}
             <FormField
               id="category"
               label="Kategori"
@@ -278,6 +281,7 @@ export default function ScheduleTGRPage() {
                 <TableCell>{s.lotNumber}</TableCell>
                 <TableCell>{new Date(s.date + "T00:00:00").toLocaleDateString('id-ID', { year: 'numeric', month: 'long', day: 'numeric' })}</TableCell>
                 <TableCell>{s.place}</TableCell>
+                <TableCell>{s.round}</TableCell> {/* Added Babak cell */}
                 <TableCell className="flex items-center">
                   {categoryIcons[s.category]} {s.category}
                 </TableCell>
