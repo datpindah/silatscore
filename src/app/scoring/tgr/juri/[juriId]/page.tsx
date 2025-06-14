@@ -1,12 +1,10 @@
 
 "use client";
 
-import { useState, useEffect, useCallback, use } from 'react'; 
+import { useState, useEffect, useCallback } from 'react'; // Removed 'use'
 import Link from 'next/link';
-// import { Header } from '@/components/layout/Header'; // Removed, new design is full-screen specific
 import { Button } from '@/components/ui/button';
-// import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'; // Old UI, removing
-import { ArrowLeft, Loader2, Info, XIcon, AlertCircle, CheckCircle2 } from 'lucide-react'; // Using XIcon for the large button, added CheckCircle2
+import { ArrowLeft, Loader2, Info, XIcon, AlertCircle, CheckCircle2 } from 'lucide-react';
 import type { ScheduleTGR, TGRJuriScore, TGRTimerStatus } from '@/lib/types';
 import { db } from '@/lib/firebase';
 import { doc, onSnapshot, getDoc, setDoc, serverTimestamp, Timestamp } from 'firebase/firestore';
@@ -38,9 +36,8 @@ const initialTgrTimerStatus: TGRTimerStatus = {
   performanceDuration: 180,
 };
 
-export default function JuriTGRPage({ params: paramsPromise }: { params: Promise<{ juriId: string }> }) { 
-  const resolvedParams = use(paramsPromise); 
-  const { juriId } = resolvedParams; 
+export default function JuriTGRPage({ params }: { params: { juriId: string } }) { 
+  const { juriId } = params; // Directly access juriId from params object
   const juriDisplayName = `Juri ${juriId?.split('-')[1] || 'TGR Tidak Dikenal'}`;
 
   const [configMatchId, setConfigMatchId] = useState<string | null | undefined>(undefined);
