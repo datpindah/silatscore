@@ -22,13 +22,20 @@ const initialFormState: Omit<ScheduleTanding, 'id'> = {
   pesilatMerahContingent: '',
   pesilatBiruName: '',
   pesilatBiruContingent: '',
-  round: '',
+  round: 'Penyisihan', // Default to Penyisihan
   class: '',
   matchNumber: 1,
 };
 
 const ACTIVE_TANDING_SCHEDULE_CONFIG_PATH = 'app_settings/active_match_tanding';
 const SCHEDULE_TANDING_COLLECTION = 'schedules_tanding';
+
+const roundOptions = [
+  { value: 'Penyisihan', label: 'Penyisihan' },
+  { value: 'Perempat Final', label: 'Perempat Final' },
+  { value: 'Semi Final', label: 'Semi Final' },
+  { value: 'Final', label: 'Final' },
+];
 
 export default function ScheduleTandingPage() {
   const [schedules, setSchedules] = useState<ScheduleTanding[]>([]);
@@ -108,6 +115,10 @@ export default function ScheduleTandingPage() {
       ...prev,
       [name]: type === 'number' ? parseInt(value) || 0 : value,
     }));
+  };
+
+  const handleSelectChange = (fieldName: string) => (value: string) => {
+    setFormData(prev => ({ ...prev, [fieldName]: value }));
   };
 
   const handleSubmit = async (e: FormEvent<HTMLFormElement>) => {
@@ -343,7 +354,16 @@ export default function ScheduleTandingPage() {
             <FormField id="pesilatBiruName" label="Nama Pesilat Biru" value={formData.pesilatBiruName} onChange={handleChange} required />
             <FormField id="pesilatBiruContingent" label="Kontingen Pesilat Biru" value={formData.pesilatBiruContingent} onChange={handleChange} required />
 
-            <FormField id="round" label="Babak" value={formData.round} onChange={handleChange} placeholder="cth: Penyisihan, Final" required />
+            <FormField
+              id="round"
+              label="Babak"
+              as="select"
+              value={formData.round}
+              onSelectChange={handleSelectChange('round')}
+              options={roundOptions}
+              placeholder="Pilih Babak"
+              required
+            />
             <FormField id="class" label="Kelas Tanding" value={formData.class} onChange={handleChange} placeholder="cth: Kelas A Putra Dewasa" required />
           </CardContent>
           <CardFooter>

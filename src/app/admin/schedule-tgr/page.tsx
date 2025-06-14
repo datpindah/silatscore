@@ -25,12 +25,19 @@ const initialFormState: Omit<ScheduleTGR, 'id'> = {
   category: 'Tunggal',
   date: new Date().toISOString().split('T')[0],
   place: '',
-  round: '', // Added round
+  round: 'Penyisihan', // Default to Penyisihan
   pesilatMerahName: '',
   pesilatMerahContingent: '',
   pesilatBiruName: '',
   pesilatBiruContingent: '',
 };
+
+const roundOptions = [
+  { value: 'Penyisihan', label: 'Penyisihan' },
+  { value: 'Perempat Final', label: 'Perempat Final' },
+  { value: 'Semi Final', label: 'Semi Final' },
+  { value: 'Final', label: 'Final' },
+];
 
 export default function ScheduleTGRPage() {
   const [schedules, setSchedules] = useState<ScheduleTGR[]>([]);
@@ -115,7 +122,7 @@ export default function ScheduleTGRPage() {
   };
 
   const handleSelectChange = (name: string) => (value: string) => {
-     setFormData(prev => ({ ...prev, [name]: value as TGRCategoryType }));
+     setFormData(prev => ({ ...prev, [name]: value })); // Simplified for both category and round
   };
 
   const handleSubmit = async (e: FormEvent<HTMLFormElement>) => {
@@ -125,7 +132,7 @@ export default function ScheduleTGRPage() {
         alert("Nama Pesilat Merah dan Kontingen Merah wajib diisi.");
         return;
     }
-    if (!formData.date || !formData.place || !formData.round) { // Added round check
+    if (!formData.date || !formData.place || !formData.round) { 
         alert("Tanggal, Gelanggang, dan Babak wajib diisi.");
         return;
     }
@@ -193,7 +200,7 @@ export default function ScheduleTGRPage() {
     }
   };
 
-  const tableHeaders = ["No. Partai/Undian", "Tanggal", "Gelanggang", "Babak", "Kategori", "Pesilat Merah", "Kontingen Merah", "Pesilat Biru", "Kontingen Biru"]; // Added Babak
+  const tableHeaders = ["No. Partai/Undian", "Tanggal", "Gelanggang", "Babak", "Kategori", "Pesilat Merah", "Kontingen Merah", "Pesilat Biru", "Kontingen Biru"];
 
   const categoryIcons: Record<TGRCategoryType, React.ReactNode> = {
     Tunggal: <User className="h-4 w-4 inline mr-1" />,
@@ -239,7 +246,16 @@ export default function ScheduleTGRPage() {
             <FormField id="lotNumber" label="No. Partai/Undian" type="number" value={formData.lotNumber} onChange={handleChange} required />
             <FormField id="date" label="Tanggal" type="date" value={formData.date} onChange={handleChange} required />
             <FormField id="place" label="Gelanggang" value={formData.place} onChange={handleChange} required />
-            <FormField id="round" label="Babak" value={formData.round} onChange={handleChange} placeholder="cth: Penyisihan, Final" required /> {/* Added Babak field */}
+            <FormField
+              id="round"
+              label="Babak"
+              as="select"
+              value={formData.round}
+              onSelectChange={handleSelectChange('round')}
+              options={roundOptions}
+              placeholder="Pilih Babak"
+              required
+            />
             <FormField
               id="category"
               label="Kategori"
