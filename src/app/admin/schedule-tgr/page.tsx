@@ -62,11 +62,31 @@ export default function ScheduleTGRPage() {
       const schedulesData: ScheduleTGR[] = [];
       querySnapshot.forEach((docSnap) => {
         const data = docSnap.data();
+        
+        let processedDate: string;
+        if (data.date instanceof Timestamp) {
+          processedDate = data.date.toDate().toISOString().split('T')[0];
+        } else if (typeof data.date === 'string') {
+          // Basic validation for YYYY-MM-DD format if it's a string
+          if (/^\d{4}-\d{2}-\d{2}$/.test(data.date)) {
+            processedDate = data.date;
+          } else {
+            console.warn(`[ScheduleTGR] Malformed date string from Firestore: ${data.date}. Defaulting to today.`);
+            processedDate = new Date().toISOString().split('T')[0];
+          }
+        } else if (data.date && typeof data.date.seconds === 'number' && typeof data.date.nanoseconds === 'number') {
+          // Handle plain object {seconds, nanoseconds} representation of a Timestamp
+          processedDate = new Date(data.date.seconds * 1000).toISOString().split('T')[0];
+        } else {
+          console.warn(`[ScheduleTGR] Unexpected date type from Firestore: ${typeof data.date}. Defaulting to today.`);
+          processedDate = new Date().toISOString().split('T')[0];
+        }
+
         schedulesData.push({
           id: docSnap.id,
           lotNumber: data.lotNumber,
           category: data.category as TGRCategoryType,
-          date: data.date instanceof Timestamp ? data.date.toDate().toISOString().split('T')[0] : data.date as string,
+          date: processedDate,
           place: data.place as string,
           pesilatMerahName: data.pesilatMerahName as string,
           pesilatMerahContingent: data.pesilatMerahContingent as string,
@@ -133,13 +153,8 @@ export default function ScheduleTGRPage() {
   const handleEdit = (id: string) => {
     const scheduleToEdit = schedules.find(s => s.id === id);
     if (scheduleToEdit) {
-      const formDate = typeof scheduleToEdit.date === 'string'
-        ? scheduleToEdit.date
-        : (scheduleToEdit.date as any instanceof Timestamp) 
-          ? (scheduleToEdit.date as any as Timestamp).toDate().toISOString().split('T')[0]
-          : new Date().toISOString().split('T')[0]; 
-
-      setFormData({...scheduleToEdit, date: formDate });
+      // scheduleToEdit.date is already guaranteed to be a YYYY-MM-DD string by the fetching logic
+      setFormData({...scheduleToEdit });
       setIsEditing(id);
     }
   };
@@ -295,3 +310,4 @@ export default function ScheduleTGRPage() {
     </>
   );
 }
+
