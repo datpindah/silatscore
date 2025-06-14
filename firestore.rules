@@ -1,71 +1,61 @@
 
 rules_version = '2';
-
 service cloud.firestore {
   match /databases/{database}/documents {
 
-    // App Settings (active match configuration)
-    // In production, only admins should write here.
-    // For development, allow authenticated users.
+    // App Settings (e.g., active match IDs)
+    // Admin typically sets this. For production, you'd check for an admin role.
     match /app_settings/{settingId} {
-      allow read, write: if request.auth != null;
+      allow read, write: if request.auth != null; // Placeholder: replace with admin check for write
     }
 
-    // Schedules (Tanding & TGR)
-    // In production, typically managed by Admins.
-    // For development, allow authenticated users.
+    // Schedules - Created and managed by Admin
+    // For production, write access should be restricted to users with an admin role.
+    // Example: allow write: if request.auth != null && request.auth.token.isAdmin == true;
     match /schedules_tanding/{scheduleId} {
-      allow read, write: if request.auth != null;
+      allow read: if request.auth != null; // Allow authenticated users to read schedules
+      allow write: if request.auth != null; // Placeholder for development: allows any authenticated user to write.
+                                        // For production, use: if request.auth != null && request.auth.token.isAdmin == true;
     }
     match /schedules_tgr/{scheduleId} {
-      allow read, write: if request.auth != null;
+      allow read: if request.auth != null;   // Allow authenticated users to read schedules
+      allow write: if request.auth != null; // Placeholder for development: allows any authenticated user to write.
+                                        // For production, use: if request.auth != null && request.auth.token.isAdmin == true;
     }
 
-    // Live Match Data (Tanding)
+    // Live Match Data for Tanding
     match /matches_tanding/{matchId} {
-      // Allow read/write to the main match document (timer, logs, etc.)
-      allow read, write: if request.auth != null;
-
-      // Juri Scores for Tanding
-      // In production, a Juri should ideally only write to their own document.
+      allow read, write: if request.auth != null; // Dewan controls timer, logs
+      // Juri scores for Tanding
       match /juri_scores/{juriId} {
-        allow read, write: if request.auth != null;
+        // For production, ensure juriId in path matches request.auth.uid or a specific claim
+        allow read, write: if request.auth != null; 
       }
-
-      // Official Actions (Ketua Pertandingan actions)
+      // Official actions by Ketua Pertandingan for Tanding
       match /official_actions/{actionId} {
+        // For production, ensure only Ketua Pertandingan can write
         allow read, write: if request.auth != null;
       }
-
-      // Verifications
+      // Verification requests for Tanding
       match /verifications/{verificationId} {
-        allow read, write: if request.auth != null;
+        // For production, refine who can read/write based on roles (Ketua creates, Juri updates votes)
+        allow read, write: if request.auth != null; 
       }
     }
 
-    // Live Match Data (TGR)
+    // Live Match Data for TGR
     match /matches_tgr/{matchId} {
-      // Allow read/write to the main match document (timer, etc.)
-      allow read, write: if request.auth != null;
-
-      // Juri Scores for TGR
+      allow read, write: if request.auth != null; // Dewan controls timer
+      // Juri scores for TGR
       match /juri_scores_tgr/{juriId} {
-        allow read, write: if request.auth != null;
+        // For production, ensure juriId in path matches request.auth.uid or a specific claim
+        allow read, write: if request.auth != null; 
       }
-
-      // Dewan Penalties for TGR
+      // Dewan penalties for TGR
       match /dewan_penalties_tgr/{penaltyId} {
-        allow read, write: if request.auth != null;
+        // For production, ensure only Dewan can write
+        allow read, write: if request.auth != null; 
       }
     }
-
-    // Fallback: Deny all other paths if not explicitly matched.
-    // If you have other collections, you'll need to add rules for them.
-    // For a fresh project with only the above, this rule is not strictly
-    // necessary as unmatched paths are denied by default.
-    // However, it's a good explicit statement.
-    // match /{document=**} {
-    //   allow read, write: if false;
-    // }
   }
 }
