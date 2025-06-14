@@ -25,17 +25,18 @@ const defaultPartaiOptions = [
   { value: NO_ACTIVE_SCHEDULE_VALUE, label: 'Tidak ada jadwal Tanding aktif' },
 ];
 
+// Halaman tujuan spesifik untuk Tanding
 const halamanOptions = [
-  { value: '/scoring/tanding/dewan-1', label: 'Dewan Juri 1 (Timer & Kontrol)' },
-  { value: '/scoring/tanding/dewan-2', label: 'Dewan Juri 2 (Display Skor Detail)' },
-  { value: '/scoring/tanding/juri/juri-1', label: 'Juri 1' },
-  { value: '/scoring/tanding/juri/juri-2', label: 'Juri 2' },
-  { value: '/scoring/tanding/juri/juri-3', label: 'Juri 3' },
-  { value: '/scoring/tanding/ketua-pertandingan', label: 'Ketua Pertandingan' },
-  { value: '/scoring/tanding/monitoring-skor', label: 'Monitoring Skor (Display Umum)' },
+  { value: '/scoring/tanding/dewan-1', label: 'Dewan Juri 1 (Timer & Kontrol Tanding)' },
+  { value: '/scoring/tanding/dewan-2', label: 'Dewan Juri 2 (Display Skor Detail Tanding)' },
+  { value: '/scoring/tanding/juri/juri-1', label: 'Juri 1 (Tanding)' },
+  { value: '/scoring/tanding/juri/juri-2', label: 'Juri 2 (Tanding)' },
+  { value: '/scoring/tanding/juri/juri-3', label: 'Juri 3 (Tanding)' },
+  { value: '/scoring/tanding/ketua-pertandingan', label: 'Ketua Pertandingan (Tanding)' },
+  { value: '/scoring/tanding/monitoring-skor', label: 'Monitoring Skor (Display Umum Tanding)' },
 ];
 
-const CORRECT_PASSWORD = "123456"; // Password diubah di sini
+const CORRECT_PASSWORD = "123456";
 
 export default function LoginPage() {
   const router = useRouter();
@@ -62,7 +63,7 @@ export default function LoginPage() {
           const scheduleDoc = await getDoc(scheduleDocRef);
 
           if (scheduleDoc.exists()) {
-            const activeScheduleData = scheduleDoc.data() as ScheduleTanding;
+            const activeScheduleData = scheduleDoc.data() as ScheduleTanding; // Spesifik ke Tanding
             const formattedLabel = `Partai ${activeScheduleData.matchNumber}: ${activeScheduleData.pesilatMerahName} vs ${activeScheduleData.pesilatBiruName} (${activeScheduleData.class})`;
             setPartaiOptions([{ value: activeScheduleId, label: formattedLabel }]);
             setSelectedPartai(activeScheduleId);
@@ -117,7 +118,7 @@ export default function LoginPage() {
       return;
     }
     
-    setIsLoading(true); // Pindahkan setIsLoading ke sini setelah validasi awal
+    setIsLoading(true); 
     setTimeout(() => {
       if (password === CORRECT_PASSWORD) {
         router.push(selectedHalaman);
@@ -170,7 +171,7 @@ export default function LoginPage() {
                  {!isLoading && partaiOptions[0]?.value === NO_ACTIVE_SCHEDULE_VALUE && <p className="text-xs text-destructive">Tidak ada jadwal Tanding aktif. Silakan atur di Admin.</p>}
               </div>
               <div className="space-y-2">
-                <Label htmlFor="halaman" className="font-headline">Pilih Halaman Tujuan</Label>
+                <Label htmlFor="halaman" className="font-headline">Pilih Halaman Tujuan (Tanding)</Label>
                 <Select onValueChange={setSelectedHalaman} value={selectedHalaman} disabled={isLoading}>
                   <SelectTrigger id="halaman">
                     <SelectValue placeholder="Pilih Halaman Scoring Tanding" />
@@ -198,7 +199,7 @@ export default function LoginPage() {
             </CardContent>
             <CardFooter>
               <Button type="submit" className="w-full bg-primary hover:bg-primary/90 text-primary-foreground" disabled={isLoading}>
-                {isLoading && password ? ( // Tampilkan loader hanya jika isLoading dan ada password (artinya sedang dalam proses setTimeout)
+                {isLoading && password ? ( 
                   <>
                     <LogIn className="mr-2 h-4 w-4 animate-pulse" />
                     Memproses...
