@@ -1,78 +1,71 @@
+
 rules_version = '2';
 
 service cloud.firestore {
   match /databases/{database}/documents {
 
-    // --- PENGATURAN UMUM APLIKASI ---
-    // Mengizinkan baca dan tulis untuk semua dokumen di app_settings.
-    // Ini digunakan untuk active_match_tanding dan active_match_tgr.
-    // Untuk produksi, batasi 'write' hanya untuk admin.
+    // App Settings (active match configuration)
+    // In production, only admins should write here.
+    // For development, allow authenticated users.
     match /app_settings/{settingId} {
-      allow read: if true;
-      allow write: if true; // PERHATIAN: Sangat permisif, amankan untuk produksi!
-                           // Contoh aman: allow write: if request.auth != null && get(/databases/$(database)/documents/admins/$(request.auth.uid)).exists;
+      allow read, write: if request.auth != null;
     }
 
-    // --- JADWAL PERTANDINGAN (TANDING & TGR) ---
-    // Mengizinkan baca dan tulis untuk semua jadwal.
-    // Untuk produksi, batasi 'write' hanya untuk admin.
+    // Schedules (Tanding & TGR)
+    // In production, typically managed by Admins.
+    // For development, allow authenticated users.
     match /schedules_tanding/{scheduleId} {
-      allow read: if true;
-      allow write: if true; // PERHATIAN: Amankan untuk produksi!
+      allow read, write: if request.auth != null;
     }
-
     match /schedules_tgr/{scheduleId} {
-      allow read: if true;
-      allow write: if true; // PERHATIAN: Amankan untuk produksi!
+      allow read, write: if request.auth != null;
     }
 
-    // --- DATA PERTANDINGAN TANDING ---
-    // Aturan untuk dokumen utama pertandingan Tanding dan sub-koleksinya.
+    // Live Match Data (Tanding)
     match /matches_tanding/{matchId} {
-      // Dokumen utama (timer, log skor terkonfirmasi)
-      allow read: if true;  // Diperlukan oleh semua peran Tanding (Dewan, Ketua, Juri, Monitor)
-      allow write: if true; // PERHATIAN: Dewan/Ketua yang memodifikasi ini. Amankan untuk produksi!
+      // Allow read/write to the main match document (timer, logs, etc.)
+      allow read, write: if request.auth != null;
 
-      // Skor dari masing-masing Juri Tanding
+      // Juri Scores for Tanding
+      // In production, a Juri should ideally only write to their own document.
       match /juri_scores/{juriId} {
-        allow read: if true;
-        allow write: if true; // PERHATIAN: Juri Tanding menulis di sini. Amankan untuk produksi!
-                              // Contoh: allow write: if request.auth != null; (minimal)
+        allow read, write: if request.auth != null;
       }
 
-      // Log tindakan dari Ketua Pertandingan Tanding
+      // Official Actions (Ketua Pertandingan actions)
       match /official_actions/{actionId} {
-        allow read: if true;
-        allow write: if true; // PERHATIAN: Ketua Pertandingan Tanding menulis di sini. Amankan!
+        allow read, write: if request.auth != null;
       }
 
-      // Data verifikasi yang diminta Ketua Pertandingan Tanding
+      // Verifications
       match /verifications/{verificationId} {
-        allow read: if true;
-        allow write: if true; // PERHATIAN: Ketua Pertandingan Tanding membuat/memperbarui. Amankan!
+        allow read, write: if request.auth != null;
       }
     }
 
-    // --- DATA PERTANDINGAN TGR ---
-    // Aturan untuk dokumen utama pertandingan TGR dan sub-koleksinya.
+    // Live Match Data (TGR)
     match /matches_tgr/{matchId} {
-      // Dokumen utama (timer status TGR)
-      allow read: if true;  // Diperlukan oleh Juri TGR untuk status timer, dan Ketua TGR.
-      allow write: if true; // PERHATIAN: Dewan TGR/Ketua TGR yang memodifikasi ini. Amankan untuk produksi!
+      // Allow read/write to the main match document (timer, etc.)
+      allow read, write: if request.auth != null;
 
-      // Skor dari masing-masing Juri TGR
+      // Juri Scores for TGR
       match /juri_scores_tgr/{juriId} {
-        allow read: if true;  // Ketua TGR atau monitor mungkin perlu membaca ini.
-        allow write: if true; // PERHATIAN: Juri TGR menulis di sini. Amankan untuk produksi!
-                              // Contoh: allow write: if request.auth != null; (minimal)
+        allow read, write: if request.auth != null;
       }
 
-      // Sub-koleksi lain untuk TGR, jika ada (misalnya, hukuman dari Dewan TGR)
-      // match /dewan_penalties_tgr/{penaltyId} {
-      //   allow read: if true;
-      //   allow write: if true; // PERHATIAN: Idealnya dibatasi hanya untuk Dewan TGR.
-      // }
+      // Dewan Penalties for TGR
+      match /dewan_penalties_tgr/{penaltyId} {
+        allow read, write: if request.auth != null;
+      }
     }
-    // --- AKHIR ATURAN TGR ---
+
+    // Fallback: Deny all other paths if not explicitly matched.
+    // If you have other collections, you'll need to add rules for them.
+    // For a fresh project with only the above, this rule is not strictly
+    // necessary as unmatched paths are denied by default.
+    // However, it's a good explicit statement.
+    // match /{document=**} {
+    //   allow read, write: if false;
+    // }
   }
 }
