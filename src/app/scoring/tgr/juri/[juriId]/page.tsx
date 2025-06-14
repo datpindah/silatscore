@@ -3,11 +3,10 @@
 
 import { useState, useEffect, useCallback, use } from 'react'; 
 import Link from 'next/link';
-import { Header } from '@/components/layout/Header';
-// import { PageTitle } from '@/components/shared/PageTitle'; // Not used directly, remove if not needed
+// import { Header } from '@/components/layout/Header'; // Removed, new design is full-screen specific
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
-import { ArrowLeft, Loader2, Info, CheckSquare, Square, XIcon, Check, AlertCircle } from 'lucide-react';
+// import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'; // Old UI, removing
+import { ArrowLeft, Loader2, Info, XIcon, AlertCircle } from 'lucide-react'; // Using XIcon for the large button
 import type { ScheduleTGR, TGRJuriScore, TGRTimerStatus } from '@/lib/types';
 import { db } from '@/lib/firebase';
 import { doc, onSnapshot, getDoc, setDoc, serverTimestamp, Timestamp } from 'firebase/firestore';
@@ -23,12 +22,12 @@ const BASE_SCORE_TGR = 9.90;
 const GERAKAN_SALAH_DEDUCTION = 0.01;
 const STAMINA_BONUS_OPTIONS = [0.01, 0.02, 0.03, 0.04, 0.05, 0.06, 0.07, 0.08, 0.09, 0.10];
 
-const initialJuriScore: TGRJuriScore = {
+const initialJuriScore: Omit<TGRJuriScore, 'lastUpdated'> = {
   baseScore: BASE_SCORE_TGR,
   gerakanSalahCount: 0,
   staminaKemantapanBonus: 0.00,
   calculatedScore: BASE_SCORE_TGR,
-  isReady: false,
+  isReady: false, // Kept for potential future use, though not in new UI
 };
 
 const initialTgrTimerStatus: TGRTimerStatus = {
@@ -145,7 +144,7 @@ export default function JuriTGRPage({ params: paramsPromise }: { params: Promise
               staminaKemantapanBonus: staminaBonus,
               calculatedScore: calculateScore(gsCount, staminaBonus),
               isReady: data.isReady ?? initialJuriScore.isReady,
-              lastUpdated: data.lastUpdated // Keep as is, can be null/undefined if not set
+              lastUpdated: data.lastUpdated 
             });
           } else {
             setJuriScore({...initialJuriScore, calculatedScore: calculateScore(initialJuriScore.gerakanSalahCount, initialJuriScore.staminaKemantapanBonus) });
@@ -228,20 +227,12 @@ export default function JuriTGRPage({ params: paramsPromise }: { params: Promise
       return updatedScore;
     });
   };
-
-  const toggleJuriReady = () => {
-    setJuriScore(prev => {
-        const newReadyState = !prev.isReady;
-        const updatedScore = { ...prev, isReady: newReadyState };
-        saveJuriScore({ isReady: newReadyState }); 
-        return updatedScore;
-    });
-  };
   
   const formatDisplayDate = (dateString: string | undefined) => {
     if (!dateString) return 'Tanggal tidak tersedia';
     try {
-      const date = new Date(dateString + 'T00:00:00'); 
+      // Assuming dateString is "YYYY-MM-DD"
+      const date = new Date(dateString + 'T00:00:00'); // Add time to avoid timezone issues with just date
       return new Intl.DateTimeFormat('id-ID', { day: 'numeric', month: 'long', year: 'numeric' }).format(date);
     } catch (e) {
       console.warn("Error formatting date in TGR Juri:", e, "Original date string:", dateString);
@@ -262,92 +253,78 @@ export default function JuriTGRPage({ params: paramsPromise }: { params: Promise
     if (!tgrTimerStatus.isTimerRunning) return "Penampilan belum dimulai atau dijeda oleh Dewan.";
     return "";
   };
+  
+  const getCategorySpecificName = () => {
+    if (!scheduleDetails) return <Skeleton className="h-5 w-48 inline-block" />;
+    if (scheduleDetails.category === 'Jurus Tunggal Bebas') return "Tunggal Jurus Bebas";
+    return scheduleDetails.pesilatMerahName || "Nama Pesilat/Tim";
+  }
 
   return (
-    <div className="flex flex-col min-h-screen bg-gray-100 dark:bg-gray-900">
-      <Header />
+    <div className="flex flex-col min-h-screen bg-gray-100 dark:bg-gray-900 text-gray-800 dark:text-gray-900 font-sans">
       <main className="flex-1 container mx-auto px-2 py-4 md:p-6">
         {/* Header Info */}
-        <Card className="mb-4 shadow-md">
-          <CardContent className="p-3 md:p-4 space-y-1">
-            <div className="flex justify-between items-start">
-              <div>
-                <div className="text-sm font-semibold text-primary">{scheduleDetails?.pesilatMerahContingent || <Skeleton className="h-5 w-24" />}</div>
-                <div className="text-xs text-muted-foreground">
-                  {scheduleDetails?.category || <Skeleton className="h-4 w-20" />}
-                  {scheduleDetails?.category === 'Jurus Tunggal Bebas' && scheduleDetails.pesilatBiruName && ` vs ${scheduleDetails.pesilatBiruName} (${scheduleDetails.pesilatBiruContingent})`}
-                </div>
-              </div>
-              <div className="text-right">
-                <div className="text-sm text-muted-foreground">{scheduleDetails?.place || <Skeleton className="h-5 w-20" />}</div>
-                <div className="text-xs text-muted-foreground">{formatDisplayDate(scheduleDetails?.date) || <Skeleton className="h-4 w-24" />}</div>
-              </div>
-            </div>
-            <div className="text-center">
-                 <div className="text-lg font-semibold">
-                  {scheduleDetails?.pesilatMerahName ? 
-                    (scheduleDetails.category === 'Jurus Tunggal Bebas' ? `Tunggal Jurus Bebas` : scheduleDetails.pesilatMerahName) 
-                    : <Skeleton className="h-6 w-40 inline-block" />}
-                </div>
-                 <div className="text-sm text-muted-foreground">Partai No: {scheduleDetails?.lotNumber || <Skeleton className="h-4 w-10 inline-block" />}</div> 
-            </div>
-          </CardContent>
-        </Card>
+        <div className="mb-4 md:mb-6 text-center">
+          <h1 className="text-2xl md:text-3xl font-bold text-blue-600">
+            Kontingen {scheduleDetails?.pesilatMerahContingent || <Skeleton className="h-8 w-40 inline-block" />}
+          </h1>
+          <p className="text-sm md:text-base text-gray-600 dark:text-gray-700">
+            {/* Using a placeholder for "Babak Penyisihan" as it's not directly in scheduleDetails */}
+            Kategori: {scheduleDetails?.category || <Skeleton className="h-5 w-24 inline-block" />}
+          </p>
+          <p className="text-lg md:text-xl font-semibold text-gray-700 dark:text-gray-800">
+            {getCategorySpecificName()}
+          </p>
+          <div className="text-xs md:text-sm text-gray-500 dark:text-gray-600">
+            {scheduleDetails?.place || <Skeleton className="h-4 w-20 inline-block" />}, {formatDisplayDate(scheduleDetails?.date) || <Skeleton className="h-4 w-28 inline-block" />} | Partai No: {scheduleDetails?.lotNumber || <Skeleton className="h-4 w-8 inline-block" />}
+          </div>
+        </div>
 
         {/* Main Interaction Area */}
-        <div className="grid grid-cols-1 md:grid-cols-[2fr_1fr] gap-4 mb-4">
+        <div className="grid grid-cols-1 md:grid-cols-[2fr_1.5fr] gap-4 md:gap-6 mb-4 md:mb-6 items-stretch">
           {/* Kesalahan Gerakan Button */}
           <Button 
             variant="default" 
-            className="h-40 md:h-64 text-5xl md:text-7xl bg-blue-600 hover:bg-blue-700 text-white shadow-lg"
+            className="h-40 md:h-64 text-5xl md:text-7xl bg-blue-600 hover:bg-blue-700 text-white shadow-lg rounded-lg flex items-center justify-center"
             onClick={handleGerakanSalah}
             disabled={isInputDisabled}
+            aria-label="Kesalahan Gerakan"
           >
-            <XIcon className="w-20 h-20 md:w-28 md:h-28" />
+            <XIcon className="w-20 h-20 md:w-28 md:w-28" strokeWidth={3}/>
           </Button>
 
-          {/* Detail Gerakan & Siap Button */}
-          <div className="flex flex-col gap-3">
-            <Card className="flex-grow shadow">
-              <CardHeader className="p-2 pb-1 md:p-3 md:pb-2">
-                <CardTitle className="text-sm font-medium">Detail Gerakan (Placeholder)</CardTitle>
-              </CardHeader>
-              <CardContent className="p-2 md:p-3 text-xs">
-                <p>Urutan Gerakan: ...</p>
-                <p>Gerakan yang Terlewat: ...</p>
-              </CardContent>
-            </Card>
-            <Button 
-              onClick={toggleJuriReady} 
-              disabled={isLoading || isSaving || !activeMatchId || !matchDetailsLoaded}
-              className={cn(
-                "w-full py-3 text-base font-semibold shadow-md",
-                juriScore.isReady ? "bg-blue-500 hover:bg-blue-600 text-white" : "bg-gray-300 hover:bg-gray-400 text-gray-700 dark:bg-gray-600 dark:hover:bg-gray-500 dark:text-gray-200"
-              )}
-            >
-              {isSaving && juriScore.isReady !== undefined ? <Loader2 className="mr-2 h-5 w-5 animate-spin" /> : (juriScore.isReady ? <Check className="mr-2 h-5 w-5"/> : <Square className="mr-2 h-5 w-5"/> )}
-              {juriScore.isReady ? "Juri Siap" : "Tandai Siap"}
-            </Button>
+          {/* Detail Gerakan & Placeholder Visual */}
+          <div className="flex flex-col bg-gray-200 dark:bg-gray-800 p-3 md:p-4 rounded-lg shadow">
+            <div className="mb-2">
+              <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-300">Detail Gerakan</h3>
+              <p className="text-xs text-gray-600 dark:text-gray-400">Urutan Gerakan</p>
+              <p className="text-xs text-gray-600 dark:text-gray-400">Gerakan yang terlewat</p>
+            </div>
+            <div className="flex-grow flex items-center justify-center bg-gray-500 dark:bg-gray-700 rounded-md min-h-[100px] md:min-h-[150px]">
+              <div className="w-3/5 h-3/5 bg-white dark:bg-gray-200 rounded-full opacity-50"></div>
+            </div>
           </div>
         </div>
         
         {/* Skor Akurasi & Stamina */}
-        <Card className="mb-4 shadow-md">
-          <CardContent className="p-3 md:p-4">
-            <div className="text-center mb-3">
-              <p className="text-sm font-semibold text-muted-foreground">TOTAL AKURASI SKOR</p>
-              <p className="text-5xl md:text-6xl font-bold text-primary">{juriScore.calculatedScore.toFixed(2)}</p>
+        <div className="mb-4 md:mb-6 space-y-2">
+            <div className="flex items-center justify-between bg-gray-200 dark:bg-gray-800 p-3 md:p-4 rounded-md shadow">
+                <p className="text-sm md:text-base font-semibold text-gray-700 dark:text-gray-300">TOTAL AKURASI SKOR</p>
+                <div className="bg-gray-300 dark:bg-gray-700 h-6 w-16 md:h-8 md:w-20 rounded-sm"></div>
             </div>
             
-            <div className="mb-2 text-center">
-              <p className="text-xs font-medium text-muted-foreground">FLOW OF MOVEMENT / STAMINA (RANGE SKOR : 0.01 - 0.10)</p>
+            <div className="text-center my-1">
+              <p className="text-xs font-medium text-gray-600 dark:text-gray-500">FLOW OF MOVEMENT / STAMINA (RANGE SKOR : 0.01 - 0.10)</p>
             </div>
-            <div className="grid grid-cols-5 sm:grid-cols-10 gap-1 md:gap-2">
+            <div className="grid grid-cols-5 sm:grid-cols-10 gap-1 md:gap-2 px-1">
               {STAMINA_BONUS_OPTIONS.map(bonus => (
                 <Button
                   key={bonus}
                   variant={juriScore.staminaKemantapanBonus === bonus ? "default" : "outline"}
-                  className={cn("text-xs md:text-sm h-9 md:h-10", juriScore.staminaKemantapanBonus === bonus && "bg-primary text-primary-foreground")}
+                  className={cn(
+                    "text-xs md:text-sm h-8 md:h-9 rounded-md", 
+                    juriScore.staminaKemantapanBonus === bonus ? "bg-gray-600 dark:bg-gray-400 text-white dark:text-black" : "bg-gray-300 dark:bg-gray-700 text-gray-700 dark:text-gray-300 border-gray-400 dark:border-gray-600 hover:bg-gray-400 dark:hover:bg-gray-600"
+                  )}
                   onClick={() => handleStaminaBonusChange(bonus)}
                   disabled={isInputDisabled}
                 >
@@ -355,26 +332,38 @@ export default function JuriTGRPage({ params: paramsPromise }: { params: Promise
                 </Button>
               ))}
             </div>
-            <p className="text-xs text-center mt-1 text-muted-foreground">Pengurangan: {juriScore.gerakanSalahCount} x {GERAKAN_SALAH_DEDUCTION.toFixed(2)} = {(juriScore.gerakanSalahCount * GERAKAN_SALAH_DEDUCTION).toFixed(2)}. Bonus Stamina: {juriScore.staminaKemantapanBonus.toFixed(2)}</p>
-          </CardContent>
-        </Card>
+             <div className="flex items-center justify-between bg-gray-200 dark:bg-gray-800 p-3 md:p-4 rounded-md shadow mt-2">
+                <p className="text-sm md:text-base font-semibold text-gray-700 dark:text-gray-300">TOTAL SKOR</p>
+                <div className="bg-gray-300 dark:bg-gray-700 h-6 w-24 md:h-8 md:w-32 rounded-sm flex items-center justify-center text-sm md:text-base font-bold text-gray-800 dark:text-gray-200">
+                  {isLoading ? <Skeleton className="h-5 w-16 bg-gray-400 dark:bg-gray-600"/> : juriScore.calculatedScore.toFixed(2)}
+                </div>
+            </div>
+            <p className="text-xs text-center mt-1 text-gray-500 dark:text-gray-600">
+                Pengurangan: {juriScore.gerakanSalahCount} x {GERAKAN_SALAH_DEDUCTION.toFixed(2)} = {(juriScore.gerakanSalahCount * GERAKAN_SALAH_DEDUCTION).toFixed(2)}. Bonus Stamina: {juriScore.staminaKemantapanBonus.toFixed(2)}
+            </p>
+        </div>
         
-        {/* Footer Buttons */}
-        <div className="flex flex-col sm:flex-row justify-between items-center gap-3">
-           <div className="w-full sm:w-auto">
-            {error && <div className="text-sm text-red-500 flex items-center"><AlertCircle className="mr-1 h-4 w-4"/> {error}</div>}
-             {inputDisabledReason() && !error && (
-                <div className="text-sm text-yellow-700 dark:text-yellow-400 flex items-center"><Info className="mr-1 h-4 w-4"/> {inputDisabledReason()}</div>
+        {/* Footer Buttons & Info */}
+        <div className="flex flex-col items-center gap-3 mt-6">
+          <div className="w-full max-w-xs">
+             {inputDisabledReason() && (
+                <div className={cn("text-xs text-center p-1 rounded-md mb-2", error ? "bg-red-100 text-red-700" : "bg-yellow-100 text-yellow-800")}>
+                    {error ? <AlertCircle className="inline mr-1 h-3 w-3"/> : <Info className="inline mr-1 h-3 w-3"/>} 
+                    {inputDisabledReason()}
+                </div>
              )}
           </div>
-          <div className="flex gap-3 w-full sm:w-auto">
-            <Button variant="outline" asChild className="flex-1 sm:flex-none">
-                <Link href="/scoring/tgr"><ArrowLeft className="mr-2 h-4 w-4" /> Kembali</Link>
-            </Button>
-            <Button className="flex-1 sm:flex-none bg-green-600 hover:bg-green-700 text-white" disabled={isInputDisabled || tgrTimerStatus.matchStatus !== 'Finished'}>
+          <div className="flex gap-3 w-full justify-end">
+            <Button 
+                className="bg-green-600 hover:bg-green-700 text-white py-3 px-6 text-sm md:text-base rounded-lg shadow-md" 
+                disabled={isInputDisabled || tgrTimerStatus.matchStatus !== 'Finished'}
+            >
               Jurus Selanjutnya
             </Button>
           </div>
+           <Link href="/scoring/tgr" className="text-xs text-blue-600 hover:underline mt-2">
+                <ArrowLeft className="inline mr-1 h-3 w-3" /> Kembali ke Pemilihan Peran TGR
+           </Link>
         </div>
 
       </main>
