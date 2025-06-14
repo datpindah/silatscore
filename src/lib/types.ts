@@ -81,10 +81,10 @@ export interface ScheduleTGR {
   date: string; // YYYY-MM-DD
   place: string;
   round: string; // Babak (e.g., Penyisihan, Final)
-  pesilatMerahName: string;
+  pesilatMerahName: string; // For Tunggal, or primary name for Ganda/Regu
   pesilatMerahContingent: string;
-  pesilatBiruName: string; 
-  pesilatBiruContingent: string; 
+  pesilatBiruName: string; // Optional: for Ganda second name, or leave empty for Tunggal/Regu
+  pesilatBiruContingent: string; // Optional: for Ganda second contingent
 }
 
 
@@ -199,12 +199,17 @@ export interface TGRJuriScore {
   lastUpdated?: FirebaseTimestamp | Date | { seconds: number; nanoseconds: number } | null;
 }
 
-export type TGRDewanPenaltyType = 'weapon_drop' | 'time_violation' | 'costume_violation' | 'arena_out';
+export type TGRDewanPenaltyType =
+  | 'arena_out' // Penampilan Keluar Gelanggang 10mx10m
+  | 'weapon_touch_floor' // Menjatuhkan Senjata Menyentuh Lantai
+  | 'time_tolerance_violation' // Penampilan melebihi atau kurang dari toleransi waktu 5 Detik S/d 10 Detik
+  | 'costume_violation' // Pakaian tidak sesuai aturan
+  | 'movement_hold_violation'; // Menahan gerakan lebih dari 5 (lima) detik.
 
 export interface TGRDewanPenalty {
   id?: string; // Firestore document ID
   type: TGRDewanPenaltyType;
-  description: string;
+  description: string; // Can be denormalized from PenaltyConfig
   pointsDeducted: number; // e.g., -0.50
   timestamp: FirebaseTimestamp | Date | { seconds: number; nanoseconds: number };
 }
