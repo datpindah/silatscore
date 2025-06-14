@@ -12,25 +12,30 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { LogIn, AlertCircle } from 'lucide-react';
-import type { ScheduleTGR } from '@/lib/types'; 
+import type { ScheduleTanding } from '@/lib/types';
 import { db } from '@/lib/firebase';
 import { doc, getDoc, onSnapshot } from 'firebase/firestore';
 
 
-const ACTIVE_TGR_SCHEDULE_CONFIG_PATH = 'app_settings/active_match_tgr'; 
-const SCHEDULE_TGR_COLLECTION = 'schedules_tgr'; 
+const ACTIVE_TANDING_SCHEDULE_CONFIG_PATH = 'app_settings/active_match_tanding';
+const SCHEDULE_TANDING_COLLECTION = 'schedules_tanding';
 const NO_ACTIVE_SCHEDULE_VALUE = "NO_ACTIVE_SCHEDULE_SELECTED";
 
 const defaultPartaiOptions = [
-  { value: NO_ACTIVE_SCHEDULE_VALUE, label: 'Tidak ada jadwal TGR aktif' }, 
+  { value: NO_ACTIVE_SCHEDULE_VALUE, label: 'Tidak ada jadwal Tanding aktif' },
 ];
 
-const halamanOptions = [ 
-  { value: '/scoring/tgr', label: 'Scoring - Panel Juri (TGR)' },
-  // Jika ada role lain untuk TGR (misal monitoring khusus TGR), bisa ditambahkan di sini.
+const halamanOptions = [
+  { value: '/scoring/tanding/dewan-1', label: 'Dewan Juri 1 (Timer & Kontrol)' },
+  { value: '/scoring/tanding/dewan-2', label: 'Dewan Juri 2 (Display Skor)' },
+  { value: '/scoring/tanding/juri/juri-1', label: 'Juri 1' },
+  { value: '/scoring/tanding/juri/juri-2', label: 'Juri 2' },
+  { value: '/scoring/tanding/juri/juri-3', label: 'Juri 3' },
+  { value: '/scoring/tanding/ketua-pertandingan', label: 'Ketua Pertandingan' },
+  { value: '/scoring/tanding/monitoring-skor', label: 'Monitoring Skor (Display Umum)' },
 ];
 
-const CORRECT_PASSWORD = "123456"; 
+const CORRECT_PASSWORD = "123"; // Ganti dengan password yang aman
 
 export default function LoginPage() {
   const router = useRouter();
@@ -43,33 +48,31 @@ export default function LoginPage() {
 
   useEffect(() => {
     setIsLoading(true);
-    const unsub = onSnapshot(doc(db, ACTIVE_TGR_SCHEDULE_CONFIG_PATH), async (docSnap) => { 
+    const unsub = onSnapshot(doc(db, ACTIVE_TANDING_SCHEDULE_CONFIG_PATH), async (docSnap) => {
       if (docSnap.exists() && docSnap.data()?.activeScheduleId) {
         const activeScheduleId = docSnap.data().activeScheduleId;
-        if (activeScheduleId === null || activeScheduleId === "") { 
+        if (activeScheduleId === null || activeScheduleId === "") {
             setPartaiOptions(defaultPartaiOptions);
             setSelectedPartai(NO_ACTIVE_SCHEDULE_VALUE);
             setIsLoading(false);
             return;
         }
         try {
-          const scheduleDocRef = doc(db, SCHEDULE_TGR_COLLECTION, activeScheduleId); 
+          const scheduleDocRef = doc(db, SCHEDULE_TANDING_COLLECTION, activeScheduleId);
           const scheduleDoc = await getDoc(scheduleDocRef);
 
           if (scheduleDoc.exists()) {
-            const activeScheduleData = scheduleDoc.data() as Omit<ScheduleTGR, 'id'>; 
-            
-            const formattedLabel = `Partai/Undian ${activeScheduleData.lotNumber}: ${activeScheduleData.pesilatMerahName} (${activeScheduleData.category})`;
-            
+            const activeScheduleData = scheduleDoc.data() as ScheduleTanding;
+            const formattedLabel = `Partai ${activeScheduleData.matchNumber}: ${activeScheduleData.pesilatMerahName} vs ${activeScheduleData.pesilatBiruName} (${activeScheduleData.class})`;
             setPartaiOptions([{ value: activeScheduleId, label: formattedLabel }]);
             setSelectedPartai(activeScheduleId);
           } else {
-            console.warn("Active TGR schedule document not found:", activeScheduleId);
+            console.warn("Active Tanding schedule document not found:", activeScheduleId);
             setPartaiOptions(defaultPartaiOptions);
             setSelectedPartai(NO_ACTIVE_SCHEDULE_VALUE);
           }
         } catch (err) {
-          console.error("Error fetching active TGR schedule details:", err);
+          console.error("Error fetching active Tanding schedule details:", err);
           setPartaiOptions(defaultPartaiOptions);
           setSelectedPartai(NO_ACTIVE_SCHEDULE_VALUE);
         }
@@ -79,7 +82,7 @@ export default function LoginPage() {
       }
       setIsLoading(false);
     }, (error) => {
-      console.error("Error subscribing to active TGR schedule config:", error);
+      console.error("Error subscribing to active Tanding schedule config:", error);
       setPartaiOptions(defaultPartaiOptions);
       setSelectedPartai(NO_ACTIVE_SCHEDULE_VALUE);
       setIsLoading(false);
@@ -94,12 +97,12 @@ export default function LoginPage() {
     setIsLoading(true);
 
     if (selectedPartai === NO_ACTIVE_SCHEDULE_VALUE) {
-      setError('Tidak ada jadwal TGR aktif yang bisa dipilih. Silakan aktifkan jadwal di halaman Admin.');
+      setError('Tidak ada jadwal Tanding aktif yang bisa dipilih. Silakan aktifkan jadwal di halaman Admin.');
       setIsLoading(false);
       return;
     }
-     if (!selectedPartai) { 
-      setError('Silakan pilih partai TGR terlebih dahulu.');
+     if (!selectedPartai) {
+      setError('Silakan pilih partai Tanding terlebih dahulu.');
       setIsLoading(false);
       return;
     }
@@ -130,9 +133,9 @@ export default function LoginPage() {
       <main className="flex-1 flex items-center justify-center p-4 bg-gradient-to-br from-background to-muted/50">
         <Card className="w-full max-w-md shadow-2xl">
           <CardHeader>
-            <CardTitle className="text-3xl font-headline text-primary text-center">Login Panel Scoring TGR</CardTitle> 
+            <CardTitle className="text-3xl font-headline text-primary text-center">Login Panel Scoring Tanding</CardTitle>
             <CardDescription className="text-center font-body">
-              Pilih partai TGR, halaman tujuan, dan masukkan password untuk melanjutkan. 
+              Pilih partai Tanding, halaman tujuan, dan masukkan password untuk melanjutkan.
             </CardDescription>
           </CardHeader>
           <form onSubmit={handleSubmit}>
@@ -145,31 +148,31 @@ export default function LoginPage() {
                 </Alert>
               )}
               <div className="space-y-2">
-                <Label htmlFor="partai" className="font-headline">Pilih Partai TGR</Label> 
-                <Select 
-                  onValueChange={setSelectedPartai} 
-                  value={selectedPartai} 
+                <Label htmlFor="partai" className="font-headline">Pilih Partai Tanding</Label>
+                <Select
+                  onValueChange={setSelectedPartai}
+                  value={selectedPartai}
                   disabled={isLoading || (partaiOptions.length === 1 && partaiOptions[0]?.value === NO_ACTIVE_SCHEDULE_VALUE)}
                 >
                   <SelectTrigger id="partai">
-                    <SelectValue placeholder="Pilih Partai Pertandingan TGR" /> 
+                    <SelectValue placeholder="Pilih Partai Pertandingan Tanding" />
                   </SelectTrigger>
                   <SelectContent>
                     {partaiOptions.map(option => (
-                      <SelectItem key={option.value} value={option.value} disabled={option.value === NO_ACTIVE_SCHEDULE_VALUE && option.label === 'Tidak ada jadwal TGR aktif'}> 
+                      <SelectItem key={option.value} value={option.value} disabled={option.value === NO_ACTIVE_SCHEDULE_VALUE && option.label === 'Tidak ada jadwal Tanding aktif'}>
                         {option.label}
                       </SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
-                 {isLoading && partaiOptions[0]?.value === NO_ACTIVE_SCHEDULE_VALUE && <p className="text-xs text-muted-foreground">Memuat jadwal TGR aktif...</p>} 
-                 {!isLoading && partaiOptions[0]?.value === NO_ACTIVE_SCHEDULE_VALUE && <p className="text-xs text-destructive">Tidak ada jadwal TGR aktif. Silakan atur di Admin.</p>} 
+                 {isLoading && partaiOptions[0]?.value === NO_ACTIVE_SCHEDULE_VALUE && <p className="text-xs text-muted-foreground">Memuat jadwal Tanding aktif...</p>}
+                 {!isLoading && partaiOptions[0]?.value === NO_ACTIVE_SCHEDULE_VALUE && <p className="text-xs text-destructive">Tidak ada jadwal Tanding aktif. Silakan atur di Admin.</p>}
               </div>
               <div className="space-y-2">
                 <Label htmlFor="halaman" className="font-headline">Pilih Halaman Tujuan</Label>
                 <Select onValueChange={setSelectedHalaman} value={selectedHalaman} disabled={isLoading}>
                   <SelectTrigger id="halaman">
-                    <SelectValue placeholder="Pilih Halaman Scoring TGR" /> 
+                    <SelectValue placeholder="Pilih Halaman Scoring Tanding" />
                   </SelectTrigger>
                   <SelectContent>
                     {halamanOptions.map(option => (
@@ -213,5 +216,3 @@ export default function LoginPage() {
     </div>
   );
 }
-
-    

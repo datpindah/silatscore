@@ -13,8 +13,8 @@ export default function ScoringSelectionPage() {
     <div className="flex flex-col min-h-screen">
       <Header />
       <main className="flex-1 container mx-auto px-4 py-8">
-        <PageTitle 
-          title="Pilih Mode Scoring" 
+        <PageTitle
+          title="Pilih Mode Scoring"
           description="Pilih jenis pertandingan Pencak Silat yang ingin Anda nilai."
         />
 
@@ -31,7 +31,7 @@ export default function ScoringSelectionPage() {
             </CardHeader>
             <CardContent>
               <Button asChild className="w-full bg-primary hover:bg-primary/90 text-primary-foreground">
-                <Link href="/scoring/tanding">Mulai Scoring Tanding</Link>
+                <Link href="/login">Mulai Scoring Tanding</Link>
               </Button>
             </CardContent>
           </Card>
@@ -57,5 +57,3 @@ export default function ScoringSelectionPage() {
     </div>
   );
 }
-
-    
