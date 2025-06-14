@@ -312,7 +312,7 @@ export default function JuriTGRPage({ params: paramsPromise }: { params: Promise
             disabled={isInputDisabled}
             aria-label="Kesalahan Gerakan (-0.01)"
           >
-            <XIcon className="w-36 h-36 md:w-56 md:h-56" strokeWidth={3} />
+            <XIcon className="w-36 h-36 md:w-60 md:h-60" strokeWidth={3} />
           </Button>
           
           <div className="w-full md:w-auto flex flex-col items-center justify-center text-center p-2 md:p-4 rounded-lg bg-gray-200 dark:bg-gray-800/50 md:h-auto md:flex-[1_1_0%] my-auto">
