@@ -101,7 +101,7 @@ body {
     --sidebar-ring: 51 100% 60%;
   }
 
-  /* Monitoring Page Specific Theme Variables */
+  /* Monitoring Page Specific Theme Variables (TANDING) */
   .monitoring-theme-light {
     --monitor-bg: hsl(var(--background));
     --monitor-text: hsl(var(--foreground));
@@ -225,6 +225,132 @@ body {
     --monitor-overlay-button-border: theme('colors.gray.600');
     --monitor-overlay-button-hover-bg: theme('colors.gray.600');
   }
+
+  /* Monitoring Page Specific Theme Variables (TGR - can be same as tanding for now) */
+  .tgr-monitoring-theme-light {
+    --monitor-bg: hsl(var(--background));
+    --monitor-text: hsl(var(--foreground));
+    --monitor-text-muted: hsl(var(--muted-foreground));
+    --monitor-header-section-bg: hsl(120, 60%, 88%); /* Light Green for TGR */
+    
+    --monitor-skeleton-bg: hsl(var(--muted));
+
+    --monitor-pesilat-biru-name-text: theme('colors.teal.700'); /* Example color change for TGR */
+    --monitor-pesilat-biru-contingent-text: theme('colors.teal.500');
+    --monitor-pesilat-merah-name-text: theme('colors.orange.700'); /* Example color change for TGR */
+    --monitor-pesilat-merah-contingent-text: theme('colors.orange.500');
+
+    --monitor-foulbox-inactive-bg: theme('colors.gray.200');
+    --monitor-foulbox-inactive-text: theme('colors.gray.700');
+    --monitor-foulbox-inactive-border: theme('colors.gray.400');
+    --monitor-foulbox-active-bg: theme('colors.amber.400'); /* Amber for TGR fouls */
+    --monitor-foulbox-active-text: theme('colors.black');
+    --monitor-foulbox-active-border: theme('colors.amber.500');
+
+    --monitor-skor-biru-bg: theme('colors.teal.500');
+    --monitor-skor-merah-bg: theme('colors.orange.500');
+    --monitor-skor-text: theme('colors.white');
+    
+    --monitor-juri-indicator-inactive-bg: theme('colors.gray.200');
+    --monitor-juri-indicator-inactive-text: theme('colors.gray.700');
+    --monitor-juri-indicator-inactive-border: theme('colors.gray.400');
+    --monitor-juri-indicator-active-bg: theme('colors.lime.400'); /* Lime for TGR juri input */
+    --monitor-juri-indicator-active-text: theme('colors.black');
+    
+    --monitor-timer-text: hsl(var(--foreground));
+    --monitor-babak-indicator-inactive-bg: theme('colors.gray.300');
+    --monitor-babak-indicator-inactive-text: theme('colors.gray.800');
+    --monitor-babak-indicator-inactive-border: theme('colors.gray.400');
+    --monitor-babak-indicator-active-bg: theme('colors.lime.400');
+    --monitor-babak-indicator-active-text: theme('colors.black');
+    --monitor-babak-indicator-active-border: theme('colors.lime.500');
+    --monitor-status-text: hsl(var(--muted-foreground));
+
+    --monitor-dialog-bg: hsl(var(--popover));
+    --monitor-dialog-text: hsl(var(--popover-foreground));
+    --monitor-dialog-border: hsl(var(--border));
+    --monitor-dialog-title-text: theme('colors.green.600'); /* Green for TGR dialog */
+    --monitor-dialog-vote-merah-bg: theme('colors.orange.500');
+    --monitor-dialog-vote-merah-text: theme('colors.white');
+    --monitor-dialog-vote-biru-bg: theme('colors.teal.500');
+    --monitor-dialog-vote-biru-text: theme('colors.white');
+    --monitor-dialog-vote-invalid-bg: theme('colors.amber.400');
+    --monitor-dialog-vote-invalid-text: theme('colors.black');
+    --monitor-dialog-vote-null-bg: theme('colors.gray.300');
+    --monitor-dialog-vote-null-text: theme('colors.gray.800');
+
+    --monitor-overlay-bg: hsla(0, 0%, 0%, 0.5);
+    --monitor-overlay-text-primary: hsl(var(--foreground));
+    --monitor-overlay-text-secondary: hsl(var(--muted-foreground));
+    --monitor-overlay-accent-text: theme('colors.lime.600');
+    --monitor-overlay-button-bg: hsl(var(--card));
+    --monitor-overlay-button-text: hsl(var(--card-foreground));
+    --monitor-overlay-button-border: hsl(var(--border));
+    --monitor-overlay-button-hover-bg: hsl(var(--muted));
+  }
+
+  .tgr-monitoring-theme-dark {
+    --monitor-bg: theme('colors.gray.800'); /* Darker green-ish for TGR dark */
+    --monitor-text: theme('colors.gray.100');
+    --monitor-text-muted: theme('colors.gray.400');
+    --monitor-header-section-bg: hsl(120, 25%, 20%); /* Darker Green */
+
+    --monitor-skeleton-bg: theme('colors.gray.700');
+
+    --monitor-pesilat-biru-name-text: theme('colors.teal.300');
+    --monitor-pesilat-biru-contingent-text: theme('colors.teal.400');
+    --monitor-pesilat-merah-name-text: theme('colors.orange.300');
+    --monitor-pesilat-merah-contingent-text: theme('colors.orange.400');
+
+    --monitor-foulbox-inactive-bg: theme('colors.gray.700');
+    --monitor-foulbox-inactive-text: theme('colors.gray.200');
+    --monitor-foulbox-inactive-border: theme('colors.gray.600');
+    --monitor-foulbox-active-bg: theme('colors.amber.400');
+    --monitor-foulbox-active-text: theme('colors.black');
+    --monitor-foulbox-active-border: theme('colors.amber.500');
+
+    --monitor-skor-biru-bg: theme('colors.teal.600');
+    --monitor-skor-merah-bg: theme('colors.orange.600');
+    --monitor-skor-text: theme('colors.white');
+    
+    --monitor-juri-indicator-inactive-bg: theme('colors.gray.700');
+    --monitor-juri-indicator-inactive-text: theme('colors.gray.200');
+    --monitor-juri-indicator-inactive-border: theme('colors.gray.600');
+    --monitor-juri-indicator-active-bg: theme('colors.lime.400');
+    --monitor-juri-indicator-active-text: theme('colors.black');
+
+    --monitor-timer-text: theme('colors.gray.100');
+    --monitor-babak-indicator-inactive-bg: theme('colors.gray.700');
+    --monitor-babak-indicator-inactive-text: theme('colors.gray.200');
+    --monitor-babak-indicator-inactive-border: theme('colors.gray.600');
+    --monitor-babak-indicator-active-bg: theme('colors.lime.300');
+    --monitor-babak-indicator-active-text: theme('colors.black');
+    --monitor-babak-indicator-active-border: theme('colors.lime.400');
+    --monitor-status-text: theme('colors.gray.300');
+
+    --monitor-dialog-bg: theme('colors.gray.900'); /* Darker dialog for TGR dark */
+    --monitor-dialog-text: theme('colors.gray.100');
+    --monitor-dialog-border: theme('colors.gray.700');
+    --monitor-dialog-title-text: theme('colors.green.300');
+    --monitor-dialog-vote-merah-bg: theme('colors.orange.600');
+    --monitor-dialog-vote-merah-text: theme('colors.white');
+    --monitor-dialog-vote-biru-bg: theme('colors.teal.600');
+    --monitor-dialog-vote-biru-text: theme('colors.white');
+    --monitor-dialog-vote-invalid-bg: theme('colors.amber.400');
+    --monitor-dialog-vote-invalid-text: theme('colors.black');
+    --monitor-dialog-vote-null-bg: theme('colors.gray.700');
+    --monitor-dialog-vote-null-text: theme('colors.gray.100');
+
+    --monitor-overlay-bg: hsla(120, 10%, 5%, 0.8);
+    --monitor-overlay-text-primary: theme('colors.gray.200');
+    --monitor-overlay-text-secondary: theme('colors.gray.300');
+    --monitor-overlay-accent-text: theme('colors.lime.400');
+    --monitor-overlay-button-bg: theme('colors.gray.700');
+    --monitor-overlay-button-text: theme('colors.gray.200');
+    --monitor-overlay-button-border: theme('colors.gray.600');
+    --monitor-overlay-button-hover-bg: theme('colors.gray.600');
+  }
+
 }
 
 @layer base {

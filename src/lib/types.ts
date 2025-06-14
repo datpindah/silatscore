@@ -80,8 +80,8 @@ export interface ScheduleTGR {
   place: string;
   pesilatMerahName: string;
   pesilatMerahContingent: string;
-  pesilatBiruName: string;
-  pesilatBiruContingent: string;
+  pesilatBiruName: string; // Now required string
+  pesilatBiruContingent: string; // Now required string
 }
 
 
@@ -132,7 +132,7 @@ export interface VerificationRequest {
 }
 // --- END VERIFICATION TYPES ---
 
-// --- TIMER STATUS for DEWAN 1 ---
+// --- TIMER STATUS for DEWAN 1 TANDING ---
 export type TimerMatchStatus =
   | 'Pending'
   | `OngoingRound${number}`
@@ -177,3 +177,43 @@ export interface JuriMatchData {
   biru: RoundScores;
   lastUpdated?: any; // Firestore Timestamp
 }
+
+// --- TGR Scoring Types ---
+export interface TGRTimerStatus {
+  timerSeconds: number;
+  isTimerRunning: boolean;
+  matchStatus: 'Pending' | 'Ongoing' | 'Paused' | 'Finished';
+  performanceDuration: number; // e.g., 180 seconds for Tunggal
+}
+
+export interface TGRJuriScore {
+  id?: string; // juriId, e.g., 'juri-1'
+  baseScore: number; // Default 9.90
+  gerakanSalahCount: number;
+  staminaKemantapanBonus: number; // 0.00 to 0.10
+  calculatedScore: number; // baseScore - (gerakanSalahCount * 0.01) + staminaKemantapanBonus
+  lastUpdated?: any; // Firestore Timestamp
+}
+
+export type TGRDewanPenaltyType = 'weapon_drop' | 'time_violation' | 'costume_violation' | 'arena_out';
+
+export interface TGRDewanPenalty {
+  id?: string; // Firestore document ID
+  type: TGRDewanPenaltyType;
+  description: string;
+  pointsDeducted: number; // e.g., -0.50
+  timestamp: any; // Firestore Timestamp
+}
+
+export interface TGRMatchData {
+  id: string; // Corresponds to ScheduleTGR id
+  scheduleDetails: ScheduleTGR; // Denormalized or linked
+  timerStatus: TGRTimerStatus;
+  // Juri scores will be in a subcollection: juri_scores_tgr/{juriId} -> TGRJuriScore
+  // Dewan penalties will be in a subcollection: dewan_penalties_tgr/{penaltyId} -> TGRDewanPenalty
+  finalMedianScore?: number; // Calculated by Ketua
+  totalDewanPenaltyPoints?: number; // Calculated by Ketua
+  overallScore?: number; // finalMedianScore + totalDewanPenaltyPoints
+  status: 'Pending' | 'Ongoing' | 'Paused' | 'Finished';
+}
+// --- End TGR Scoring Types ---
