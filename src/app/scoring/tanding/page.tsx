@@ -6,7 +6,7 @@ import { Header } from "@/components/layout/Header";
 import { PageTitle } from "@/components/shared/PageTitle";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
-import { Timer, Users, Eye, Award, ClipboardCheck } from 'lucide-react';
+import { Timer, Users, Eye, Award } from 'lucide-react';
 
 interface RoleCardProps {
   title: string;
@@ -39,7 +39,7 @@ function RoleCard({ title, description, href, icon: Icon }: RoleCardProps) {
 export default function TandingRoleSelectionPage() {
   const roles = [
     { title: "Timer Dewan 1", description: "Kontrol timer dan input skor utama untuk pertandingan.", href: "/scoring/tanding/dewan-1", icon: Timer },
-    { title: "Timer Dewan 2", description: "Kontrol timer dan input skor cadangan/alternatif.", href: "/scoring/tanding/dewan-2", icon: Timer },
+    { title: "Timer Dewan 2", description: "Tampilan skor detail per babak untuk pertandingan.", href: "/scoring/tanding/dewan-2", icon: Timer },
     { title: "Juri 1", description: "Input penilaian poin dari perspektif Juri 1.", href: "/scoring/tanding/juri/juri-1", icon: Users },
     { title: "Juri 2", description: "Input penilaian poin dari perspektif Juri 2.", href: "/scoring/tanding/juri/juri-2", icon: Users },
     { title: "Juri 3", description: "Input penilaian poin dari perspektif Juri 3.", href: "/scoring/tanding/juri/juri-3", icon: Users },
@@ -64,5 +64,3 @@ export default function TandingRoleSelectionPage() {
     </div>
   );
 }
-
-    
