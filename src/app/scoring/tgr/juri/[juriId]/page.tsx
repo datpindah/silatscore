@@ -304,8 +304,7 @@ export default function JuriTGRPage({ params: paramsPromise }: { params: Promise
         </div>
 
         {/* Main Interaction Area */}
-        <div className="flex flex-col md:flex-row items-stretch gap-4 md:gap-6 mb-4 md:mb-6">
-          {/* Kesalahan Gerakan Button (X) */}
+         <div className="flex flex-col md:flex-row items-stretch gap-4 md:gap-6 mb-4 md:mb-6">
           <Button
             variant="default"
             className="w-full md:w-auto h-40 md:h-64 text-5xl md:text-7xl bg-blue-600 hover:bg-blue-700 text-white shadow-lg rounded-lg flex items-center justify-center p-2 md:flex-[2_2_0%]"
@@ -315,19 +314,17 @@ export default function JuriTGRPage({ params: paramsPromise }: { params: Promise
           >
             <XIcon className="w-28 h-28 md:w-44 md:h-44" strokeWidth={3} />
           </Button>
-
-          {/* Detail Gerakan Text Block - Positioned in the middle */}
-          <div className="w-full md:w-auto flex flex-col items-center justify-center text-center p-2 md:p-4 rounded-lg bg-gray-100 dark:bg-gray-800 md:h-64 md:flex-[1_1_0%]">
+          
+          <div className="w-full md:w-auto flex flex-col items-center justify-center text-center p-2 md:p-4 rounded-lg bg-gray-200 dark:bg-gray-800/50 md:h-auto md:flex-[1_1_0%] my-auto">
             <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-300">Detail Gerakan</h3>
             <p className="text-xs text-gray-600 dark:text-gray-400 mt-1">Urutan Gerakan</p>
             <p className="text-xs text-gray-600 dark:text-gray-400">Gerakan yang terlewat</p>
           </div>
 
-          {/* SIAP Button */}
           <Button
             id="tombol-siap-juri-tgr"
             className={cn(
-              "w-full md:w-auto h-40 md:h-64 text-lg md:text-2xl font-semibold rounded-lg shadow-lg flex flex-col items-center justify-center p-2 sm:p-4 md:flex-[1_1_0%]",
+              "w-full md:w-auto h-40 md:h-64 text-lg md:text-2xl font-semibold rounded-lg shadow-lg flex flex-col items-center justify-center p-2 md:flex-[2_2_0%]",
               isJuriReady ? "bg-green-600 hover:bg-green-700 text-white" : "bg-yellow-500 hover:bg-yellow-600 text-black",
               buttonSiapDisabled && !isJuriReady ? "opacity-50 cursor-not-allowed" : "",
               isJuriReady ? "opacity-75 cursor-default" : ""
