@@ -4,7 +4,7 @@
 import Link from 'next/link';
 import { AppLogo } from './AppLogo';
 import { Button } from '@/components/ui/button';
-import { Sheet, SheetContent, SheetTrigger, SheetTitle } from '@/components/ui/sheet'; // Added SheetTitle
+import { Sheet, SheetContent, SheetTrigger, SheetTitle } from '@/components/ui/sheet';
 import { Menu } from 'lucide-react';
 import { ThemeToggle } from '@/components/shared/ThemeToggle';
 import { useState, useEffect, type PointerEvent } from 'react';
@@ -40,23 +40,21 @@ export function Header() {
     };
 
     document.addEventListener('mousemove', handleMouseMove);
-    // Listen for mouse leaving the entire HTML document
     document.documentElement.addEventListener('mouseleave', handleDocumentMouseLeave);
 
     return () => {
       document.removeEventListener('mousemove', handleMouseMove);
       document.documentElement.removeEventListener('mouseleave', handleDocumentMouseLeave);
     };
-  }, [isMouseOverHeader]); // Re-attach if isMouseOverHeader changes
+  }, [isMouseOverHeader]);
 
   const handleHeaderMouseEnter = () => {
     setIsMouseOverHeader(true);
-    setIsVisible(true); // Ensure it's visible when mouse enters header
+    setIsVisible(true); 
   };
 
   const handleHeaderMouseLeave = (event: PointerEvent<HTMLElement>) => {
     setIsMouseOverHeader(false);
-    // If mouse leaves header and is outside activation zone, hide immediately
     if (event.clientY >= ACTIVATION_THRESHOLD_PX) {
       setIsVisible(false);
     }
@@ -95,7 +93,7 @@ export function Header() {
                 </Button>
               </SheetTrigger>
               <SheetContent side="right">
-                <SheetTitle className="sr-only">Navigation Menu</SheetTitle> {/* Added SheetTitle */}
+                <SheetTitle className="sr-only">Navigation Menu</SheetTitle>
                 <nav className="grid gap-6 text-lg font-medium mt-8">
                   <AppLogo />
                   {navItems.map((item) => (
