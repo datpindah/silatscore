@@ -1,10 +1,10 @@
 
 "use client";
 
-import { useState, useEffect, useCallback, use } from 'react'; // Added use
+import { useState, useEffect, useCallback, use } from 'react'; 
 import Link from 'next/link';
 import { Header } from '@/components/layout/Header';
-import { PageTitle } from '@/components/shared/PageTitle';
+// import { PageTitle } from '@/components/shared/PageTitle'; // Not used directly, remove if not needed
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { ArrowLeft, Loader2, Info, CheckSquare, Square, XIcon, Check, AlertCircle } from 'lucide-react';
@@ -38,9 +38,9 @@ const initialTgrTimerStatus: TGRTimerStatus = {
   performanceDuration: 180,
 };
 
-export default function JuriTGRPage({ params: paramsPromise }: { params: Promise<{ juriId: string }> }) { // Changed params to paramsPromise and its type
-  const params = use(paramsPromise); // Unwrap the promise using use()
-  const { juriId } = params; // Destructure from the resolved params
+export default function JuriTGRPage({ params: paramsPromise }: { params: Promise<{ juriId: string }> }) { 
+  const params = use(paramsPromise); 
+  const { juriId } = params; 
   const juriDisplayName = `Juri ${juriId?.split('-')[1] || 'TGR Tidak Dikenal'}`;
 
   const [configMatchId, setConfigMatchId] = useState<string | null | undefined>(undefined);
@@ -57,7 +57,7 @@ export default function JuriTGRPage({ params: paramsPromise }: { params: Promise
   const [error, setError] = useState<string | null>(null);
 
   const calculateScore = useCallback((gsCount: number, staminaBonus: number) => {
-    return BASE_SCORE_TGR - (gsCount * GERAKAN_SALAH_DEDUCTION) + staminaBonus;
+    return parseFloat((BASE_SCORE_TGR - (gsCount * GERAKAN_SALAH_DEDUCTION) + staminaBonus).toFixed(2));
   }, []);
 
   useEffect(() => {
@@ -106,7 +106,20 @@ export default function JuriTGRPage({ params: paramsPromise }: { params: Promise
         unsubSchedule = onSnapshot(scheduleDocRef, (docSnap) => {
           if (!mounted) return;
           if (docSnap.exists()) {
-            setScheduleDetails(docSnap.data() as ScheduleTGR);
+            const rawData = docSnap.data();
+            let processedDate: string;
+
+            if (rawData.date instanceof Timestamp) {
+                processedDate = rawData.date.toDate().toISOString().split('T')[0];
+            } else if (typeof rawData.date === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(rawData.date)) {
+                processedDate = rawData.date;
+            } else if (rawData.date && typeof rawData.date.seconds === 'number' && typeof rawData.date.nanoseconds === 'number') {
+                processedDate = new Date(rawData.date.seconds * 1000).toISOString().split('T')[0];
+            } else {
+                console.warn(`[${juriDisplayName}] Schedule TGR date is in unexpected format or missing for ID ${activeMatchId}. Defaulting to today.`);
+                processedDate = new Date().toISOString().split('T')[0]; 
+            }
+            setScheduleDetails({ ...rawData, date: processedDate } as ScheduleTGR);
             setMatchDetailsLoaded(true);
           } else {
             setError(`Detail Jadwal TGR (ID: ${activeMatchId}) tidak ditemukan.`);
@@ -164,7 +177,7 @@ export default function JuriTGRPage({ params: paramsPromise }: { params: Promise
       if (unsubJuriScore) unsubJuriScore();
       if (unsubMatchData) unsubMatchData();
     };
-  }, [activeMatchId, juriId, calculateScore]);
+  }, [activeMatchId, juriId, calculateScore, juriDisplayName]);
 
   useEffect(() => {
      if (isLoading && matchDetailsLoaded) {
@@ -213,7 +226,7 @@ export default function JuriTGRPage({ params: paramsPromise }: { params: Promise
     setJuriScore(prev => {
         const newReadyState = !prev.isReady;
         const updatedScore = { ...prev, isReady: newReadyState };
-        saveJuriScore({ isReady: newReadyState }); // Only save the isReady state
+        saveJuriScore({ isReady: newReadyState }); 
         return updatedScore;
     });
   };
@@ -221,10 +234,11 @@ export default function JuriTGRPage({ params: paramsPromise }: { params: Promise
   const formatDisplayDate = (dateString: string | undefined) => {
     if (!dateString) return 'Tanggal tidak tersedia';
     try {
-      const date = new Date(dateString + 'T00:00:00'); // Ensure parsing as local date
+      const date = new Date(dateString + 'T00:00:00'); 
       return new Intl.DateTimeFormat('id-ID', { day: 'numeric', month: 'long', year: 'numeric' }).format(date);
     } catch (e) {
-      return dateString; // Fallback to original string if formatting fails
+      console.warn("Error formatting date in TGR Juri:", e, "Original date string:", dateString);
+      return dateString; 
     }
   };
 
@@ -268,7 +282,7 @@ export default function JuriTGRPage({ params: paramsPromise }: { params: Promise
                     (scheduleDetails.category === 'Jurus Tunggal Bebas' ? `Tunggal Jurus Bebas` : scheduleDetails.pesilatMerahName) 
                     : <Skeleton className="h-6 w-40 inline-block" />}
                 </div>
-                 <div className="text-sm text-muted-foreground">Babak: Penyisihan (Contoh)</div> {/* Placeholder, needs dynamic data */}
+                 <div className="text-sm text-muted-foreground">Partai No: {scheduleDetails?.lotNumber || <Skeleton className="h-4 w-10 inline-block" />}</div> 
             </div>
           </CardContent>
         </Card>
