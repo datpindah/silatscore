@@ -250,24 +250,24 @@ export default function JuriTGRPage({ params }: { params: { juriId: string } }) 
           <CardContent className="p-3 md:p-4 space-y-1">
             <div className="flex justify-between items-start">
               <div>
-                <p className="text-sm font-semibold text-primary">{scheduleDetails?.pesilatMerahContingent || <Skeleton className="h-5 w-24" />}</p>
-                <p className="text-xs text-muted-foreground">
+                <div className="text-sm font-semibold text-primary">{scheduleDetails?.pesilatMerahContingent || <Skeleton className="h-5 w-24" />}</div>
+                <div className="text-xs text-muted-foreground">
                   {scheduleDetails?.category || <Skeleton className="h-4 w-20" />}
                   {scheduleDetails?.category === 'Jurus Tunggal Bebas' && scheduleDetails.pesilatBiruName && ` vs ${scheduleDetails.pesilatBiruName} (${scheduleDetails.pesilatBiruContingent})`}
-                </p>
+                </div>
               </div>
               <div className="text-right">
-                <p className="text-sm text-muted-foreground">{scheduleDetails?.place || <Skeleton className="h-5 w-20" />}</p>
-                <p className="text-xs text-muted-foreground">{formatDisplayDate(scheduleDetails?.date) || <Skeleton className="h-4 w-24" />}</p>
+                <div className="text-sm text-muted-foreground">{scheduleDetails?.place || <Skeleton className="h-5 w-20" />}</div>
+                <div className="text-xs text-muted-foreground">{formatDisplayDate(scheduleDetails?.date) || <Skeleton className="h-4 w-24" />}</div>
               </div>
             </div>
             <div className="text-center">
-                 <p className="text-lg font-semibold">
+                 <div className="text-lg font-semibold">
                   {scheduleDetails?.pesilatMerahName ? 
                     (scheduleDetails.category === 'Jurus Tunggal Bebas' ? `Tunggal Jurus Bebas` : scheduleDetails.pesilatMerahName) 
                     : <Skeleton className="h-6 w-40 inline-block" />}
-                </p>
-                 <p className="text-sm text-muted-foreground">Babak: Penyisihan (Contoh)</p> {/* Placeholder, needs dynamic data */}
+                </div>
+                 <div className="text-sm text-muted-foreground">Babak: Penyisihan (Contoh)</div> {/* Placeholder, needs dynamic data */}
             </div>
           </CardContent>
         </Card>
