@@ -37,7 +37,8 @@ const initialTgrTimerStatus: TGRTimerStatus = {
 };
 
 export default function JuriTGRPage({ params: paramsPromise }: { params: Promise<{ juriId: string }> }) { 
-  const { juriId } = use(paramsPromise);
+  const resolvedParams = use(paramsPromise);
+  const { juriId } = resolvedParams;
   const juriDisplayName = `Juri ${juriId?.split('-')[1] || 'TGR Tidak Dikenal'}`;
 
   const [configMatchId, setConfigMatchId] = useState<string | null | undefined>(undefined);
@@ -314,7 +315,7 @@ export default function JuriTGRPage({ params: paramsPromise }: { params: Promise
               disabled={isInputDisabled}
               aria-label="Kesalahan Gerakan (-0.01)"
             >
-              <XIcon className="w-20 h-20 md:w-28 md:h-28" strokeWidth={3}/>
+              <XIcon className="w-28 h-28 md:w-44 md:h-44" strokeWidth={3}/>
             </Button>
 
             {/* SIAP Button */}
@@ -329,7 +330,7 @@ export default function JuriTGRPage({ params: paramsPromise }: { params: Promise
               onClick={handleJuriSiap}
               disabled={buttonSiapDisabled} 
             >
-              {isJuriReady ? <CheckCircle2 className="w-8 h-8 md:w-12 md:w-12 mb-2" /> : <Info className="w-8 h-8 md:w-12 md:w-12 mb-2"/>}
+              {isJuriReady ? <CheckCircle2 className="w-8 h-8 md:w-12 md:h-12 mb-2" /> : <Info className="w-8 h-8 md:w-12 md:h-12 mb-2"/>}
               <span className="block text-center">{isJuriReady ? "MENILAI" : "SIAP"}</span>
             </Button>
           </div>
@@ -412,4 +413,3 @@ export default function JuriTGRPage({ params: paramsPromise }: { params: Promise
   );
 }
 
-    
