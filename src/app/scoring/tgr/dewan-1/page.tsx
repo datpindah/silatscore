@@ -9,7 +9,7 @@ import { Button } from '@/components/ui/button';
 import { ArrowLeft, Trash2, Loader2, MinusCircle } from 'lucide-react';
 import type { ScheduleTGR, TGRDewanPenalty, TGRDewanPenaltyType, TGRJuriScore } from '@/lib/types';
 import { db } from '@/lib/firebase';
-import { doc, onSnapshot, getDoc, collection, addDoc, query, orderBy, limit, deleteDoc, serverTimestamp, Timestamp, where, getDocs, setDoc, updateDoc } from 'firebase/firestore';
+import { doc, onSnapshot, getDoc, collection, addDoc, query, orderBy, limit, deleteDoc, serverTimestamp, Timestamp, where, getDocs, setDoc, updateDoc, writeBatch } from 'firebase/firestore';
 import { Skeleton } from '@/components/ui/skeleton';
 
 const ACTIVE_TGR_SCHEDULE_CONFIG_PATH = 'app_settings/active_match_tgr';
@@ -140,6 +140,7 @@ export default function DewanTGRPenaltyPage() {
 
 
   const handleAddPenalty = async (penalty: PenaltyConfig) => {
+    console.log(`[handleAddPenalty] Triggered for penalty: ${penalty.id}, activeMatchId: ${activeMatchId}`);
     if (!activeMatchId || activeMatchId.trim() === "" || isProcessing[penalty.id]) {
       if (!activeMatchId || activeMatchId.trim() === "") {
         console.error("handleAddPenalty aborted: activeMatchId is invalid.", { activeMatchId });
@@ -155,15 +156,28 @@ export default function DewanTGRPenaltyPage() {
         pointsDeducted: penalty.points,
         timestamp: serverTimestamp(),
       };
-      await addDoc(collection(db, MATCHES_TGR_COLLECTION, activeMatchId, DEWAN_PENALTIES_TGR_SUBCOLLECTION), penaltyData);
 
-      // After Dewan penalty is logged, update all Juri scores
+      const batch = writeBatch(db);
+      
+      // 1. Add Dewan Penalty
+      const newPenaltyRef = doc(collection(db, MATCHES_TGR_COLLECTION, activeMatchId, DEWAN_PENALTIES_TGR_SUBCOLLECTION));
+      batch.set(newPenaltyRef, penaltyData);
+      console.log(`[handleAddPenalty] Prepared to add penalty doc: ${newPenaltyRef.path}`);
+
+      // 2. Update all Juri scores
       const deductionAmount = Math.abs(penalty.points); // e.g., 0.50
 
       for (const juriId of TGR_JURI_IDS) {
         const juriDocRef = doc(db, MATCHES_TGR_COLLECTION, activeMatchId, JURI_SCORES_TGR_SUBCOLLECTION, juriId);
+        console.log(`[handleAddPenalty] Preparing update for Juri: ${juriId}, path: ${juriDocRef.path}`);
+        
+        // It's crucial to get the current state of the Juri's document if we need to base calculations on it.
+        // However, since Firestore batch writes are not transactional reads, we'll assume a default or base calculation.
+        // If a juri doc doesn't exist, setDoc will create it. If it exists, merge will update.
+        
+        // Let's fetch the current juri document to be safe, even if it adds a bit of latency for this specific operation.
+        // For a production app, you might optimize this if read-before-write becomes a bottleneck for many juris.
         const juriDocSnap = await getDoc(juriDocRef);
-
         let currentJuriData: Partial<TGRJuriScore> = {
             baseScore: BASE_SCORE_TGR,
             gerakanSalahCount: 0,
@@ -185,7 +199,7 @@ export default function DewanTGRPenaltyPage() {
             ).toFixed(2)
         );
 
-        await setDoc(juriDocRef, {
+        const juriUpdateData = {
             baseScore: currentJuriData.baseScore ?? BASE_SCORE_TGR,
             gerakanSalahCount: currentJuriData.gerakanSalahCount ?? 0,
             staminaKemantapanBonus: currentJuriData.staminaKemantapanBonus ?? 0,
@@ -193,21 +207,34 @@ export default function DewanTGRPenaltyPage() {
             calculatedScore: newCalculatedScore,
             isReady: currentJuriData.isReady ?? false,
             lastUpdated: serverTimestamp(),
-        }, { merge: true });
+        };
+        console.log(`[handleAddPenalty] Data for Juri ${juriId}:`, juriUpdateData);
+        batch.set(juriDocRef, juriUpdateData, { merge: true });
       }
 
+      await batch.commit();
+      console.log(`[handleAddPenalty] Batch commit successful for penalty ${penalty.id}`);
+
     } catch (err) {
-      setError(`Gagal menambah pelanggaran & update skor juri: ${err instanceof Error ? err.message : String(err)}`);
-      console.error("Error in handleAddPenalty or updating Juri scores:", err);
+      const firebaseError = err as any; // Cast to any to access potential code property
+      console.error("[handleAddPenalty] Error processing penalty or updating Juri scores. ActiveMatchId:", activeMatchId, "Penalty:", penalty.id, "Error:", firebaseError);
+      
+      let errorMessage = `Gagal menambah pelanggaran & update skor juri: ${firebaseError.message || String(firebaseError)}`;
+      if (firebaseError.code === 'permission-denied') {
+        errorMessage += " Pastikan Anda telah login dan memiliki izin yang cukup. Periksa juga path Firestore yang diakses.";
+      }
+      setError(errorMessage);
+      alert(errorMessage);
     } finally {
       setIsProcessing(prev => ({ ...prev, [penalty.id]: false }));
     }
   };
 
   const handleDeleteLastPenalty = async (penaltyType: TGRDewanPenaltyType) => {
+    console.log(`[handleDeleteLastPenalty] Triggered for penaltyType: ${penaltyType}, activeMatchId: ${activeMatchId}`);
      if (!activeMatchId || activeMatchId.trim() === "" || isProcessing[penaltyType]) {
         if (!activeMatchId || activeMatchId.trim() === "") {
-          console.error("handleDeleteLastPenalty aborted: activeMatchId is invalid.", { activeMatchId });
+          console.error("[handleDeleteLastPenalty] Aborted: activeMatchId is invalid.", { activeMatchId });
           setError("ID pertandingan aktif tidak valid. Tidak dapat menghapus pelanggaran.");
         }
         return;
@@ -224,14 +251,19 @@ export default function DewanTGRPenaltyPage() {
       if (!snapshot.empty) {
         const docToDelete = snapshot.docs[0];
         const deletedPenaltyPoints = (docToDelete.data() as TGRDewanPenalty).pointsDeducted;
-        await deleteDoc(doc(db, MATCHES_TGR_COLLECTION, activeMatchId, DEWAN_PENALTIES_TGR_SUBCOLLECTION, docToDelete.id));
+        console.log(`[handleDeleteLastPenalty] Found penalty to delete: ${docToDelete.id}, points: ${deletedPenaltyPoints}`);
 
-        // After Dewan penalty is deleted, revert the deduction from all Juri scores
-        const deductionAmountToRevert = Math.abs(deletedPenaltyPoints); // e.g., 0.50
+        const batch = writeBatch(db);
+        batch.delete(doc(db, MATCHES_TGR_COLLECTION, activeMatchId, DEWAN_PENALTIES_TGR_SUBCOLLECTION, docToDelete.id));
+        console.log(`[handleDeleteLastPenalty] Prepared to delete penalty doc: ${docToDelete.ref.path}`);
+
+        const deductionAmountToRevert = Math.abs(deletedPenaltyPoints);
 
         for (const juriId of TGR_JURI_IDS) {
             const juriDocRef = doc(db, MATCHES_TGR_COLLECTION, activeMatchId, JURI_SCORES_TGR_SUBCOLLECTION, juriId);
-            const juriDocSnap = await getDoc(juriDocRef);
+            console.log(`[handleDeleteLastPenalty] Preparing update for Juri: ${juriId}, path: ${juriDocRef.path}`);
+            
+            const juriDocSnap = await getDoc(juriDocRef); // Fetch current data
 
             if (juriDocSnap.exists()) {
                 const currentJuriData = juriDocSnap.data() as TGRJuriScore;
@@ -244,21 +276,34 @@ export default function DewanTGRPenaltyPage() {
                       newExternalDeductions
                     ).toFixed(2)
                 );
-
-                await updateDoc(juriDocRef, {
+                
+                const juriUpdateData = {
                     externalDeductions: newExternalDeductions,
                     calculatedScore: newCalculatedScore,
                     lastUpdated: serverTimestamp(),
-                });
+                };
+                console.log(`[handleDeleteLastPenalty] Data for Juri ${juriId}:`, juriUpdateData);
+                batch.update(juriDocRef, juriUpdateData);
+            } else {
+                console.warn(`[handleDeleteLastPenalty] Juri doc not found for ${juriId}, skipping update for this juri.`);
             }
         }
+        await batch.commit();
+        console.log(`[handleDeleteLastPenalty] Batch commit successful for deleting penalty ${penaltyType}`);
 
       } else {
         alert(`Tidak ada pelanggaran tipe "${penaltyType}" yang bisa dihapus.`);
+        console.log(`[handleDeleteLastPenalty] No penalty of type "${penaltyType}" found to delete.`);
       }
     } catch (err) {
-      setError(`Gagal menghapus pelanggaran & update skor juri: ${err instanceof Error ? err.message : String(err)}`);
-      console.error("Error in handleDeleteLastPenalty or updating Juri scores:", err);
+      const firebaseError = err as any;
+      console.error("[handleDeleteLastPenalty] Error processing penalty deletion or updating Juri scores. ActiveMatchId:", activeMatchId, "PenaltyType:", penaltyType, "Error:", firebaseError);
+      let errorMessage = `Gagal menghapus pelanggaran & update skor juri: ${firebaseError.message || String(firebaseError)}`;
+      if (firebaseError.code === 'permission-denied') {
+        errorMessage += " Pastikan Anda telah login dan memiliki izin yang cukup. Periksa juga path Firestore yang diakses.";
+      }
+      setError(errorMessage);
+      alert(errorMessage);
     } finally {
       setIsProcessing(prev => ({ ...prev, [penaltyType]: false }));
     }
@@ -377,3 +422,4 @@ export default function DewanTGRPenaltyPage() {
     </div>
   );
 }
+
