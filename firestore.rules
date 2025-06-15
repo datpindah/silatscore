@@ -4,80 +4,81 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
-    // App settings - e.g., active match ID
-    // For production, write should be restricted to specific admin/control panel users.
+    // === App Settings ===
+    // app_settings (seperti active_match_id) perlu bisa dibaca oleh semua
+    // untuk halaman login, tapi hanya bisa ditulis oleh admin (idealnya).
+    // Untuk sekarang, tulis oleh pengguna terautentikasi.
     match /app_settings/{settingId} {
-      allow read: if true; // Allow all clients to read app settings (e.g., active match ID)
-      allow write: if request.auth != null; // Only authenticated users (e.g., admin panel) can change settings
+      allow read: if true;
+      // Produksi: allow write: if request.auth.token.isAdmin == true;
+      allow write: if request.auth != null;
     }
 
-    // Schedules for Tanding matches
-    // Created and managed by Admin. Read by login page and scoring panels.
+    // === Schedules (Jadwal Pertandingan) ===
+    // Dibuat dan dikelola oleh Admin.
+    // Dibaca oleh berbagai halaman scoring untuk mendapatkan detail.
+    // Untuk sekarang, tulis oleh pengguna terautentikasi.
     match /schedules_tanding/{scheduleId} {
-      // For production, write should be restricted to admins, e.g., request.auth.token.isAdmin == true
-      allow read, write: if request.auth != null;
+      allow read: if request.auth != null;
+      // Produksi: allow write: if request.auth.token.isAdmin == true;
+      allow write: if request.auth != null;
     }
 
-    // Schedules for TGR matches
-    // Created and managed by Admin. Read by login page and scoring panels.
     match /schedules_tgr/{scheduleId} {
-      // For production, write should be restricted to admins, e.g., request.auth.token.isAdmin == true
-      allow read, write: if request.auth != null;
+      allow read: if request.auth != null;
+      // Produksi: allow write: if request.auth.token.isAdmin == true;
+      allow write: if request.auth != null;
     }
 
-    // Live match data for Tanding
+    // === Tanding Matches Data ===
+    // Data utama pertandingan Tanding, termasuk timer dan log skor yang dikonfirmasi.
+    // Semua peran scoring (Dewan, Juri, Ketua) perlu akses tulis dan baca.
     match /matches_tanding/{matchId} {
-      // Timer status, overall scores, etc.
-      // Allow read by all authenticated users (juri, dewan, ketua, monitor)
-      // Allow write only by Dewan Kontrol (Dewan 1)
-      // For production, this write rule needs to be more specific, e.g., based on a custom claim or role.
       allow read: if request.auth != null;
-      allow write: if request.auth != null; // Dewan 1 updates timer and logs
+      allow write: if request.auth != null;
 
-      // Juri scores for Tanding
+      // Sub-koleksi untuk skor dari masing-masing juri Tanding
       match /juri_scores/{juriId} {
-        // Each Juri writes to their own document. Dewan Kontrol reads all.
-        // For production, write should be restricted to specific juriId, e.g., request.auth.uid == juriId
-        allow read, write: if request.auth != null;
+        allow read: if request.auth != null;
+        allow write: if request.auth != null;
       }
 
-      // Official actions by Ketua Pertandingan for Tanding
+      // Sub-koleksi untuk log tindakan dari Ketua Pertandingan Tanding
       match /official_actions/{actionId} {
-        // Ketua Pertandingan writes. Dewan Kontrol reads.
-        // For production, write should be restricted to Ketua Pertandingan role.
-        allow read, write: if request.auth != null;
+        allow read: if request.auth != null;
+        allow write: if request.auth != null;
       }
 
-      // Verification requests for Tanding
+      // Sub-koleksi untuk permintaan verifikasi Tanding
       match /verifications/{verificationId} {
-        // Ketua Pertandingan creates. Juri update their votes. Dewan Kontrol reads.
-        // For production, rules need to be granular for create, update (own vote), read.
-        allow read, write: if request.auth != null;
+        allow read: if request.auth != null;
+        allow write: if request.auth != null;
       }
     }
 
-    // Live match data for TGR
+    // === TGR Matches Data ===
+    // Data utama pertandingan TGR, termasuk timer.
+    // Dewan TGR dan Juri TGR perlu akses tulis dan baca.
     match /matches_tgr/{matchId} {
-      // Timer status, etc.
-      // Allow read by all authenticated users (juri, dewan, ketua, monitor)
-      // Allow write only by Dewan Kontrol (Dewan 1 TGR)
-      // For production, this write rule needs to be more specific.
       allow read: if request.auth != null;
-      allow write: if request.auth != null; // Dewan 1 TGR updates timer and dewan penalties
+      allow write: if request.auth != null;
 
-      // Juri scores for TGR
+      // Sub-koleksi untuk skor dari masing-masing juri TGR
       match /juri_scores_tgr/{juriId} {
-        // Each Juri TGR writes to their own document. Ketua TGR reads all.
-        // For production, write should be restricted to specific juriId.
-        allow read, write: if request.auth != null;
+        allow read: if request.auth != null;
+        allow write: if request.auth != null;
       }
 
-      // Dewan penalties for TGR
+      // Sub-koleksi untuk penalti yang dicatat oleh Dewan TGR
       match /dewan_penalties_tgr/{penaltyId} {
-        // Dewan TGR writes. Ketua TGR reads.
-        // For production, write should be restricted to Dewan TGR role.
-        allow read, write: if request.auth != null;
+        allow read: if request.auth != null;
+        allow write: if request.auth != null;
       }
+    }
+
+    // Default deny untuk path lain yang tidak secara eksplisit diizinkan
+    match /{document=**} {
+      allow read, write: if false;
     }
   }
 }
