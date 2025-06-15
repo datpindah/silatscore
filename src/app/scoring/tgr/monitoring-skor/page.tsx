@@ -216,7 +216,7 @@ export default function MonitoringSkorTGRPage() {
       </Button>
 
       {/* Wrapper for content below sticky header */}
-      <div className="flex-1 flex flex-col pt-16"> {/* pt-16 for h-16 Header */}
+      <div className="flex-1 flex flex-col"> {/* Removed pt-16 here */}
         {/* Header Bar specific to this page */}
         <div className="bg-[var(--monitor-header-section-bg)] p-3 md:p-4 text-center text-sm md:text-base font-semibold text-[var(--monitor-text)]">
           <div className="grid grid-cols-4 gap-1 items-center">
@@ -268,9 +268,9 @@ export default function MonitoringSkorTGRPage() {
             </div>
           )}
         </div>
-      </div> {/* End of pt-16 wrapper */}
+      </div> {/* End of flex-1 flex-col wrapper */}
       
-      {/* Overlays and Fixed Buttons remain outside the pt-16 wrapper to ensure correct positioning */}
+      {/* Overlays and Fixed Buttons remain outside the flex-1 wrapper to ensure correct positioning relative to viewport */}
       {isLoading && activeScheduleId && !matchDetailsLoaded && (
          <div className="absolute inset-0 bg-[var(--monitor-overlay-bg)] flex flex-col items-center justify-center z-50">
             <Loader2 className="h-12 w-12 animate-spin text-[var(--monitor-overlay-accent-text)] mb-4" />
