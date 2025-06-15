@@ -5,7 +5,7 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
 import { ArrowLeft, Loader2, Sun, Moon, ChevronsRight, AlertTriangle } from 'lucide-react';
-import type { ScheduleTGR, TGRTimerStatus, TGRJuriScore } from '@/lib/types';
+import type { ScheduleTGR, TGRTimerStatus, TGRJuriScore, SideSpecificTGRScore } from '@/lib/types';
 import { db } from '@/lib/firebase';
 import { doc, onSnapshot, getDoc, collection, query, orderBy, Timestamp, where, limit, setDoc } from 'firebase/firestore';
 import { cn } from '@/lib/utils';
@@ -24,6 +24,7 @@ const initialTgrTimerStatus: TGRTimerStatus = {
   isTimerRunning: false,
   matchStatus: 'Pending',
   performanceDuration: 180,
+  currentPerformingSide: null,
 };
 
 const initialAllJuriScores: Record<string, TGRJuriScore | null> = TGR_JURI_IDS.reduce((acc, id) => {
@@ -185,11 +186,47 @@ export default function MonitoringSkorTGRPage() {
     }
   };
 
-  const ScoreCell = ({ value, isLoadingValue }: { value: string | number, isLoadingValue?: boolean }) => (
-    <div className="w-full py-3 md:py-4 border border-[var(--monitor-border)] flex items-center justify-center text-lg md:text-xl font-semibold bg-[var(--monitor-skor-biru-bg)] text-[var(--monitor-skor-text)] rounded-sm">
-      {isLoadingValue ? <Skeleton className="h-6 w-10 bg-[var(--monitor-skeleton-bg)]" /> : value}
-    </div>
-  );
+  const ScoreCell = ({ juriId, isLoadingJuriData }: { juriId: typeof TGR_JURI_IDS[number], isLoadingJuriData?: boolean }) => {
+    const juriScoreData = allJuriScores[juriId];
+    let displayValue: string | number = '-';
+
+    if (isLoadingJuriData) {
+        return (
+            <div className="w-full py-3 md:py-4 border border-[var(--monitor-border)] flex items-center justify-center text-lg md:text-xl font-semibold bg-[var(--monitor-skor-biru-bg)] text-[var(--monitor-skor-text)] rounded-sm">
+                <Skeleton className="h-6 w-10 bg-[var(--monitor-skeleton-bg)]" />
+            </div>
+        );
+    }
+
+    let sideToConsider: 'biru' | 'merah' | null = tgrTimerStatus.currentPerformingSide;
+
+    if (!sideToConsider && tgrTimerStatus.matchStatus === 'Finished') {
+        // If match is finished and no current side, default to 'merah' if it existed, else 'biru'
+        if (scheduleDetails?.pesilatMerahName) {
+            sideToConsider = 'merah';
+        } else if (scheduleDetails?.pesilatBiruName) {
+            sideToConsider = 'biru';
+        }
+    }
+    
+    if (juriScoreData && sideToConsider) {
+        const sideData = juriScoreData[sideToConsider];
+        if (sideData) {
+            if (sideData.isReady) {
+                displayValue = sideData.calculatedScore.toFixed(2);
+            } else {
+                displayValue = '...'; // Juri has data but not "SIAP" yet for this side
+            }
+        }
+    }
+
+    return (
+        <div className="w-full py-3 md:py-4 border border-[var(--monitor-border)] flex items-center justify-center text-lg md:text-xl font-semibold bg-[var(--monitor-skor-biru-bg)] text-[var(--monitor-skor-text)] rounded-sm">
+            {displayValue}
+        </div>
+    );
+};
+
 
   const JuriLabelCell = ({ label }: { label: string }) => (
     <div className="w-full py-2 border border-[var(--monitor-border)] flex items-center justify-center text-sm md:text-base font-medium bg-[var(--monitor-header-section-bg)] text-[var(--monitor-text)] rounded-sm">
@@ -197,8 +234,27 @@ export default function MonitoringSkorTGRPage() {
     </div>
   );
 
-  const mainParticipantName = scheduleDetails?.pesilatMerahName || 'Nama Peserta';
-  const mainParticipantContingent = scheduleDetails?.pesilatMerahContingent || 'Kontingen';
+  const mainParticipantName = () => {
+    if (!scheduleDetails) return <Skeleton className="h-5 w-32 inline-block bg-[var(--monitor-skeleton-bg)]" />;
+    if (tgrTimerStatus.currentPerformingSide === 'biru' && scheduleDetails.pesilatBiruName) return scheduleDetails.pesilatBiruName;
+    if (tgrTimerStatus.currentPerformingSide === 'merah' && scheduleDetails.pesilatMerahName) return scheduleDetails.pesilatMerahName;
+    if (scheduleDetails.pesilatMerahName && !scheduleDetails.pesilatBiruName) return scheduleDetails.pesilatMerahName; // Single performer (merah default)
+    if (scheduleDetails.pesilatBiruName && !scheduleDetails.pesilatMerahName) return scheduleDetails.pesilatBiruName; // Single performer (biru)
+    return scheduleDetails.pesilatMerahName || "Nama Peserta"; // Fallback if side logic is complex
+  };
+
+  const mainParticipantContingent = () => {
+    if (!scheduleDetails) return <Skeleton className="h-4 w-24 inline-block bg-[var(--monitor-skeleton-bg)] mt-1" />;
+    if (tgrTimerStatus.currentPerformingSide === 'biru' && scheduleDetails.pesilatBiruContingent) return scheduleDetails.pesilatBiruContingent;
+    if (tgrTimerStatus.currentPerformingSide === 'merah' && scheduleDetails.pesilatMerahContingent) return scheduleDetails.pesilatMerahContingent;
+    // Fallback logic for single performer or if one contingent is primary
+    return scheduleDetails.pesilatMerahContingent || scheduleDetails.pesilatBiruContingent || "Kontingen";
+  };
+  
+  const displaySideName = tgrTimerStatus.currentPerformingSide 
+    ? (tgrTimerStatus.currentPerformingSide === 'biru' ? 'SUDUT BIRU' : 'SUDUT MERAH')
+    : (scheduleDetails?.pesilatMerahName && !scheduleDetails.pesilatBiruName ? 'PESERTA' : (scheduleDetails?.pesilatBiruName && !scheduleDetails.pesilatMerahName ? 'PESERTA' : 'N/A'));
+
 
   return (
     <>
@@ -222,7 +278,7 @@ export default function MonitoringSkorTGRPage() {
         {/* Header Bar specific to this page */}
         <div className="bg-[var(--monitor-header-section-bg)] p-3 md:p-4 text-center text-sm md:text-base font-semibold text-[var(--monitor-text)]">
           <div className="grid grid-cols-4 gap-1 items-center">
-            <div>{mainParticipantName}</div>
+            <div>{displaySideName}</div>
             <div>Partai/Pool: {scheduleDetails?.lotNumber || <Skeleton className="h-5 w-16 inline-block bg-[var(--monitor-skeleton-bg)]" />}</div>
             <div>{scheduleDetails?.category || <Skeleton className="h-5 w-20 inline-block bg-[var(--monitor-skeleton-bg)]" />}</div>
             <div>Babak: {scheduleDetails?.round || <Skeleton className="h-5 w-20 inline-block bg-[var(--monitor-skeleton-bg)]" />}</div>
@@ -235,7 +291,7 @@ export default function MonitoringSkorTGRPage() {
             <div className="text-left">
               <div className="text-xs md:text-sm font-medium text-[var(--monitor-text-muted)]">KONTINGEN</div>
               <div className="text-lg md:text-2xl font-bold text-[var(--monitor-text)]">
-                {mainParticipantContingent}
+                {mainParticipantContingent()}
               </div>
             </div>
             <div className="text-right">
@@ -254,11 +310,9 @@ export default function MonitoringSkorTGRPage() {
               ))}
             </div>
             <div className="grid grid-cols-6 gap-1 md:gap-2">
-              {TGR_JURI_IDS.map(juriId => {
-                const scoreData = allJuriScores[juriId];
-                const displayScore = scoreData && scoreData.isReady ? scoreData.calculatedScore.toFixed(2) : '-';
-                return <ScoreCell key={`score-${juriId}`} value={displayScore} isLoadingValue={isLoading && !matchDetailsLoaded} />;
-              })}
+               {TGR_JURI_IDS.map(juriId => (
+                <ScoreCell key={`score-${juriId}`} juriId={juriId} isLoadingJuriData={isLoading && !matchDetailsLoaded} />
+              ))}
             </div>
           </div>
 
@@ -267,6 +321,9 @@ export default function MonitoringSkorTGRPage() {
             <div className="mt-auto pt-4 text-center text-xs md:text-sm text-[var(--monitor-status-text)]">
               Status: {tgrTimerStatus.matchStatus}
               {tgrTimerStatus.isTimerRunning && " (Berjalan)"}
+               {!tgrTimerStatus.isTimerRunning && tgrTimerStatus.timerSeconds > 0 && tgrTimerStatus.matchStatus === 'Paused' && " (Jeda)"}
+              {tgrTimerStatus.matchStatus === 'Finished' && tgrTimerStatus.currentPerformingSide && ` (${tgrTimerStatus.currentPerformingSide === 'biru' ? "Sudut Biru" : "Sudut Merah"} Selesai)`}
+              {tgrTimerStatus.matchStatus === 'Finished' && tgrTimerStatus.currentPerformingSide === null && " (Partai Selesai)"}
             </div>
           )}
         </div>
@@ -284,12 +341,12 @@ export default function MonitoringSkorTGRPage() {
               <p className="text-xl text-center text-[var(--monitor-overlay-text-primary)] mb-2">{error || "Tidak ada pertandingan TGR yang aktif untuk dimonitor."}</p>
               <p className="text-sm text-center text-[var(--monitor-overlay-text-secondary)] mb-6">Silakan aktifkan jadwal TGR di panel admin atau tunggu pertandingan dimulai.</p>
               <Button variant="outline" asChild className="bg-[var(--monitor-overlay-button-bg)] border-[var(--monitor-overlay-button-border)] hover:bg-[var(--monitor-overlay-button-hover-bg)] text-[var(--monitor-overlay-button-text)]">
-                <Link href="/scoring/tgr"><ArrowLeft className="mr-2 h-4 w-4" /> Kembali</Link>
+                <Link href="/scoring/tgr/login"><ArrowLeft className="mr-2 h-4 w-4" /> Kembali</Link>
               </Button>
            </div>
         )}
         
-        {tgrTimerStatus.matchStatus === 'Finished' && (
+        {tgrTimerStatus.matchStatus === 'Finished' && tgrTimerStatus.currentPerformingSide === null && (
             <Button
                 onClick={handleNextMatchNavigation}
                 disabled={isNavigatingNextMatch || isLoading}
