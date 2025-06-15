@@ -8,7 +8,7 @@ import { PageTitle } from '@/components/shared/PageTitle';
 import { Button } from '@/components/ui/button';
 import { ArrowLeft, Trash2, Loader2, MinusCircle } from 'lucide-react';
 import type { ScheduleTGR, TGRDewanPenalty, TGRDewanPenaltyType, TGRJuriScore } from '@/lib/types';
-import { db } from '@/lib/firebase';
+import { db, auth } from '@/lib/firebase'; // Import auth
 import { doc, onSnapshot, getDoc, collection, addDoc, query, orderBy, limit, deleteDoc, serverTimestamp, Timestamp, where, getDocs, setDoc, updateDoc, writeBatch } from 'firebase/firestore';
 import { Skeleton } from '@/components/ui/skeleton';
 
@@ -141,6 +141,18 @@ export default function DewanTGRPenaltyPage() {
 
   const handleAddPenalty = async (penalty: PenaltyConfig) => {
     console.log(`[handleAddPenalty] Triggered for penalty: ${penalty.id}, activeMatchId: ${activeMatchId}`);
+    
+    // --- ADDED AUTH CHECK ---
+    const currentUser = auth.currentUser;
+    console.log("[handleAddPenalty] Current Firebase Auth User:", currentUser ? currentUser.uid : "NULL");
+    if (!currentUser) {
+      setError("User tidak terautentikasi. Silakan login ulang dan coba lagi.");
+      alert("User tidak terautentikasi. Silakan login ulang dan coba lagi.");
+      setIsProcessing(prev => ({ ...prev, [penalty.id]: false })); // Ensure processing state is reset
+      return;
+    }
+    // --- END AUTH CHECK ---
+
     if (!activeMatchId || activeMatchId.trim() === "" || isProcessing[penalty.id]) {
       if (!activeMatchId || activeMatchId.trim() === "") {
         console.error("handleAddPenalty aborted: activeMatchId is invalid.", { activeMatchId });
@@ -226,6 +238,18 @@ export default function DewanTGRPenaltyPage() {
 
   const handleDeleteLastPenalty = async (penaltyType: TGRDewanPenaltyType) => {
     console.log(`[handleDeleteLastPenalty] Triggered for penaltyType: ${penaltyType}, activeMatchId: ${activeMatchId}`);
+    
+    // --- ADDED AUTH CHECK ---
+    const currentUser = auth.currentUser;
+    console.log("[handleDeleteLastPenalty] Current Firebase Auth User:", currentUser ? currentUser.uid : "NULL");
+    if (!currentUser) {
+      setError("User tidak terautentikasi. Silakan login ulang dan coba lagi.");
+      alert("User tidak terautentikasi. Silakan login ulang dan coba lagi.");
+      setIsProcessing(prev => ({ ...prev, [penaltyType]: false })); // Reset processing state
+      return;
+    }
+    // --- END AUTH CHECK ---
+
      if (!activeMatchId || activeMatchId.trim() === "" || isProcessing[penaltyType]) {
         if (!activeMatchId || activeMatchId.trim() === "") {
           console.error("[handleDeleteLastPenalty] Aborted: activeMatchId is invalid.", { activeMatchId });
@@ -416,4 +440,3 @@ export default function DewanTGRPenaltyPage() {
     </div>
   );
 }
-
