@@ -183,28 +183,28 @@ export interface JuriMatchData {
 
 // --- TGR Scoring Types ---
 export interface TGRTimerStatus {
-  timerSeconds: number;
+  timerSeconds: number; // Remaining time for current side's performance
   isTimerRunning: boolean;
-  matchStatus: 'Pending' | 'Ongoing' | 'Paused' | 'Finished';
-  performanceDuration: number;
+  matchStatus: 'Pending' | 'Ongoing' | 'Paused' | 'Finished'; // Status for the currentPerformingSide or overall match
+  performanceDuration: number; // Target duration for the round/category
   currentPerformingSide: 'biru' | 'merah' | null;
-  performanceDurationBiru?: number; // Duration specifically for Biru side's performance
-  performanceDurationMerah?: number; // Duration specifically for Merah side's performance
+  performanceDurationBiru?: number; // Actual recorded performance time for Biru
+  performanceDurationMerah?: number; // Actual recorded performance time for Merah
 }
 
 export interface SideSpecificTGRScore {
   gerakanSalahCount: number;
   staminaKemantapanBonus: number;
-  externalDeductions: number;
+  externalDeductions: number; // Sum of dewan penalties for this side
   calculatedScore: number;
-  isReady?: boolean;
+  isReady?: boolean; // Juri has finalized score for this side
 }
 
 export interface TGRJuriScore {
   id?: string;
   baseScore: number; // Default 9.90
-  biru: SideSpecificTGRScore; // Scores for Sudut Biru
-  merah: SideSpecificTGRScore; // Scores for Sudut Merah
+  biru: SideSpecificTGRScore;
+  merah: SideSpecificTGRScore;
   lastUpdated?: FirebaseTimestamp | Date | { seconds: number; nanoseconds: number } | null;
 }
 
@@ -219,21 +219,22 @@ export interface TGRDewanPenalty {
   id?: string;
   type: TGRDewanPenaltyType;
   description: string;
-  pointsDeducted: number;
+  pointsDeducted: number; // Should be negative
   side: 'biru' | 'merah'; // Indicates which side the penalty applies to
   timestamp: FirebaseTimestamp | Date | { seconds: number; nanoseconds: number };
 }
 
-export interface TGRMatchData {
+export interface TGRMatchData { // This type might be less used if we manage status directly in TGRTimerStatus
   id: string;
   scheduleDetails: ScheduleTGR;
-  timerStatus: TGRTimerStatus;
+  timerStatus: TGRTimerStatus; // Centralized timer and status
   finalMedianScoreBiru?: number;
   finalMedianScoreMerah?: number;
   totalDewanPenaltyPointsBiru?: number;
   totalDewanPenaltyPointsMerah?: number;
   overallScoreBiru?: number;
   overallScoreMerah?: number;
+  // status field below could be derived from TGRTimerStatus.matchStatus and TGRTimerStatus.currentPerformingSide
   status: 'Pending' | 'OngoingBiru' | 'OngoingMerah' | 'PausedBiru' | 'PausedMerah' | 'FinishedBiru' | 'FinishedMerah' | 'MatchFinished';
 }
 // --- End TGR Scoring Types ---

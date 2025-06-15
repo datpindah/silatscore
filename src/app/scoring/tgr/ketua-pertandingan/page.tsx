@@ -41,8 +41,10 @@ const initialTgrTimerStatus: TGRTimerStatus = {
   timerSeconds: 0,
   isTimerRunning: false,
   matchStatus: 'Pending',
-  performanceDuration: 0,
+  performanceDuration: 180,
   currentPerformingSide: null,
+  performanceDurationBiru: 0,
+  performanceDurationMerah: 0,
 };
 
 const initialSideScores = { biru: 0, merah: 0 };
@@ -149,7 +151,7 @@ export default function KetuaPertandinganTGRPage() {
 
   useEffect(() => {
     if (!activeMatchId) {
-      setMatchDetailsLoaded(false); // Ensure this is reset if activeMatchId becomes null
+      setMatchDetailsLoaded(false); 
       if (!error?.includes("konfigurasi")) setError(null);
       return;
     }
@@ -160,7 +162,7 @@ export default function KetuaPertandinganTGRPage() {
     const loadData = async (currentMatchId: string) => {
       if (!mounted || !currentMatchId) return;
       
-      setMatchDetailsLoaded(false); // Start with not loaded for new ID
+      // setMatchDetailsLoaded(false); // Start with not loaded for new ID
 
       try {
         const scheduleDocRef = doc(db, SCHEDULE_TGR_COLLECTION, currentMatchId);
@@ -169,12 +171,12 @@ export default function KetuaPertandinganTGRPage() {
 
         if (scheduleDocSnap.exists()) {
           setScheduleDetails(scheduleDocSnap.data() as ScheduleTGR);
-          setMatchDetailsLoaded(true); // Set loaded after successful fetch
+          setMatchDetailsLoaded(true); 
         } else {
           setError(`Detail jadwal TGR ID ${currentMatchId} tidak ditemukan.`);
           setScheduleDetails(null);
-          setMatchDetailsLoaded(false); // Ensure false on error
-          return; // Stop further subscriptions if schedule not found
+          setMatchDetailsLoaded(false); 
+          return; 
         }
 
         const matchDataDocRef = doc(db, MATCHES_TGR_COLLECTION, currentMatchId);
@@ -182,10 +184,11 @@ export default function KetuaPertandinganTGRPage() {
           if (!mounted) return;
           if (docSnap.exists()) {
             const data = docSnap.data();
-            if (data?.timerStatus) setTgrTimerStatus(data.timerStatus as TGRTimerStatus);
-            else setTgrTimerStatus(initialTgrTimerStatus);
+            // Ensure all fields from initialGlobalTgrTimerStatus are present
+            const fsTimerStatus = data?.timerStatus as TGRTimerStatus | undefined;
+            setTgrTimerStatus(fsTimerStatus ? { ...initialGlobalTgrTimerStatus, ...fsTimerStatus } : initialGlobalTgrTimerStatus);
           } else {
-            setTgrTimerStatus(initialTgrTimerStatus);
+            setTgrTimerStatus(initialGlobalTgrTimerStatus);
           }
         }));
 
@@ -208,7 +211,7 @@ export default function KetuaPertandinganTGRPage() {
         if (mounted) { 
           console.error("[KetuaTGR] Error in loadData:", err); 
           setError("Gagal memuat data pertandingan TGR."); 
-          setMatchDetailsLoaded(false); // Ensure false on catch
+          setMatchDetailsLoaded(false); 
         }
       }
     };
@@ -235,10 +238,9 @@ export default function KetuaPertandinganTGRPage() {
     const sides: ('biru' | 'merah')[] = [];
     if (scheduleDetails.pesilatBiruName) sides.push('biru');
     if (scheduleDetails.pesilatMerahName) sides.push('merah');
-    // If neither, it's a single performer usually mapped to Merah by default in input, but here we need a side.
-    // Let's default to 'merah' if no biru, but schedule implies at least one.
+    
     if (sides.length === 0 && (scheduleDetails.pesilatMerahName || scheduleDetails.pesilatBiruName)) {
-        sides.push('merah');
+        sides.push('merah'); // Default to merah if only one participant (name might be in merahName or biruName)
     }
 
 
@@ -267,14 +269,16 @@ export default function KetuaPertandinganTGRPage() {
 
   }, [allJuriScores, dewanPenalties, scheduleDetails]);
 
-  const formatWaktuPenampilan = (seconds: number) => {
-    const minutes = Math.floor(seconds / 60);
-    const remainingSeconds = seconds % 60;
+  const formatWaktuPenampilan = (seconds: number | undefined) => {
+    if (seconds === undefined || seconds === null) return { menit: 0, detik: 0};
+    const validSeconds = Math.max(0, seconds); // Ensure non-negative
+    const minutes = Math.floor(validSeconds / 60);
+    const remainingSeconds = validSeconds % 60;
     return { menit: minutes, detik: remainingSeconds };
   };
   
-  const waktuTampilBiru = formatWaktuPenampilan(tgrTimerStatus.performanceDurationBiru || tgrTimerStatus.performanceDuration || 0);
-  const waktuTampilMerah = formatWaktuPenampilan(tgrTimerStatus.performanceDurationMerah || tgrTimerStatus.performanceDuration || 0);
+  const waktuTampilBiru = formatWaktuPenampilan(tgrTimerStatus.performanceDurationBiru);
+  const waktuTampilMerah = formatWaktuPenampilan(tgrTimerStatus.performanceDurationMerah);
 
 
   if (derivedIsLoading) {
@@ -324,12 +328,20 @@ export default function KetuaPertandinganTGRPage() {
 
   const getKontingenName = (side: 'biru' | 'merah') => {
     if (!scheduleDetails) return "N/A";
-    return side === 'biru' ? (scheduleDetails.pesilatBiruContingent || scheduleDetails.pesilatMerahContingent || "Kontingen") : (scheduleDetails.pesilatMerahContingent || "Kontingen");
+    // If one of them is undefined/empty, use the other one if available (for single participant)
+    const biruKontingen = scheduleDetails.pesilatBiruContingent;
+    const merahKontingen = scheduleDetails.pesilatMerahContingent;
+
+    if (side === 'biru') {
+        return biruKontingen || merahKontingen || "Kontingen";
+    }
+    // side === 'merah'
+    return merahKontingen || biruKontingen || "Kontingen";
   };
   
   const renderSideScoresTable = (side: 'biru' | 'merah') => {
     if (side === 'biru' && !scheduleDetails.pesilatBiruName) return null;
-    if (side === 'merah' && !scheduleDetails.pesilatMerahName && scheduleDetails.pesilatBiruName) return null; // If only biru, don't render merah empty table
+    if (side === 'merah' && !scheduleDetails.pesilatMerahName && scheduleDetails.pesilatBiruName) return null; 
     
     const participantName = getParticipantName(side);
     const kontingenName = getKontingenName(side);
@@ -338,13 +350,14 @@ export default function KetuaPertandinganTGRPage() {
     const final = finalScores[side];
     const stdDev = standardDeviations[side];
     const waktuTampil = side === 'biru' ? waktuTampilBiru : waktuTampilMerah;
+    const recordedPerformanceDuration = side === 'biru' ? tgrTimerStatus.performanceDurationBiru : tgrTimerStatus.performanceDurationMerah;
 
     return (
       <div className="mb-8">
         <div className={cn("text-white p-3 md:p-4 text-center rounded-t-lg shadow-md", side === 'biru' ? 'bg-blue-600' : 'bg-red-600')}>
           <div className="flex justify-between items-center">
             <span className="text-lg md:text-xl font-semibold">{participantName.toUpperCase()}</span>
-            <span className="text-lg md:text-xl font-semibold">{scheduleDetails.babak?.toUpperCase()}</span>
+            <span className="text-lg md:text-xl font-semibold">{scheduleDetails.round?.toUpperCase()}</span> {/* Changed from babak to round */}
             <span className="text-lg md:text-xl font-semibold">{scheduleDetails.category?.toUpperCase()}</span>
           </div>
         </div>
@@ -386,8 +399,12 @@ export default function KetuaPertandinganTGRPage() {
               <div className="mt-3 space-y-1 text-sm">
                 <div className="grid grid-cols-[200px_1fr_1fr_1fr] items-center">
                   <span className="font-medium px-2">Waktu Penampilan</span>
-                  <div className="text-center"><span className="font-semibold">{waktuTampil.menit}</span> <span className="text-xs">Menit</span></div>
-                  <div className="text-center"><span className="font-semibold">{waktuTampil.detik}</span> <span className="text-xs">Detik</span></div>
+                   <div className="text-center">
+                     <span className="font-semibold">{recordedPerformanceDuration ? formatWaktuPenampilan(recordedPerformanceDuration).menit : waktuTampil.menit}</span> <span className="text-xs">Menit</span>
+                   </div>
+                   <div className="text-center">
+                     <span className="font-semibold">{recordedPerformanceDuration ? formatWaktuPenampilan(recordedPerformanceDuration).detik : waktuTampil.detik}</span> <span className="text-xs">Detik</span>
+                   </div>
                   <div></div>
                 </div>
                 <div className="grid grid-cols-[200px_1fr] items-center bg-yellow-100 dark:bg-yellow-800/30 p-1 rounded">
