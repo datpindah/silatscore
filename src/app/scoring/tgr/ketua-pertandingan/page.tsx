@@ -37,15 +37,13 @@ const PENALTY_DISPLAY_ORDER: TGRDewanPenaltyType[] = [
   'movement_hold_violation',
 ];
 
-// Define initialGlobalTgrTimerStatus locally
 const initialGlobalTgrTimerStatus: TGRTimerStatus = {
-  timerSeconds: 180, // Default target duration for TGR
+  timerSeconds: 0, // Stopwatch starts at 0
   isTimerRunning: false,
   matchStatus: 'Pending',
-  performanceDuration: 180, // Target duration
   currentPerformingSide: null,
-  performanceDurationBiru: 0, // Actual recorded duration for Biru
-  performanceDurationMerah: 0, // Actual recorded duration for Merah
+  performanceDurationBiru: 0,
+  performanceDurationMerah: 0,
 };
 
 
@@ -164,7 +162,7 @@ export default function KetuaPertandinganTGRPage() {
     const loadData = async (currentMatchId: string) => {
       if (!mounted || !currentMatchId) return;
       
-      setMatchDetailsLoaded(false); // Start with not loaded for new ID
+      setMatchDetailsLoaded(false); 
 
       try {
         const scheduleDocRef = doc(db, SCHEDULE_TGR_COLLECTION, currentMatchId);
@@ -186,7 +184,6 @@ export default function KetuaPertandinganTGRPage() {
           if (!mounted) return;
           if (docSnap.exists()) {
             const data = docSnap.data();
-            // Ensure all fields from initialGlobalTgrTimerStatus are present
             const fsTimerStatus = data?.timerStatus as TGRTimerStatus | undefined;
             setTgrTimerStatus(fsTimerStatus ? { ...initialGlobalTgrTimerStatus, ...fsTimerStatus } : initialGlobalTgrTimerStatus);
           } else {
@@ -239,10 +236,14 @@ export default function KetuaPertandinganTGRPage() {
     
     const sides: ('biru' | 'merah')[] = [];
     if (scheduleDetails.pesilatBiruName) sides.push('biru');
+    // If only one participant (e.g. Tunggal), pesilatMerahName holds their info.
+    // If it's Ganda/Regu with only one "team" entry, it also uses pesilatMerahName.
     if (scheduleDetails.pesilatMerahName) sides.push('merah');
     
-    if (sides.length === 0 && (scheduleDetails.pesilatMerahName || scheduleDetails.pesilatBiruName)) {
-        sides.push('merah'); // Default to merah if only one participant (name might be in merahName or biruName)
+    // This handles cases where a single performer is listed, ensuring they are processed.
+    // If sides is empty but we have a name (e.g. only pesilatMerahName), default to merah.
+    if (sides.length === 0 && (scheduleDetails.pesilatMerahName || scheduleDetails.pesilatBiruName) ) {
+        sides.push(scheduleDetails.pesilatMerahName ? 'merah' : 'biru'); 
     }
 
 
@@ -272,10 +273,10 @@ export default function KetuaPertandinganTGRPage() {
   }, [allJuriScores, dewanPenalties, scheduleDetails]);
 
   const formatWaktuPenampilan = (seconds: number | undefined) => {
-    if (seconds === undefined || seconds === null) return { menit: 0, detik: 0};
-    const validSeconds = Math.max(0, seconds); // Ensure non-negative
+    if (seconds === undefined || seconds === null || isNaN(seconds)) return { menit: 0, detik: 0};
+    const validSeconds = Math.max(0, seconds); 
     const minutes = Math.floor(validSeconds / 60);
-    const remainingSeconds = validSeconds % 60;
+    const remainingSeconds = Math.round(validSeconds % 60); // Round to nearest second
     return { menit: minutes, detik: remainingSeconds };
   };
   
@@ -330,20 +331,21 @@ export default function KetuaPertandinganTGRPage() {
 
   const getKontingenName = (side: 'biru' | 'merah') => {
     if (!scheduleDetails) return "N/A";
-    // If one of them is undefined/empty, use the other one if available (for single participant)
     const biruKontingen = scheduleDetails.pesilatBiruContingent;
     const merahKontingen = scheduleDetails.pesilatMerahContingent;
 
     if (side === 'biru') {
         return biruKontingen || merahKontingen || "Kontingen";
     }
-    // side === 'merah'
     return merahKontingen || biruKontingen || "Kontingen";
   };
   
   const renderSideScoresTable = (side: 'biru' | 'merah') => {
+    // Condition to render a side:
+    // - For 'biru', only if pesilatBiruName exists.
+    // - For 'merah', if pesilatMerahName exists (covers both Ganda/Regu Merah and Tunggal/Solo Merah).
     if (side === 'biru' && !scheduleDetails.pesilatBiruName) return null;
-    if (side === 'merah' && !scheduleDetails.pesilatMerahName && scheduleDetails.pesilatBiruName) return null; 
+    if (side === 'merah' && !scheduleDetails.pesilatMerahName) return null; 
     
     const participantName = getParticipantName(side);
     const kontingenName = getKontingenName(side);
@@ -359,7 +361,7 @@ export default function KetuaPertandinganTGRPage() {
         <div className={cn("text-white p-3 md:p-4 text-center rounded-t-lg shadow-md", side === 'biru' ? 'bg-blue-600' : 'bg-red-600')}>
           <div className="flex justify-between items-center">
             <span className="text-lg md:text-xl font-semibold">{participantName.toUpperCase()}</span>
-            <span className="text-lg md:text-xl font-semibold">{scheduleDetails.round?.toUpperCase()}</span> {/* Changed from babak to round */}
+            <span className="text-lg md:text-xl font-semibold">{scheduleDetails.round?.toUpperCase()}</span>
             <span className="text-lg md:text-xl font-semibold">{scheduleDetails.category?.toUpperCase()}</span>
           </div>
         </div>
@@ -385,14 +387,14 @@ export default function KetuaPertandinganTGRPage() {
                   <TableRow><TableCell className="font-medium py-2 px-2">Skor</TableCell>
                     {TGR_JURI_IDS.map(id => (
                       <TableCell key={`kebenaran-${id}-${side}`} className="text-center py-2 px-2">
-                        {allJuriScores[id]?.[side]?.isReady ? allJuriScores[id]?.[side]?.calculatedScore.toFixed(2) : '-'}
+                        {derivedIsLoading ? <Skeleton className="h-5 w-10 mx-auto" /> : (allJuriScores[id]?.[side]?.isReady ? allJuriScores[id]?.[side]?.calculatedScore.toFixed(2) : '-')}
                       </TableCell>
                     ))}
                   </TableRow>
                   <TableRow><TableCell className="font-medium py-2 px-2">Stamina/Flow <span className="text-xs">(0.01-0.10)</span></TableCell>
                     {TGR_JURI_IDS.map(id => (
                       <TableCell key={`stamina-${id}-${side}`} className="text-center py-2 px-2">
-                        {allJuriScores[id]?.[side]?.isReady ? allJuriScores[id]?.[side]?.staminaKemantapanBonus.toFixed(2) : '-'}
+                        {derivedIsLoading ? <Skeleton className="h-5 w-10 mx-auto" /> : (allJuriScores[id]?.[side]?.isReady ? allJuriScores[id]?.[side]?.staminaKemantapanBonus.toFixed(2) : '-')}
                       </TableCell>
                     ))}
                   </TableRow>
@@ -402,16 +404,16 @@ export default function KetuaPertandinganTGRPage() {
                 <div className="grid grid-cols-[200px_1fr_1fr_1fr] items-center">
                   <span className="font-medium px-2">Waktu Penampilan</span>
                    <div className="text-center">
-                     <span className="font-semibold">{recordedPerformanceDuration ? formatWaktuPenampilan(recordedPerformanceDuration).menit : waktuTampil.menit}</span> <span className="text-xs">Menit</span>
+                     <span className="font-semibold">{derivedIsLoading ? <Skeleton className="h-5 w-8 inline-block"/> : (recordedPerformanceDuration ? formatWaktuPenampilan(recordedPerformanceDuration).menit : waktuTampil.menit)}</span> <span className="text-xs">Menit</span>
                    </div>
                    <div className="text-center">
-                     <span className="font-semibold">{recordedPerformanceDuration ? formatWaktuPenampilan(recordedPerformanceDuration).detik : waktuTampil.detik}</span> <span className="text-xs">Detik</span>
+                     <span className="font-semibold">{derivedIsLoading ? <Skeleton className="h-5 w-8 inline-block"/> : (recordedPerformanceDuration ? formatWaktuPenampilan(recordedPerformanceDuration).detik : waktuTampil.detik)}</span> <span className="text-xs">Detik</span>
                    </div>
                   <div></div>
                 </div>
                 <div className="grid grid-cols-[200px_1fr] items-center bg-yellow-100 dark:bg-yellow-800/30 p-1 rounded">
                   <span className="font-bold px-2 text-yellow-700 dark:text-yellow-300">Median</span>
-                  <span className="font-bold text-center text-yellow-700 dark:text-yellow-300">{median.toFixed(2)}</span>
+                  <span className="font-bold text-center text-yellow-700 dark:text-yellow-300">{derivedIsLoading ? <Skeleton className="h-5 w-12 inline-block"/> : median.toFixed(2)}</span>
                 </div>
               </div>
             </div>
@@ -426,7 +428,7 @@ export default function KetuaPertandinganTGRPage() {
                     <div key={`${penaltyType}-${side}`} className="flex justify-between items-center p-1.5 bg-gray-50 dark:bg-gray-700/40 rounded">
                       <span className="text-gray-600 dark:text-gray-300">{PENALTY_DESCRIPTIONS_MAP[penaltyType]}</span>
                       <span className={cn("font-semibold px-1.5 py-0.5 rounded text-white", sidePenaltyValue < 0 ? "bg-red-500" : "bg-gray-400 dark:bg-gray-600")}>
-                        {sidePenaltyValue.toFixed(2)}
+                        {derivedIsLoading ? <Skeleton className="h-4 w-10 inline-block"/> : sidePenaltyValue.toFixed(2)}
                       </span>
                     </div>
                   );
@@ -438,11 +440,11 @@ export default function KetuaPertandinganTGRPage() {
              <div className="grid grid-cols-[200px_1fr_200px_1fr] items-center gap-x-4">
                 <span className="font-bold text-lg text-right text-green-600 dark:text-green-400">Final Skor</span>
                 <span className="font-bold text-lg text-left text-green-700 dark:text-green-300 py-1 px-2 bg-green-100 dark:bg-green-800/30 rounded w-min">
-                    {final.toFixed(2)}
+                    {derivedIsLoading ? <Skeleton className="h-6 w-16 inline-block"/> : final.toFixed(2)}
                 </span>
                 <span className="font-medium text-right">Standard Deviation</span>
                 <span className="font-medium text-left py-1 px-2 bg-gray-100 dark:bg-gray-700/50 rounded w-min">
-                    {stdDev.toFixed(2)}
+                    {derivedIsLoading ? <Skeleton className="h-5 w-12 inline-block"/> : stdDev.toFixed(2)}
                 </span>
              </div>
           </div>
@@ -456,7 +458,7 @@ export default function KetuaPertandinganTGRPage() {
     <div className="flex flex-col min-h-screen bg-gray-100 dark:bg-gray-900">
       <Header />
       <main className="flex-1 container mx-auto px-2 py-4 md:p-6">
-        {scheduleDetails?.pesilatBiruName && renderSideScoresTable('biru')}
+        {renderSideScoresTable('biru')}
         {renderSideScoresTable('merah')}
         
         <div className="mt-8 text-center">
@@ -468,3 +470,4 @@ export default function KetuaPertandinganTGRPage() {
     </div>
   );
 }
+

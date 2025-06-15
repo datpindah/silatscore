@@ -183,11 +183,11 @@ export interface JuriMatchData {
 
 // --- TGR Scoring Types ---
 export interface TGRTimerStatus {
-  timerSeconds: number; // Remaining time for current side's performance
+  timerSeconds: number; // Elapsed time for stopwatch, or remaining for countdown
   isTimerRunning: boolean;
-  matchStatus: 'Pending' | 'Ongoing' | 'Paused' | 'Finished'; // Status for the currentPerformingSide or overall match
-  performanceDuration: number; // Target duration for the round/category
+  matchStatus: 'Pending' | 'Ongoing' | 'Paused' | 'Finished';
   currentPerformingSide: 'biru' | 'merah' | null;
+  performanceDuration?: number; // Target/max duration if still needed, for stopwatch less critical
   performanceDurationBiru?: number; // Actual recorded performance time for Biru
   performanceDurationMerah?: number; // Actual recorded performance time for Merah
 }
