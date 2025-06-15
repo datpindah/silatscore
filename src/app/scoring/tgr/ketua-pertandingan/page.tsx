@@ -4,12 +4,10 @@
 import { useState, useEffect, useCallback } from 'react';
 import Link from 'next/link';
 import { Header } from '@/components/layout/Header';
-import { PageTitle } from '@/components/shared/PageTitle';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow, TableCaption } from "@/components/ui/table";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { ArrowLeft, Loader2, Info } from 'lucide-react';
-import type { ScheduleTGR, TGRTimerStatus, TGRJuriScore, TGRDewanPenalty, TGRDewanPenaltyType } from '@/lib/types';
+import type { ScheduleTGR, TGRTimerStatus, TGRJuriScore, TGRDewanPenalty, TGRDewanPenaltyType, SideSpecificTGRScore } from '@/lib/types';
 import { db } from '@/lib/firebase';
 import { doc, onSnapshot, getDoc, collection, query, orderBy, Timestamp } from 'firebase/firestore';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -24,11 +22,11 @@ const DEWAN_PENALTIES_TGR_SUBCOLLECTION = 'dewan_penalties_tgr';
 const TGR_JURI_IDS = ['juri-1', 'juri-2', 'juri-3', 'juri-4', 'juri-5', 'juri-6'] as const;
 
 const PENALTY_DESCRIPTIONS_MAP: Record<TGRDewanPenaltyType, string> = {
-  'arena_out': "Penampilan Keluar Gelanggang 10mx10m",
-  'weapon_touch_floor': "Menjatuhkan Senjata Menyentuh Lantai",
-  'time_tolerance_violation': "Penampilan melebihi atau kurang dari toleransi waktu",
-  'costume_violation': "Pakaian tidak sesuai aturan",
-  'movement_hold_violation': "Menahan gerakan lebih dari 5 (lima) detik."
+  'arena_out': "Keluar Gelanggang",
+  'weapon_touch_floor': "Senjata Jatuh",
+  'time_tolerance_violation': "Toleransi Waktu",
+  'costume_violation': "Pakaian",
+  'movement_hold_violation': "Gerakan Tertahan"
 };
 
 const PENALTY_DISPLAY_ORDER: TGRDewanPenaltyType[] = [
@@ -39,18 +37,33 @@ const PENALTY_DISPLAY_ORDER: TGRDewanPenaltyType[] = [
   'movement_hold_violation',
 ];
 
-
 const initialTgrTimerStatus: TGRTimerStatus = {
   timerSeconds: 0,
   isTimerRunning: false,
   matchStatus: 'Pending',
   performanceDuration: 0,
+  currentPerformingSide: null,
+};
+
+const initialSideScores = { biru: 0, merah: 0 };
+const initialSideSpecificTGRScore: SideSpecificTGRScore = {
+  gerakanSalahCount: 0,
+  staminaKemantapanBonus: 0,
+  externalDeductions: 0,
+  calculatedScore: 0,
+  isReady: false,
 };
 
 const initialAllJuriScores: Record<string, TGRJuriScore | null> = TGR_JURI_IDS.reduce((acc, id) => {
-  acc[id] = null;
+  acc[id] = {
+    baseScore: 9.90,
+    biru: { ...initialSideSpecificTGRScore },
+    merah: { ...initialSideSpecificTGRScore },
+    lastUpdated: null,
+  };
   return acc;
 }, {} as Record<string, TGRJuriScore | null>);
+
 
 function calculateStandardDeviation(scores: number[]): number {
   if (scores.length < 2) return 0;
@@ -61,12 +74,12 @@ function calculateStandardDeviation(scores: number[]): number {
 
 function calculateMedian(scores: number[]): number {
   if (scores.length === 0) return 0;
-  if (scores.length < 3) { // If less than 3 scores, average them (or handle as per specific rule)
+  if (scores.length < 3) { 
     return parseFloat((scores.reduce((sum, score) => sum + score, 0) / scores.length).toFixed(2));
   }
   const sortedScores = [...scores].sort((a, b) => a - b);
-  const scoresToAverage = sortedScores.slice(1, -1); // Drop highest and lowest
-  if (scoresToAverage.length === 0) { // Should not happen if initial length >=3, but as a safeguard
+  const scoresToAverage = sortedScores.slice(1, -1); 
+  if (scoresToAverage.length === 0) { 
       return parseFloat((sortedScores.reduce((a,b) => a+b, 0) / sortedScores.length).toFixed(2));
   }
   return parseFloat((scoresToAverage.reduce((sum, score) => sum + score, 0) / scoresToAverage.length).toFixed(2));
@@ -82,15 +95,15 @@ export default function KetuaPertandinganTGRPage() {
   const [allJuriScores, setAllJuriScores] = useState<Record<string, TGRJuriScore | null>>(initialAllJuriScores);
   const [dewanPenalties, setDewanPenalties] = useState<TGRDewanPenalty[]>([]);
 
-  const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
   const [matchDetailsLoaded, setMatchDetailsLoaded] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
-  // Calculated values
-  const [medianScore, setMedianScore] = useState(0);
-  const [totalDewanPenaltyPoints, setTotalDewanPenaltyPoints] = useState(0);
-  const [finalScore, setFinalScore] = useState(0);
-  const [standardDeviation, setStandardDeviation] = useState(0);
+  const [medianScores, setMedianScores] = useState<{biru: number; merah: number}>(initialSideScores);
+  const [totalDewanPenaltyPointsMap, setTotalDewanPenaltyPointsMap] = useState<{biru: number; merah: number}>(initialSideScores);
+  const [finalScores, setFinalScores] = useState<{biru: number; merah: number}>(initialSideScores);
+  const [standardDeviations, setStandardDeviations] = useState<{biru: number; merah: number}>(initialSideScores);
+
+  const derivedIsLoading = configMatchId === undefined || (!!activeMatchId && !matchDetailsLoaded);
 
   const resetPageData = useCallback(() => {
     setScheduleDetails(null);
@@ -99,10 +112,10 @@ export default function KetuaPertandinganTGRPage() {
     setDewanPenalties([]);
     setMatchDetailsLoaded(false);
     setError(null);
-    setMedianScore(0);
-    setTotalDewanPenaltyPoints(0);
-    setFinalScore(0);
-    setStandardDeviation(0);
+    setMedianScores(initialSideScores);
+    setTotalDewanPenaltyPointsMap(initialSideScores);
+    setFinalScores(initialSideScores);
+    setStandardDeviations(initialSideScores);
   }, []);
 
   useEffect(() => {
@@ -118,10 +131,14 @@ export default function KetuaPertandinganTGRPage() {
   }, []);
 
   useEffect(() => {
-    if (configMatchId === undefined) { setIsLoading(true); return; }
+    if (configMatchId === undefined) return; 
     if (configMatchId === null) {
-      if (activeMatchId !== null) { resetPageData(); setActiveMatchId(null); }
-      setIsLoading(false); setError("Tidak ada jadwal TGR yang aktif."); return;
+      if (activeMatchId !== null) { 
+        resetPageData(); 
+        setActiveMatchId(null); 
+      }
+      setError("Tidak ada jadwal TGR yang aktif."); 
+      return;
     }
     if (configMatchId !== activeMatchId) {
       resetPageData();
@@ -129,32 +146,35 @@ export default function KetuaPertandinganTGRPage() {
     }
   }, [configMatchId, activeMatchId, resetPageData]);
 
+
   useEffect(() => {
     if (!activeMatchId) {
-      setIsLoading(false);
+      setMatchDetailsLoaded(false); // Ensure this is reset if activeMatchId becomes null
       if (!error?.includes("konfigurasi")) setError(null);
       return;
     }
 
-    setIsLoading(true);
     let mounted = true;
     const unsubscribers: (() => void)[] = [];
 
     const loadData = async (currentMatchId: string) => {
       if (!mounted || !currentMatchId) return;
+      
+      setMatchDetailsLoaded(false); // Start with not loaded for new ID
+
       try {
         const scheduleDocRef = doc(db, SCHEDULE_TGR_COLLECTION, currentMatchId);
         const scheduleDocSnap = await getDoc(scheduleDocRef);
         if (!mounted) return;
+
         if (scheduleDocSnap.exists()) {
           setScheduleDetails(scheduleDocSnap.data() as ScheduleTGR);
-          setMatchDetailsLoaded(true);
+          setMatchDetailsLoaded(true); // Set loaded after successful fetch
         } else {
           setError(`Detail jadwal TGR ID ${currentMatchId} tidak ditemukan.`);
           setScheduleDetails(null);
-          setMatchDetailsLoaded(false); // Explicitly set to false
-          setIsLoading(false); // Stop loading if details not found
-          return;
+          setMatchDetailsLoaded(false); // Ensure false on error
+          return; // Stop further subscriptions if schedule not found
         }
 
         const matchDataDocRef = doc(db, MATCHES_TGR_COLLECTION, currentMatchId);
@@ -185,7 +205,11 @@ export default function KetuaPertandinganTGRPage() {
         }));
 
       } catch (err) {
-        if (mounted) { console.error("[KetuaTGR] Error in loadData:", err); setError("Gagal memuat data pertandingan TGR."); }
+        if (mounted) { 
+          console.error("[KetuaTGR] Error in loadData:", err); 
+          setError("Gagal memuat data pertandingan TGR."); 
+          setMatchDetailsLoaded(false); // Ensure false on catch
+        }
       }
     };
 
@@ -193,56 +217,67 @@ export default function KetuaPertandinganTGRPage() {
     return () => { mounted = false; unsubscribers.forEach(unsub => unsub()); };
   }, [activeMatchId]);
 
-  useEffect(() => {
-    if (isLoading && matchDetailsLoaded && Object.values(allJuriScores).some(s => s !== null)) {
-      setIsLoading(false);
-    } else if (isLoading && activeMatchId === null) {
-      setIsLoading(false);
-    }
-  }, [isLoading, matchDetailsLoaded, allJuriScores, activeMatchId]);
 
-  // Calculations useEffect
   useEffect(() => {
-    const validJuriScores = TGR_JURI_IDS
-      .map(id => allJuriScores[id])
-      .filter(score => score && score.isReady)
-      .map(score => score!.calculatedScore);
-
-    if (validJuriScores.length > 0) {
-      const currentMedian = calculateMedian(validJuriScores);
-      setMedianScore(currentMedian);
-      setStandardDeviation(calculateStandardDeviation(validJuriScores));
-      
-      const currentTotalDewanPenalties = dewanPenalties.reduce((sum, p) => sum + p.pointsDeducted, 0);
-      setTotalDewanPenaltyPoints(currentTotalDewanPenalties);
-      
-      setFinalScore(parseFloat((currentMedian + currentTotalDewanPenalties).toFixed(2)));
-    } else {
-      setMedianScore(0);
-      setStandardDeviation(0);
-      const currentTotalDewanPenalties = dewanPenalties.reduce((sum, p) => sum + p.pointsDeducted, 0);
-      setTotalDewanPenaltyPoints(currentTotalDewanPenalties);
-      setFinalScore(parseFloat(currentTotalDewanPenalties.toFixed(2)));
+    if (!scheduleDetails) {
+      setMedianScores(initialSideScores);
+      setTotalDewanPenaltyPointsMap(initialSideScores);
+      setFinalScores(initialSideScores);
+      setStandardDeviations(initialSideScores);
+      return;
     }
-  }, [allJuriScores, dewanPenalties]);
+
+    const newMedianScores = { biru: 0, merah: 0 };
+    const newTotalPenalties = { biru: 0, merah: 0 };
+    const newFinalScores = { biru: 0, merah: 0 };
+    const newStdDevs = { biru: 0, merah: 0 };
+    
+    const sides: ('biru' | 'merah')[] = [];
+    if (scheduleDetails.pesilatBiruName) sides.push('biru');
+    if (scheduleDetails.pesilatMerahName) sides.push('merah');
+    // If neither, it's a single performer usually mapped to Merah by default in input, but here we need a side.
+    // Let's default to 'merah' if no biru, but schedule implies at least one.
+    if (sides.length === 0 && (scheduleDetails.pesilatMerahName || scheduleDetails.pesilatBiruName)) {
+        sides.push('merah');
+    }
+
+
+    sides.forEach(side => {
+      const validJuriScoresForSide = TGR_JURI_IDS
+        .map(id => allJuriScores[id]?.[side])
+        .filter(sideScore => sideScore && sideScore.isReady)
+        .map(sideScore => sideScore!.calculatedScore);
+
+      if (validJuriScoresForSide.length > 0) {
+        newMedianScores[side] = calculateMedian(validJuriScoresForSide);
+        newStdDevs[side] = calculateStandardDeviation(validJuriScoresForSide);
+      }
+
+      newTotalPenalties[side] = dewanPenalties
+        .filter(p => p.side === side)
+        .reduce((sum, p) => sum + p.pointsDeducted, 0);
+      
+      newFinalScores[side] = parseFloat((newMedianScores[side] + newTotalPenalties[side]).toFixed(2));
+    });
+
+    setMedianScores(newMedianScores);
+    setTotalDewanPenaltyPointsMap(newTotalPenalties);
+    setFinalScores(newFinalScores);
+    setStandardDeviations(newStdDevs);
+
+  }, [allJuriScores, dewanPenalties, scheduleDetails]);
 
   const formatWaktuPenampilan = (seconds: number) => {
     const minutes = Math.floor(seconds / 60);
     const remainingSeconds = seconds % 60;
     return { menit: minutes, detik: remainingSeconds };
   };
-  const waktuTampil = formatWaktuPenampilan(tgrTimerStatus.performanceDuration);
+  
+  const waktuTampilBiru = formatWaktuPenampilan(tgrTimerStatus.performanceDurationBiru || tgrTimerStatus.performanceDuration || 0);
+  const waktuTampilMerah = formatWaktuPenampilan(tgrTimerStatus.performanceDurationMerah || tgrTimerStatus.performanceDuration || 0);
 
 
-  const aggregatedPenalties: Record<string, number> = PENALTY_DISPLAY_ORDER.reduce((acc, type) => {
-    acc[type] = dewanPenalties
-      .filter(p => p.type === type)
-      .reduce((sum, p) => sum + p.pointsDeducted, 0);
-    return acc;
-  }, {} as Record<string, number>);
-
-
-  if (isLoading) {
+  if (derivedIsLoading) {
     return (
       <div className="flex flex-col min-h-screen">
         <Header />
@@ -282,138 +317,135 @@ export default function KetuaPertandinganTGRPage() {
     );
   }
   
-  const participantName = scheduleDetails.pesilatMerahName || "Nama Peserta";
-  const kontingenName = scheduleDetails.pesilatMerahContingent || "Kontingen";
-  const kategori = scheduleDetails.category || "Tunggal";
-  const babak = scheduleDetails.round || "N/A";
-  const gelanggangPartai = `Gelanggang ${scheduleDetails.place || 'N/A'}, Partai ${scheduleDetails.lotNumber || 'N/A'}`;
+  const getParticipantName = (side: 'biru' | 'merah') => {
+    if (!scheduleDetails) return "N/A";
+    return side === 'biru' ? (scheduleDetails.pesilatBiruName || "Pesilat Biru") : (scheduleDetails.pesilatMerahName || "Pesilat Merah");
+  };
 
+  const getKontingenName = (side: 'biru' | 'merah') => {
+    if (!scheduleDetails) return "N/A";
+    return side === 'biru' ? (scheduleDetails.pesilatBiruContingent || scheduleDetails.pesilatMerahContingent || "Kontingen") : (scheduleDetails.pesilatMerahContingent || "Kontingen");
+  };
+  
+  const renderSideScoresTable = (side: 'biru' | 'merah') => {
+    if (side === 'biru' && !scheduleDetails.pesilatBiruName) return null;
+    if (side === 'merah' && !scheduleDetails.pesilatMerahName && scheduleDetails.pesilatBiruName) return null; // If only biru, don't render merah empty table
+    
+    const participantName = getParticipantName(side);
+    const kontingenName = getKontingenName(side);
+    const median = medianScores[side];
+    const penalties = totalDewanPenaltyPointsMap[side];
+    const final = finalScores[side];
+    const stdDev = standardDeviations[side];
+    const waktuTampil = side === 'biru' ? waktuTampilBiru : waktuTampilMerah;
 
-  return (
-    <div className="flex flex-col min-h-screen bg-gray-100 dark:bg-gray-900">
-      <Header />
-      <main className="flex-1 container mx-auto px-2 py-4 md:p-6">
-        <div className="bg-blue-600 text-white p-3 md:p-4 text-center rounded-t-lg shadow-md">
+    return (
+      <div className="mb-8">
+        <div className={cn("text-white p-3 md:p-4 text-center rounded-t-lg shadow-md", side === 'biru' ? 'bg-blue-600' : 'bg-red-600')}>
           <div className="flex justify-between items-center">
             <span className="text-lg md:text-xl font-semibold">{participantName.toUpperCase()}</span>
-            <span className="text-lg md:text-xl font-semibold">{babak.toUpperCase()}</span>
-            <span className="text-lg md:text-xl font-semibold">{kategori.toUpperCase()}</span>
+            <span className="text-lg md:text-xl font-semibold">{scheduleDetails.babak?.toUpperCase()}</span>
+            <span className="text-lg md:text-xl font-semibold">{scheduleDetails.category?.toUpperCase()}</span>
           </div>
         </div>
-
         <div className="bg-white dark:bg-gray-800 p-3 md:p-4 shadow-md rounded-b-lg">
           <div className="flex justify-between items-center mb-4">
             <h2 className="text-md md:text-lg font-bold text-gray-700 dark:text-gray-200">
               KONTINGEN: {kontingenName.toUpperCase()}
             </h2>
             <div className="text-right">
-              <p className="text-sm md:text-md text-gray-600 dark:text-gray-400">{gelanggangPartai}</p>
+              <p className="text-sm md:text-md text-gray-600 dark:text-gray-400">Gelanggang {scheduleDetails.place || 'N/A'}, Partai {scheduleDetails.lotNumber || 'N/A'}</p>
             </div>
           </div>
-
-          <div className="grid grid-cols-1 lg:grid-cols-[2fr_1fr] gap-4">
-            {/* Juri Scores Table */}
+           <div className="grid grid-cols-1 lg:grid-cols-[2fr_1fr] gap-4">
             <div className="overflow-x-auto">
               <Table className="min-w-full">
-                <TableHeader>
-                  <TableRow className="bg-gray-200 dark:bg-gray-700">
-                    <TableHead className="py-2 px-2 text-gray-600 dark:text-gray-300 w-[200px]">Juri</TableHead>
-                    {TGR_JURI_IDS.map((id, index) => (
-                      <TableHead key={id} className="py-2 px-2 text-center text-gray-600 dark:text-gray-300">{index + 1}</TableHead>
-                    ))}
-                  </TableRow>
-                </TableHeader>
+                <TableHeader><TableRow className="bg-gray-200 dark:bg-gray-700">
+                  <TableHead className="py-2 px-2 text-gray-600 dark:text-gray-300 w-[200px]">Juri</TableHead>
+                  {TGR_JURI_IDS.map((id, index) => (
+                    <TableHead key={id} className="py-2 px-2 text-center text-gray-600 dark:text-gray-300">{index + 1}</TableHead>
+                  ))}
+                </TableRow></TableHeader>
                 <TableBody>
-                  <TableRow>
-                    <TableCell className="font-medium py-2 px-2">Kebenaran Skor</TableCell>
+                  <TableRow><TableCell className="font-medium py-2 px-2">Skor</TableCell>
                     {TGR_JURI_IDS.map(id => (
-                      <TableCell key={`kebenaran-${id}`} className="text-center py-2 px-2">
-                        {allJuriScores[id]?.isReady ? allJuriScores[id]?.calculatedScore.toFixed(2) : '-'}
+                      <TableCell key={`kebenaran-${id}-${side}`} className="text-center py-2 px-2">
+                        {allJuriScores[id]?.[side]?.isReady ? allJuriScores[id]?.[side]?.calculatedScore.toFixed(2) : '-'}
                       </TableCell>
                     ))}
                   </TableRow>
-                  <TableRow>
-                    <TableCell className="font-medium py-2 px-2">Urutan Gerakan/Stamina <span className="text-xs">(0.01-0.10)</span></TableCell>
+                  <TableRow><TableCell className="font-medium py-2 px-2">Stamina/Flow <span className="text-xs">(0.01-0.10)</span></TableCell>
                     {TGR_JURI_IDS.map(id => (
-                      <TableCell key={`stamina-${id}`} className="text-center py-2 px-2">
-                        {allJuriScores[id]?.isReady ? allJuriScores[id]?.staminaKemantapanBonus.toFixed(2) : '-'}
-                      </TableCell>
-                    ))}
-                  </TableRow>
-                  <TableRow className="bg-gray-100 dark:bg-gray-700/50 font-semibold">
-                    <TableCell className="py-2 px-2">Total Skor</TableCell>
-                    {TGR_JURI_IDS.map(id => (
-                      <TableCell key={`total-${id}`} className="text-center py-2 px-2">
-                        {allJuriScores[id]?.isReady ? allJuriScores[id]?.calculatedScore.toFixed(2) : '-'}
+                      <TableCell key={`stamina-${id}-${side}`} className="text-center py-2 px-2">
+                        {allJuriScores[id]?.[side]?.isReady ? allJuriScores[id]?.[side]?.staminaKemantapanBonus.toFixed(2) : '-'}
                       </TableCell>
                     ))}
                   </TableRow>
                 </TableBody>
               </Table>
-              
-              {/* Waktu, Detail Juri, Median */}
               <div className="mt-3 space-y-1 text-sm">
                 <div className="grid grid-cols-[200px_1fr_1fr_1fr] items-center">
                   <span className="font-medium px-2">Waktu Penampilan</span>
-                  <div className="text-center">
-                    <span className="font-semibold">{waktuTampil.menit}</span> <span className="text-xs">Menit</span>
-                  </div>
-                  <div className="text-center">
-                    <span className="font-semibold">{waktuTampil.detik}</span> <span className="text-xs">Detik</span>
-                  </div>
+                  <div className="text-center"><span className="font-semibold">{waktuTampil.menit}</span> <span className="text-xs">Menit</span></div>
+                  <div className="text-center"><span className="font-semibold">{waktuTampil.detik}</span> <span className="text-xs">Detik</span></div>
                   <div></div>
                 </div>
-                 <div className="grid grid-cols-[200px_1fr] items-center">
-                    <span className="font-medium px-2">Detail Juri</span>
-                    <span className="px-2 text-center">-</span>
-                </div>
                 <div className="grid grid-cols-[200px_1fr] items-center bg-yellow-100 dark:bg-yellow-800/30 p-1 rounded">
-                    <span className="font-bold px-2 text-yellow-700 dark:text-yellow-300">Median</span>
-                    <span className="font-bold text-center text-yellow-700 dark:text-yellow-300">{medianScore.toFixed(2)}</span>
+                  <span className="font-bold px-2 text-yellow-700 dark:text-yellow-300">Median</span>
+                  <span className="font-bold text-center text-yellow-700 dark:text-yellow-300">{median.toFixed(2)}</span>
                 </div>
               </div>
             </div>
-
-            {/* Dewan Penalties */}
             <div className="border-l border-gray-300 dark:border-gray-600 pl-3">
               <h3 className="text-md font-semibold mb-1 text-center text-gray-700 dark:text-gray-200">Pelanggaran Dewan</h3>
               <div className="space-y-1 text-xs">
-                {PENALTY_DISPLAY_ORDER.map(penaltyType => (
-                  <div key={penaltyType} className="flex justify-between items-center p-1.5 bg-gray-50 dark:bg-gray-700/40 rounded">
-                    <span className="text-gray-600 dark:text-gray-300">{PENALTY_DESCRIPTIONS_MAP[penaltyType]}</span>
-                    <span className={cn(
-                        "font-semibold px-1.5 py-0.5 rounded text-white",
-                        (aggregatedPenalties[penaltyType] ?? 0) < 0 ? "bg-red-500" : "bg-gray-400 dark:bg-gray-600"
-                    )}>
-                      {(aggregatedPenalties[penaltyType] ?? 0).toFixed(2)}
-                    </span>
-                  </div>
-                ))}
+                {PENALTY_DISPLAY_ORDER.map(penaltyType => {
+                  const sidePenaltyValue = dewanPenalties
+                    .filter(p => p.type === penaltyType && p.side === side)
+                    .reduce((sum, p) => sum + p.pointsDeducted, 0);
+                  return (
+                    <div key={`${penaltyType}-${side}`} className="flex justify-between items-center p-1.5 bg-gray-50 dark:bg-gray-700/40 rounded">
+                      <span className="text-gray-600 dark:text-gray-300">{PENALTY_DESCRIPTIONS_MAP[penaltyType]}</span>
+                      <span className={cn("font-semibold px-1.5 py-0.5 rounded text-white", sidePenaltyValue < 0 ? "bg-red-500" : "bg-gray-400 dark:bg-gray-600")}>
+                        {sidePenaltyValue.toFixed(2)}
+                      </span>
+                    </div>
+                  );
+                })}
               </div>
             </div>
           </div>
-
-          {/* Final Score & Standard Deviation */}
           <div className="mt-4 pt-3 border-t border-gray-300 dark:border-gray-600 space-y-1 text-sm">
              <div className="grid grid-cols-[200px_1fr_200px_1fr] items-center gap-x-4">
                 <span className="font-bold text-lg text-right text-green-600 dark:text-green-400">Final Skor</span>
                 <span className="font-bold text-lg text-left text-green-700 dark:text-green-300 py-1 px-2 bg-green-100 dark:bg-green-800/30 rounded w-min">
-                    {finalScore.toFixed(2)}
+                    {final.toFixed(2)}
                 </span>
                 <span className="font-medium text-right">Standard Deviation</span>
                 <span className="font-medium text-left py-1 px-2 bg-gray-100 dark:bg-gray-700/50 rounded w-min">
-                    {standardDeviation.toFixed(2)}
+                    {stdDev.toFixed(2)}
                 </span>
              </div>
           </div>
-           <div className="mt-8 text-center">
-            <Button variant="outline" asChild>
-              <Link href="/scoring/tgr"><ArrowLeft className="mr-2 h-4 w-4" /> Kembali</Link>
-            </Button>
-          </div>
+        </div>
+      </div>
+    );
+  };
+
+
+  return (
+    <div className="flex flex-col min-h-screen bg-gray-100 dark:bg-gray-900">
+      <Header />
+      <main className="flex-1 container mx-auto px-2 py-4 md:p-6">
+        {scheduleDetails?.pesilatBiruName && renderSideScoresTable('biru')}
+        {renderSideScoresTable('merah')}
+        
+        <div className="mt-8 text-center">
+          <Button variant="outline" asChild>
+            <Link href="/scoring/tgr/login"><ArrowLeft className="mr-2 h-4 w-4" /> Kembali ke Login TGR</Link>
+          </Button>
         </div>
       </main>
     </div>
   );
 }
-
