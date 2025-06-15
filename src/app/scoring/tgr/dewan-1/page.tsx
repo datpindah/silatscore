@@ -7,15 +7,21 @@ import { Header } from '@/components/layout/Header';
 import { PageTitle } from '@/components/shared/PageTitle';
 import { Button } from '@/components/ui/button';
 import { ArrowLeft, Trash2, Loader2, MinusCircle } from 'lucide-react';
-import type { ScheduleTGR, TGRDewanPenalty, TGRDewanPenaltyType } from '@/lib/types';
+import type { ScheduleTGR, TGRDewanPenalty, TGRDewanPenaltyType, TGRJuriScore } from '@/lib/types';
 import { db } from '@/lib/firebase';
-import { doc, onSnapshot, getDoc, collection, addDoc, query, orderBy, limit, deleteDoc, serverTimestamp, Timestamp, where, getDocs } from 'firebase/firestore';
+import { doc, onSnapshot, getDoc, collection, addDoc, query, orderBy, limit, deleteDoc, serverTimestamp, Timestamp, where, getDocs, setDoc } from 'firebase/firestore';
 import { Skeleton } from '@/components/ui/skeleton';
 
 const ACTIVE_TGR_SCHEDULE_CONFIG_PATH = 'app_settings/active_match_tgr';
 const SCHEDULE_TGR_COLLECTION = 'schedules_tgr';
 const MATCHES_TGR_COLLECTION = 'matches_tgr';
 const DEWAN_PENALTIES_TGR_SUBCOLLECTION = 'dewan_penalties_tgr';
+const JURI_SCORES_TGR_SUBCOLLECTION = 'juri_scores_tgr';
+
+
+const TGR_JURI_IDS = ['juri-1', 'juri-2', 'juri-3', 'juri-4', 'juri-5', 'juri-6'] as const;
+const BASE_SCORE_TGR = 9.90;
+const GERAKAN_SALAH_DEDUCTION = 0.01;
 
 interface PenaltyConfig {
   id: TGRDewanPenaltyType;
@@ -149,10 +155,50 @@ export default function DewanTGRPenaltyPage() {
         pointsDeducted: penalty.points,
         timestamp: serverTimestamp(),
       };
-      // console.log("Attempting to add penalty:", { activeMatchId, penaltyData }); // Optional: for debugging
       await addDoc(collection(db, MATCHES_TGR_COLLECTION, activeMatchId, DEWAN_PENALTIES_TGR_SUBCOLLECTION), penaltyData);
+
+      // After Dewan penalty is logged, update all Juri scores
+      const deductionAmount = Math.abs(penalty.points); // e.g., 0.50
+
+      for (const juriId of TGR_JURI_IDS) {
+        const juriDocRef = doc(db, MATCHES_TGR_COLLECTION, activeMatchId, JURI_SCORES_TGR_SUBCOLLECTION, juriId);
+        const juriDocSnap = await getDoc(juriDocRef);
+
+        let currentJuriData: Partial<TGRJuriScore> = {
+            baseScore: BASE_SCORE_TGR,
+            gerakanSalahCount: 0,
+            staminaKemantapanBonus: 0,
+            externalDeductions: 0,
+            isReady: false, // Default to not ready if creating new
+        };
+
+        if (juriDocSnap.exists()) {
+            currentJuriData = juriDocSnap.data() as TGRJuriScore;
+        }
+        
+        const newExternalDeductions = (currentJuriData.externalDeductions || 0) + deductionAmount;
+        const newCalculatedScore = parseFloat(
+            ( (currentJuriData.baseScore ?? BASE_SCORE_TGR) -
+              ((currentJuriData.gerakanSalahCount ?? 0) * GERAKAN_SALAH_DEDUCTION) +
+              (currentJuriData.staminaKemantapanBonus ?? 0) -
+              newExternalDeductions
+            ).toFixed(2)
+        );
+
+        await setDoc(juriDocRef, {
+            baseScore: currentJuriData.baseScore ?? BASE_SCORE_TGR,
+            gerakanSalahCount: currentJuriData.gerakanSalahCount ?? 0,
+            staminaKemantapanBonus: currentJuriData.staminaKemantapanBonus ?? 0,
+            externalDeductions: newExternalDeductions,
+            calculatedScore: newCalculatedScore,
+            isReady: currentJuriData.isReady ?? false,
+            lastUpdated: serverTimestamp(),
+        }, { merge: true });
+      }
+
     } catch (err) {
-      setError(`Gagal menambah pelanggaran: ${err instanceof Error ? err.message : String(err)}`);
+      setError(`Gagal menambah pelanggaran & update skor juri: ${err instanceof Error ? err.message : String(err)}`);
+      console.error("Error in handleAddPenalty or updating Juri scores:", err);
     } finally {
       setIsProcessing(prev => ({ ...prev, [penalty.id]: false }));
     }
@@ -177,12 +223,42 @@ export default function DewanTGRPenaltyPage() {
       const snapshot = await getDocs(q);
       if (!snapshot.empty) {
         const docToDelete = snapshot.docs[0];
+        const deletedPenaltyPoints = (docToDelete.data() as TGRDewanPenalty).pointsDeducted;
         await deleteDoc(doc(db, MATCHES_TGR_COLLECTION, activeMatchId, DEWAN_PENALTIES_TGR_SUBCOLLECTION, docToDelete.id));
+
+        // After Dewan penalty is deleted, revert the deduction from all Juri scores
+        const deductionAmountToRevert = Math.abs(deletedPenaltyPoints); // e.g., 0.50
+
+        for (const juriId of TGR_JURI_IDS) {
+            const juriDocRef = doc(db, MATCHES_TGR_COLLECTION, activeMatchId, JURI_SCORES_TGR_SUBCOLLECTION, juriId);
+            const juriDocSnap = await getDoc(juriDocRef);
+
+            if (juriDocSnap.exists()) {
+                const currentJuriData = juriDocSnap.data() as TGRJuriScore;
+                const newExternalDeductions = Math.max(0, (currentJuriData.externalDeductions || 0) - deductionAmountToRevert);
+                
+                const newCalculatedScore = parseFloat(
+                    ( (currentJuriData.baseScore ?? BASE_SCORE_TGR) -
+                      ((currentJuriData.gerakanSalahCount ?? 0) * GERAKAN_SALAH_DEDUCTION) +
+                      (currentJuriData.staminaKemantapanBonus ?? 0) -
+                      newExternalDeductions
+                    ).toFixed(2)
+                );
+
+                await updateDoc(juriDocRef, {
+                    externalDeductions: newExternalDeductions,
+                    calculatedScore: newCalculatedScore,
+                    lastUpdated: serverTimestamp(),
+                });
+            }
+        }
+
       } else {
         alert(`Tidak ada pelanggaran tipe "${penaltyType}" yang bisa dihapus.`);
       }
     } catch (err) {
-      setError(`Gagal menghapus pelanggaran: ${err instanceof Error ? err.message : String(err)}`);
+      setError(`Gagal menghapus pelanggaran & update skor juri: ${err instanceof Error ? err.message : String(err)}`);
+      console.error("Error in handleDeleteLastPenalty or updating Juri scores:", err);
     } finally {
       setIsProcessing(prev => ({ ...prev, [penaltyType]: false }));
     }

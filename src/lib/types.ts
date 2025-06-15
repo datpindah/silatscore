@@ -194,7 +194,8 @@ export interface TGRJuriScore {
   baseScore: number; // Default 9.90
   gerakanSalahCount: number;
   staminaKemantapanBonus: number; // 0.00 to 0.10
-  calculatedScore: number; // baseScore - (gerakanSalahCount * 0.01) + staminaKemantapanBonus
+  externalDeductions?: number; // New field for Dewan-applied penalties, sum of absolute values of penalties
+  calculatedScore: number; // baseScore - (gerakanSalahCount * 0.01) + staminaKemantapanBonus - externalDeductions
   isReady?: boolean; // Juri status kesiapan
   lastUpdated?: FirebaseTimestamp | Date | { seconds: number; nanoseconds: number } | null;
 }
@@ -226,3 +227,4 @@ export interface TGRMatchData {
   status: 'Pending' | 'Ongoing' | 'Paused' | 'Finished';
 }
 // --- End TGR Scoring Types ---
+

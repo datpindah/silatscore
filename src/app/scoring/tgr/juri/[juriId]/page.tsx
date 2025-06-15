@@ -25,6 +25,7 @@ const initialJuriScore: TGRJuriScore = {
   baseScore: BASE_SCORE_TGR,
   gerakanSalahCount: 0,
   staminaKemantapanBonus: 0.00,
+  externalDeductions: 0, // Added
   calculatedScore: BASE_SCORE_TGR,
   isReady: false,
   lastUpdated: null,
@@ -66,8 +67,8 @@ export default function JuriTGRPage({ params: paramsPromise }: { params: Promise
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const calculateScore = useCallback((gsCount: number, staminaBonus: number) => {
-    return parseFloat((BASE_SCORE_TGR - (gsCount * GERAKAN_SALAH_DEDUCTION) + staminaBonus).toFixed(2));
+  const calculateScore = useCallback((gsCount: number, staminaBonus: number, externalDeductions: number = 0) => {
+    return parseFloat((BASE_SCORE_TGR - (gsCount * GERAKAN_SALAH_DEDUCTION) + staminaBonus - externalDeductions).toFixed(2));
   }, []);
 
   useEffect(() => {
@@ -165,19 +166,21 @@ export default function JuriTGRPage({ params: paramsPromise }: { params: Promise
         const baseScore = data.baseScore ?? initialJuriScore.baseScore;
         const gsCount = data.gerakanSalahCount ?? initialJuriScore.gerakanSalahCount;
         const staminaBonus = data.staminaKemantapanBonus ?? initialJuriScore.staminaKemantapanBonus;
+        const currentExternalDeductions = data.externalDeductions ?? initialJuriScore.externalDeductions ?? 0;
         const juriIsReadyFirestore = data.isReady ?? false;
 
         setJuriScore({
           baseScore: baseScore,
           gerakanSalahCount: gsCount,
           staminaKemantapanBonus: staminaBonus,
-          calculatedScore: calculateScore(gsCount, staminaBonus),
+          externalDeductions: currentExternalDeductions,
+          calculatedScore: calculateScore(gsCount, staminaBonus, currentExternalDeductions),
           isReady: juriIsReadyFirestore,
           lastUpdated: data.lastUpdated
         });
         setIsJuriReady(juriIsReadyFirestore);
       } else {
-        const newCalculatedScore = calculateScore(initialJuriScore.gerakanSalahCount, initialJuriScore.staminaKemantapanBonus);
+        const newCalculatedScore = calculateScore(initialJuriScore.gerakanSalahCount, initialJuriScore.staminaKemantapanBonus, initialJuriScore.externalDeductions);
         setJuriScore({...initialJuriScore, calculatedScore: newCalculatedScore });
         setIsJuriReady(false);
       }
@@ -295,9 +298,9 @@ export default function JuriTGRPage({ params: paramsPromise }: { params: Promise
     if (isInputDisabled) return;
     setJuriScore(prev => {
       const newCount = prev.gerakanSalahCount + 1;
-      const newCalculated = calculateScore(newCount, prev.staminaKemantapanBonus);
+      const newCalculated = calculateScore(newCount, prev.staminaKemantapanBonus, prev.externalDeductions);
       const updatedScore = { ...prev, gerakanSalahCount: newCount, calculatedScore: newCalculated };
-      saveJuriScore({ gerakanSalahCount: newCount, calculatedScore: newCalculated, isReady: prev.isReady });
+      saveJuriScore({ gerakanSalahCount: newCount, calculatedScore: newCalculated, isReady: prev.isReady, externalDeductions: prev.externalDeductions });
       return updatedScore;
     });
   };
@@ -305,9 +308,9 @@ export default function JuriTGRPage({ params: paramsPromise }: { params: Promise
   const handleStaminaBonusChange = (bonusValue: number) => {
     if (isInputDisabled) return;
     setJuriScore(prev => {
-      const newCalculated = calculateScore(prev.gerakanSalahCount, bonusValue);
+      const newCalculated = calculateScore(prev.gerakanSalahCount, bonusValue, prev.externalDeductions);
       const updatedScore = { ...prev, staminaKemantapanBonus: bonusValue, calculatedScore: newCalculated };
-      saveJuriScore({ staminaKemantapanBonus: bonusValue, calculatedScore: newCalculated, isReady: prev.isReady });
+      saveJuriScore({ staminaKemantapanBonus: bonusValue, calculatedScore: newCalculated, isReady: prev.isReady, externalDeductions: prev.externalDeductions });
       return updatedScore;
     });
   };
@@ -320,6 +323,7 @@ export default function JuriTGRPage({ params: paramsPromise }: { params: Promise
         baseScore: juriScore.baseScore,
         gerakanSalahCount: juriScore.gerakanSalahCount,
         staminaKemantapanBonus: juriScore.staminaKemantapanBonus,
+        externalDeductions: juriScore.externalDeductions,
         calculatedScore: juriScore.calculatedScore,
     };
     saveJuriScore(scoreUpdateForFirestore);
@@ -448,7 +452,7 @@ export default function JuriTGRPage({ params: paramsPromise }: { params: Promise
                 </div>
             </div>
             <div className="text-xs text-center mt-1 text-gray-500 dark:text-gray-600">
-                Pengurangan: {juriScore.gerakanSalahCount} x {GERAKAN_SALAH_DEDUCTION.toFixed(2)} = {(juriScore.gerakanSalahCount * GERAKAN_SALAH_DEDUCTION).toFixed(2)}. Bonus Stamina: {juriScore.staminaKemantapanBonus === undefined ? '0.00' : juriScore.staminaKemantapanBonus.toFixed(2)}
+                Pengurangan: {juriScore.gerakanSalahCount} x {GERAKAN_SALAH_DEDUCTION.toFixed(2)} = {(juriScore.gerakanSalahCount * GERAKAN_SALAH_DEDUCTION).toFixed(2)}. Bonus Stamina: {juriScore.staminaKemantapanBonus === undefined ? '0.00' : juriScore.staminaKemantapanBonus.toFixed(2)}. Penalti Dewan: {(juriScore.externalDeductions ?? 0).toFixed(2)}.
             </div>
         </div>
 
@@ -478,3 +482,4 @@ export default function JuriTGRPage({ params: paramsPromise }: { params: Promise
     </div>
   );
 }
+
