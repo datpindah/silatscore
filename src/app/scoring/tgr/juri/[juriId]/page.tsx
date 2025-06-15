@@ -4,6 +4,7 @@
 import { useState, useEffect, useCallback, use } from 'react';
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
+import { Header } from '@/components/layout/Header'; // Ditambahkan
 import { ArrowLeft, Loader2, Info, XIcon, AlertCircle, CheckCircle2 } from 'lucide-react';
 import type { ScheduleTGR, TGRJuriScore, TGRTimerStatus } from '@/lib/types';
 import { db } from '@/lib/firebase';
@@ -362,6 +363,7 @@ export default function JuriTGRPage({ params: paramsPromise }: { params: Promise
 
   return (
     <div className="flex flex-col min-h-screen bg-gray-100 dark:bg-gray-900 text-gray-800 dark:text-gray-900 font-sans">
+      <Header />
       <main className="flex-1 container mx-auto px-2 py-4 md:p-6">
         {/* Header Info */}
         <div className="mb-4 md:mb-6 text-center">
