@@ -4,81 +4,55 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
-    // === App Settings ===
-    // app_settings (seperti active_match_id) perlu bisa dibaca oleh semua
-    // untuk halaman login, tapi hanya bisa ditulis oleh admin (idealnya).
-    // Untuk sekarang, tulis oleh pengguna terautentikasi.
+    // App Settings:
+    // Allows unauthenticated reads for specific settings like active match IDs (needed for login page).
+    // Writes (e.g., changing active match) require authentication.
     match /app_settings/{settingId} {
       allow read: if true;
-      // Produksi: allow write: if request.auth.token.isAdmin == true;
-      allow write: if request.auth != null;
+      allow write: if request.auth != null; // Typically, only admins should write here.
     }
 
-    // === Schedules (Jadwal Pertandingan) ===
-    // Dibuat dan dikelola oleh Admin.
-    // Dibaca oleh berbagai halaman scoring untuk mendapatkan detail.
-    // Untuk sekarang, tulis oleh pengguna terautentikasi.
+    // Schedules (Tanding & TGR):
+    // Only authenticated users (admins) can read and write schedules.
     match /schedules_tanding/{scheduleId} {
-      allow read: if request.auth != null;
-      // Produksi: allow write: if request.auth.token.isAdmin == true;
-      allow write: if request.auth != null;
+      allow read, write: if request.auth != null;
     }
-
     match /schedules_tgr/{scheduleId} {
-      allow read: if request.auth != null;
-      // Produksi: allow write: if request.auth.token.isAdmin == true;
-      allow write: if request.auth != null;
+      allow read, write: if request.auth != null;
     }
 
-    // === Tanding Matches Data ===
-    // Data utama pertandingan Tanding, termasuk timer dan log skor yang dikonfirmasi.
-    // Semua peran scoring (Dewan, Juri, Ketua) perlu akses tulis dan baca.
+    // Tanding Matches & Subcollections:
+    // All operations require authentication.
     match /matches_tanding/{matchId} {
-      allow read: if request.auth != null;
-      allow write: if request.auth != null;
+      allow read, write: if request.auth != null;
 
-      // Sub-koleksi untuk skor dari masing-masing juri Tanding
       match /juri_scores/{juriId} {
-        allow read: if request.auth != null;
-        allow write: if request.auth != null;
+        allow read, write: if request.auth != null;
       }
-
-      // Sub-koleksi untuk log tindakan dari Ketua Pertandingan Tanding
       match /official_actions/{actionId} {
-        allow read: if request.auth != null;
-        allow write: if request.auth != null;
+        allow read, write: if request.auth != null;
       }
-
-      // Sub-koleksi untuk permintaan verifikasi Tanding
       match /verifications/{verificationId} {
-        allow read: if request.auth != null;
-        allow write: if request.auth != null;
+        allow read, write: if request.auth != null;
       }
     }
 
-    // === TGR Matches Data ===
-    // Data utama pertandingan TGR, termasuk timer.
-    // Dewan TGR dan Juri TGR perlu akses tulis dan baca.
+    // TGR Matches & Subcollections:
+    // All operations require authentication.
     match /matches_tgr/{matchId} {
-      allow read: if request.auth != null;
-      allow write: if request.auth != null;
+      allow read, write: if request.auth != null;
 
-      // Sub-koleksi untuk skor dari masing-masing juri TGR
       match /juri_scores_tgr/{juriId} {
-        allow read: if request.auth != null;
-        allow write: if request.auth != null;
+        allow read, write: if request.auth != null;
       }
-
-      // Sub-koleksi untuk penalti yang dicatat oleh Dewan TGR
       match /dewan_penalties_tgr/{penaltyId} {
-        allow read: if request.auth != null;
-        allow write: if request.auth != null;
+        allow read, write: if request.auth != null;
       }
+      // If other TGR subcollections are added, they should follow this pattern.
     }
 
-    // Default deny untuk path lain yang tidak secara eksplisit diizinkan
-    match /{document=**} {
-      allow read, write: if false;
-    }
+    // Default deny: By not having a broad "match /{document=**}" rule that allows access,
+    // any path not explicitly matched above will be denied access by default.
+    // This is a secure practice.
   }
 }
