@@ -135,8 +135,6 @@ export default function MonitoringSkorTGRPage() {
 
       } catch (err) {
         if (mounted) { console.error("[MonitorTGR] Error in loadData:", err); setError("Gagal memuat data pertandingan TGR."); }
-      } finally {
-        // isLoading will be set to false via another useEffect that watches matchDetailsLoaded
       }
     };
 
@@ -205,12 +203,17 @@ export default function MonitoringSkorTGRPage() {
   return (
     <>
       <Header />
-      <div className={cn("flex flex-col min-h-screen font-sans overflow-hidden relative", pageTheme === 'light' ? 'tgr-monitoring-theme-light' : 'tgr-monitoring-theme-dark', "bg-[var(--monitor-bg)] text-[var(--monitor-text)]")}>
+      <div className={cn(
+          "flex flex-col min-h-screen font-sans overflow-hidden relative -mt-16", 
+          pageTheme === 'light' ? 'tgr-monitoring-theme-light' : 'tgr-monitoring-theme-dark', 
+          "bg-[var(--monitor-bg)] text-[var(--monitor-text)]"
+        )}
+      >
         <Button
           variant="outline"
           size="icon"
           onClick={() => setPageTheme(prev => prev === 'light' ? 'dark' : 'light')}
-          className="absolute top-2 right-2 z-[100] bg-[var(--monitor-dialog-bg)] text-[var(--monitor-text)] border-[var(--monitor-border)] hover:bg-[var(--monitor-neutral-bg)]" // Adjusted top to be above header
+          className="absolute top-2 right-2 z-[100] bg-[var(--monitor-dialog-bg)] text-[var(--monitor-text)] border-[var(--monitor-border)] hover:bg-[var(--monitor-neutral-bg)]"
           aria-label={pageTheme === "dark" ? "Ganti ke mode terang" : "Ganti ke mode gelap"}
         >
           {pageTheme === 'dark' ? <Sun className="h-[1.2rem] w-[1.2rem]" /> : <Moon className="h-[1.2rem] w-[1.2rem]" />}
@@ -305,3 +308,4 @@ export default function MonitoringSkorTGRPage() {
     </>
   );
 }
+
