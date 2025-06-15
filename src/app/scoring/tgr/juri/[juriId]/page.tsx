@@ -4,7 +4,7 @@
 import { useState, useEffect, useCallback, use } from 'react';
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
-import { Header } from '@/components/layout/Header'; 
+import { Header } from '@/components/layout/Header';
 import { ArrowLeft, Loader2, Info, XIcon, AlertCircle, CheckCircle2 } from 'lucide-react';
 import type { ScheduleTGR, TGRJuriScore, TGRTimerStatus, SideSpecificTGRScore } from '@/lib/types';
 import { db } from '@/lib/firebase';
@@ -37,7 +37,7 @@ const initialJuriScore: TGRJuriScore = {
 };
 
 const defaultInitialTgrTimerStatus: TGRTimerStatus = {
-  timerSeconds: 0, 
+  timerSeconds: 0,
   isTimerRunning: false,
   matchStatus: 'Pending',
   performanceDuration: 0,
@@ -57,7 +57,7 @@ export default function JuriTGRPage({ params: paramsPromise }: { params: Promise
 
   const [juriScore, setJuriScore] = useState<TGRJuriScore>(initialJuriScore);
   const [tgrTimerStatus, setTgrTimerStatus] = useState<TGRTimerStatus>(defaultInitialTgrTimerStatus);
-  
+
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -87,8 +87,8 @@ export default function JuriTGRPage({ params: paramsPromise }: { params: Promise
       setJuriScore(initialJuriScore);
       setTgrTimerStatus(defaultInitialTgrTimerStatus);
       setActiveMatchId(configMatchId);
-      setScheduleDetails(null); 
-      setMatchDetailsLoaded(false); 
+      setScheduleDetails(null);
+      setMatchDetailsLoaded(false);
       setError(null);
       if (configMatchId) setIsLoading(true); else setIsLoading(false);
     } else if (configMatchId === null && activeMatchId === null && isLoading) {
@@ -152,7 +152,7 @@ export default function JuriTGRPage({ params: paramsPromise }: { params: Promise
         const data = docSnap.data() as Partial<TGRJuriScore>;
         const biruScore = data.biru ? { ...initialSideSpecificScore, ...data.biru } : { ...initialSideSpecificScore };
         const merahScore = data.merah ? { ...initialSideSpecificScore, ...data.merah } : { ...initialSideSpecificScore };
-        
+
         biruScore.calculatedScore = calculateSideScore(biruScore.gerakanSalahCount, biruScore.staminaKemantapanBonus, biruScore.externalDeductions);
         merahScore.calculatedScore = calculateSideScore(merahScore.gerakanSalahCount, merahScore.staminaKemantapanBonus, merahScore.externalDeductions);
 
@@ -224,7 +224,7 @@ export default function JuriTGRPage({ params: paramsPromise }: { params: Promise
     if (isInputDisabled || !currentSide || !currentSideScore) return;
     setJuriScore(prev => {
       const updatedSideScore = { ...currentSideScore };
-      updatedSideScore.gerakanSalahCount += 1;
+      updatedSideScore.gerakanSalahCount = (updatedSideScore.gerakanSalahCount || 0) + 1;
       updatedSideScore.calculatedScore = calculateSideScore(updatedSideScore.gerakanSalahCount, updatedSideScore.staminaKemantapanBonus, updatedSideScore.externalDeductions);
       const newFullScore = { ...prev, [currentSide]: updatedSideScore };
       saveJuriScore(newFullScore);
@@ -257,7 +257,7 @@ export default function JuriTGRPage({ params: paramsPromise }: { params: Promise
   const formatDisplayDate = (dateString: string | undefined) => {
     if (!dateString) return <Skeleton className="h-4 w-28 inline-block" />;
     try {
-      const date = new Date(dateString + 'T00:00:00'); 
+      const date = new Date(dateString + 'T00:00:00');
       return new Intl.DateTimeFormat('id-ID', { day: 'numeric', month: 'long', year: 'numeric' }).format(date);
     } catch (e) { return dateString; }
   };
@@ -283,10 +283,14 @@ export default function JuriTGRPage({ params: paramsPromise }: { params: Promise
     if (!scheduleDetails) return <Skeleton className="h-6 w-48 inline-block" />;
     let name = "";
     let contingent = "";
-    if (tgrTimerStatus.currentPerformingSide === 'biru' && scheduleDetails.pesilatBiruName) {
+
+    const sideToDisplay = tgrTimerStatus.currentPerformingSide || (scheduleDetails.pesilatBiruName ? 'biru' : 'merah');
+
+
+    if (sideToDisplay === 'biru' && scheduleDetails.pesilatBiruName) {
         name = scheduleDetails.pesilatBiruName;
         contingent = scheduleDetails.pesilatBiruContingent || scheduleDetails.pesilatMerahContingent || "";
-    } else if (scheduleDetails.pesilatMerahName) { // Default to Merah if Biru not present or not current side
+    } else if (scheduleDetails.pesilatMerahName) {
         name = scheduleDetails.pesilatMerahName;
         contingent = scheduleDetails.pesilatMerahContingent || "";
     }
@@ -301,7 +305,7 @@ export default function JuriTGRPage({ params: paramsPromise }: { params: Promise
       </>
     );
   };
-  
+
   const displaySide = tgrTimerStatus.currentPerformingSide ? (tgrTimerStatus.currentPerformingSide === 'biru' ? 'Sudut Biru' : 'Sudut Merah') : 'Belum Ada Sisi Aktif';
 
   return (
@@ -330,7 +334,7 @@ export default function JuriTGRPage({ params: paramsPromise }: { params: Promise
           >
             <XIcon className="w-36 h-36 md:w-60 md:h-60" strokeWidth={3} />
           </Button>
-          
+
           <div className="w-full md:w-auto flex flex-col items-center justify-center text-center p-3 md:p-4 rounded-lg bg-gray-200 dark:bg-gray-800/50 md:h-auto md:flex-[1_1_0%] my-auto">
             <h3 className="text-sm md:text-base font-semibold text-gray-700 dark:text-gray-300">Detail Gerakan</h3>
             <p className="text-xs md:text-sm text-gray-600 dark:text-gray-400 mt-1">Urutan Gerakan</p>
@@ -385,8 +389,8 @@ export default function JuriTGRPage({ params: paramsPromise }: { params: Promise
                 </div>
             </div>
             <div className="text-xs text-center mt-1 text-gray-500 dark:text-gray-600">
-                Pengurangan: {currentSideScore?.gerakanSalahCount || 0} x {GERAKAN_SALAH_DEDUCTION.toFixed(2)} = {((currentSideScore?.gerakanSalahCount || 0) * GERAKAN_SALAH_DEDUCTION).toFixed(2)}. 
-                Bonus Stamina: {(currentSideScore?.staminaKemantapanBonus ?? 0).toFixed(2)}. 
+                Pengurangan: {currentSideScore?.gerakanSalahCount || 0} x {GERAKAN_SALAH_DEDUCTION.toFixed(2)} = {((currentSideScore?.gerakanSalahCount || 0) * GERAKAN_SALAH_DEDUCTION).toFixed(2)}.
+                Bonus Stamina: {(currentSideScore?.staminaKemantapanBonus ?? 0).toFixed(2)}.
                 Penalti Dewan: {(currentSideScore?.externalDeductions ?? 0).toFixed(2)}.
             </div>
         </div>
@@ -408,4 +412,3 @@ export default function JuriTGRPage({ params: paramsPromise }: { params: Promise
     </div>
   );
 }
-

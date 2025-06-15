@@ -85,6 +85,7 @@ export interface ScheduleTGR {
   pesilatMerahContingent: string;
   pesilatBiruName?: string; // Optional: for Ganda second name, or Biru side in two-sided TGR
   pesilatBiruContingent?: string; // Optional: for Ganda second contingent, or Biru side
+  babak?: string; // Duplicate of 'round', consider unifying
 }
 
 
@@ -105,7 +106,7 @@ export interface KetuaActionLogEntry {
 }
 
 export const JATUHAN_POINTS = 3;
-export const TEGURAN_POINTS = -1; 
+export const TEGURAN_POINTS = -1;
 export const PERINGATAN_POINTS_FIRST_PRESS = -5;
 export const PERINGATAN_POINTS_SECOND_PRESS = -10;
 
@@ -122,15 +123,15 @@ export interface JuriVotes {
 }
 
 export interface VerificationRequest {
-  id: string; 
+  id: string;
   matchId: string;
   type: VerificationType;
   status: VerificationStatus;
   round: 1 | 2 | 3;
-  timestamp: FirebaseTimestamp | Date | { seconds: number; nanoseconds: number }; 
+  timestamp: FirebaseTimestamp | Date | { seconds: number; nanoseconds: number };
   votes: JuriVotes;
-  result?: JuriVoteValue | 'tie'; 
-  requestingOfficial: 'ketua'; 
+  result?: JuriVoteValue | 'tie';
+  requestingOfficial: 'ketua';
 }
 // --- END VERIFICATION TYPES ---
 
@@ -165,7 +166,7 @@ export const foulIcons: Record<string, string> = {
 // Juri Tanding Types
 export interface ScoreEntry {
   points: 1 | 2;
-  timestamp: FirebaseTimestamp | Date | { seconds: number; nanoseconds: number }; 
+  timestamp: FirebaseTimestamp | Date | { seconds: number; nanoseconds: number };
 }
 
 export interface RoundScores {
@@ -184,46 +185,48 @@ export interface JuriMatchData {
 export interface TGRTimerStatus {
   timerSeconds: number;
   isTimerRunning: boolean;
-  matchStatus: 'Pending' | 'Ongoing' | 'Paused' | 'Finished'; 
-  performanceDuration: number; 
-  currentPerformingSide: 'biru' | 'merah' | null; // Tracks if Biru or Merah is performing, or null if overall match/phase done
+  matchStatus: 'Pending' | 'Ongoing' | 'Paused' | 'Finished';
+  performanceDuration: number;
+  currentPerformingSide: 'biru' | 'merah' | null;
+  performanceDurationBiru?: number; // Duration specifically for Biru side's performance
+  performanceDurationMerah?: number; // Duration specifically for Merah side's performance
 }
 
 export interface SideSpecificTGRScore {
   gerakanSalahCount: number;
-  staminaKemantapanBonus: number; 
-  externalDeductions: number; 
-  calculatedScore: number; 
-  isReady?: boolean; 
+  staminaKemantapanBonus: number;
+  externalDeductions: number;
+  calculatedScore: number;
+  isReady?: boolean;
 }
 
 export interface TGRJuriScore {
-  id?: string; 
+  id?: string;
   baseScore: number; // Default 9.90
-  biru?: SideSpecificTGRScore;
-  merah?: SideSpecificTGRScore;
+  biru: SideSpecificTGRScore; // Scores for Sudut Biru
+  merah: SideSpecificTGRScore; // Scores for Sudut Merah
   lastUpdated?: FirebaseTimestamp | Date | { seconds: number; nanoseconds: number } | null;
 }
 
 export type TGRDewanPenaltyType =
-  | 'arena_out' 
-  | 'weapon_touch_floor' 
-  | 'time_tolerance_violation' 
-  | 'costume_violation' 
-  | 'movement_hold_violation'; 
+  | 'arena_out'
+  | 'weapon_touch_floor'
+  | 'time_tolerance_violation'
+  | 'costume_violation'
+  | 'movement_hold_violation';
 
 export interface TGRDewanPenalty {
-  id?: string; 
+  id?: string;
   type: TGRDewanPenaltyType;
-  description: string; 
-  pointsDeducted: number; 
+  description: string;
+  pointsDeducted: number;
   side: 'biru' | 'merah'; // Indicates which side the penalty applies to
   timestamp: FirebaseTimestamp | Date | { seconds: number; nanoseconds: number };
 }
 
 export interface TGRMatchData {
-  id: string; 
-  scheduleDetails: ScheduleTGR; 
+  id: string;
+  scheduleDetails: ScheduleTGR;
   timerStatus: TGRTimerStatus;
   finalMedianScoreBiru?: number;
   finalMedianScoreMerah?: number;
@@ -234,4 +237,3 @@ export interface TGRMatchData {
   status: 'Pending' | 'OngoingBiru' | 'OngoingMerah' | 'PausedBiru' | 'PausedMerah' | 'FinishedBiru' | 'FinishedMerah' | 'MatchFinished';
 }
 // --- End TGR Scoring Types ---
-
