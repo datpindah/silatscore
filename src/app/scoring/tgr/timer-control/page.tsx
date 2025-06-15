@@ -12,6 +12,7 @@ import { db } from '@/lib/firebase';
 import { doc, onSnapshot, getDoc, setDoc, updateDoc, collection, query, orderBy, limit, where, getDocs, Timestamp } from 'firebase/firestore';
 import { Skeleton } from '@/components/ui/skeleton';
 import { cn } from '@/lib/utils';
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 
 const ACTIVE_TGR_SCHEDULE_CONFIG_PATH = 'app_settings/active_match_tgr';
 const SCHEDULE_TGR_COLLECTION = 'schedules_tgr';
@@ -297,7 +298,7 @@ export default function TGRTimerControlPage() {
       const schedulesRef = collection(db, SCHEDULE_TGR_COLLECTION);
       const q = query(
         schedulesRef,
-        where('lotNumber', '>', scheduleDetails.lotNumber),
+        where('lotNumber', '>', scheduleDetails.lotNumber), // Key: uses lotNumber
         orderBy('lotNumber', 'asc'),
         limit(1)
       );
@@ -305,8 +306,6 @@ export default function TGRTimerControlPage() {
 
       if (querySnapshot.empty) {
         alert("Ini adalah peserta TGR terakhir. Tidak ada peserta berikutnya.");
-        // Optionally, clear the active_match_tgr setting
-        // await setDoc(doc(db, ACTIVE_TGR_SCHEDULE_CONFIG_PATH), { activeScheduleId: null });
       } else {
         const nextMatchDoc = querySnapshot.docs[0];
         await setDoc(doc(db, ACTIVE_TGR_SCHEDULE_CONFIG_PATH), { activeScheduleId: nextMatchDoc.id });
@@ -411,3 +410,4 @@ export default function TGRTimerControlPage() {
     </div>
   );
 }
+
