@@ -245,7 +245,7 @@ export default function JuriTGRPage({ params: paramsPromise }: { params: Promise
   };
 
   const handleJuriSiap = () => {
-    if (isInputDisabled || !currentSide || !currentSideScore || currentSideScore.isReady || buttonSiapDisabled) return;
+    if (buttonSiapDisabled || !currentSide || !currentSideScore) return; // Uses buttonSiapDisabled for its own check
     setJuriScore(prev => {
       const updatedSideScore = { ...currentSideScore, isReady: true };
       const newFullScore = { ...prev, [currentSide]: updatedSideScore };
@@ -263,8 +263,11 @@ export default function JuriTGRPage({ params: paramsPromise }: { params: Promise
   };
 
   const isJuriSideReady = currentSide && currentSideScore ? currentSideScore.isReady : false;
-  const isInputDisabled = isLoading || isSaving || !activeMatchId || !matchDetailsLoaded || tgrTimerStatus.matchStatus === 'Finished' || !tgrTimerStatus.currentPerformingSide || isJuriSideReady;
-  const buttonSiapDisabled = isLoading || isSaving || !activeMatchId || !matchDetailsLoaded || tgrTimerStatus.matchStatus === 'Finished' || !tgrTimerStatus.currentPerformingSide || isJuriSideReady;
+  // Scoring inputs are disabled if match is finished or no current side performing.
+  const isInputDisabled = isLoading || isSaving || !activeMatchId || !matchDetailsLoaded || tgrTimerStatus.matchStatus === 'Finished' || !tgrTimerStatus.currentPerformingSide;
+  // "SIAP" button has an additional condition: it's disabled if this Juri has already marked this side as ready.
+  const buttonSiapDisabled = isInputDisabled || isJuriSideReady;
+
 
   const inputDisabledReason = () => {
     if (configMatchId === undefined && isLoading) return "Memuat konfigurasi global...";
@@ -275,7 +278,8 @@ export default function JuriTGRPage({ params: paramsPromise }: { params: Promise
     if (error) return `Error: ${error}`;
     if (tgrTimerStatus.matchStatus === 'Finished' && !tgrTimerStatus.currentPerformingSide) return "Partai telah Selesai.";
     if (!tgrTimerStatus.currentPerformingSide) return "Menunggu arahan sisi (Biru/Merah) dari Timer Kontrol.";
-    if (isJuriSideReady) return `Anda sudah siap untuk ${tgrTimerStatus.currentPerformingSide === 'biru' ? 'Sudut Biru' : 'Sudut Merah'}. Menunggu sisi berikutnya atau partai selesai.`;
+    // If isJuriSideReady is true, but isInputDisabled is false, it means they can still input scores
+    // We don't need a specific message here if scoring is allowed.
     return "";
   };
 
@@ -347,10 +351,10 @@ export default function JuriTGRPage({ params: paramsPromise }: { params: Promise
               "w-full md:w-auto h-40 md:h-64 text-lg md:text-2xl font-semibold rounded-lg shadow-lg flex flex-col items-center justify-center p-2 sm:p-4 md:flex-[2_2_0%]",
               isJuriSideReady ? "bg-green-600 hover:bg-green-700 text-white" : "bg-yellow-500 hover:bg-yellow-600 text-black",
               buttonSiapDisabled && !isJuriSideReady ? "opacity-50 cursor-not-allowed" : "",
-              isJuriSideReady ? "opacity-75 cursor-default" : ""
+              isJuriSideReady ? "opacity-75 cursor-default" : "" // Still allow click if not fully disabled by match state
             )}
             onClick={handleJuriSiap}
-            disabled={buttonSiapDisabled}
+            disabled={buttonSiapDisabled} // This button specifically uses buttonSiapDisabled
           >
             {isJuriSideReady ? <CheckCircle2 className="w-8 h-8 md:w-12 md:h-12 mb-1 md:mb-2" /> : <Info className="w-8 h-8 md:w-12 md:h-12 mb-1 md:mb-2" />}
             <span className="block text-center">{isJuriSideReady ? "MENILAI" : "SIAP"}</span>
