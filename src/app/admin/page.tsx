@@ -1,22 +1,45 @@
 
 "use client";
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { PageTitle } from '@/components/shared/PageTitle';
 import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { DataRecapTable } from '@/components/admin/DataRecapTable';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Download, Filter } from 'lucide-react';
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { Download, Filter, AlertTriangle } from 'lucide-react';
 import { ageCategories, type AgeCategory } from '@/lib/types';
 
 const ALL_CATEGORIES_VALUE = "ALL_CATEGORIES";
 
 export default function AdminDashboardPage() {
   const [selectedAgeCategory, setSelectedAgeCategory] = useState<string>(ALL_CATEGORIES_VALUE);
+  // Placeholder: In a real app, this would be set based on actual data fetching results.
+  const [dataLoadError, setDataLoadError] = useState<string | null>(null);
+
+  // useEffect(() => {
+  //   // Example: Simulate data fetching and error
+  //   // const fetchData = async () => {
+  //   //   try {
+  //   //     // ... your data fetching logic ...
+  //   //     // if (error) throw new Error("Failed to load data due to permissions.");
+  //   //     setDataLoadError(null);
+  //   //   } catch (e) {
+  //   //     if (e instanceof Error) setDataLoadError(e.message);
+  //   //     else setDataLoadError("An unknown error occurred while fetching data.");
+  //   //   }
+  //   // };
+  //   // fetchData();
+  // }, []);
 
   const handleDownloadData = () => {
     const categoryToDownload = selectedAgeCategory === ALL_CATEGORIES_VALUE ? 'Semua Kategori' : selectedAgeCategory;
+    // Simulate error if data couldn't be "loaded" for download
+    if (dataLoadError) {
+      alert(`Tidak dapat mengunduh data: ${dataLoadError}. Pastikan Anda sudah login dan memiliki izin yang cukup.`);
+      return;
+    }
     alert(`Mendownload data untuk kategori: ${categoryToDownload}`);
   };
 
@@ -28,6 +51,17 @@ export default function AdminDashboardPage() {
             Download Data
           </Button>
       </PageTitle>
+
+      {dataLoadError && (
+        <Alert variant="destructive" className="mb-6">
+          <AlertTriangle className="h-4 w-4" />
+          <AlertTitle>Gagal Memuat Data</AlertTitle>
+          <AlertDescription>
+            {dataLoadError} <br />
+            Pastikan Anda telah login dengan akun yang memiliki akses. Jika masalah berlanjut, periksa aturan keamanan Firestore Anda.
+          </AlertDescription>
+        </Alert>
+      )}
 
       <Card className="mb-6">
         <CardHeader>
@@ -61,6 +95,7 @@ export default function AdminDashboardPage() {
           <CardTitle className="font-headline">Rekapitulasi Pertandingan</CardTitle>
         </CardHeader>
         <CardContent>
+          {/* If DataRecapTable fetched its own data, you'd pass dataLoadError or fetched data to it */}
           <DataRecapTable />
         </CardContent>
       </Card>

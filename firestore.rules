@@ -1,58 +1,111 @@
-
 rules_version = '2';
 
 service cloud.firestore {
   match /databases/{database}/documents {
 
-    // App Settings:
-    // Allows unauthenticated reads for specific settings like active match IDs (needed for login page).
-    // Writes (e.g., changing active match) require authentication.
+    // --- PENGATURAN UMUM APLIKASI ---
     match /app_settings/{settingId} {
       allow read: if true;
-      allow write: if request.auth != null; // Typically, only admins should write here.
+      allow write: if true; // PERHATIAN: Amankan untuk produksi!
     }
 
-    // Schedules (Tanding & TGR):
-    // Only authenticated users (admins) can read and write schedules.
+    // --- App Settings (Global Config - dengan otentikasi) ---
+    match /app_settings/{setting} {
+      allow read: if request.auth != null;
+      allow write: if request.auth != null; // PRODUKSI: Ganti dengan pengecekan admin
+    }
+
+    // --- JADWAL PERTANDINGAN (TANDING & TGR) ---
     match /schedules_tanding/{scheduleId} {
-      allow read, write: if request.auth != null;
+      allow read: if true;
+      allow write: if true;
     }
+
+    match /schedules_tanding/{scheduleId} {
+      allow read: if request.auth != null;
+      allow write: if request.auth != null;
+    }
+
     match /schedules_tgr/{scheduleId} {
-      allow read, write: if request.auth != null;
+      allow read: if true;
+      allow write: if true;
     }
 
-    // Tanding Matches & Subcollections:
-    // All operations require authentication.
+    match /schedules_tgr/{scheduleId} {
+      allow read: if request.auth != null;
+      allow write: if request.auth != null;
+    }
+
+    // --- DATA PERTANDINGAN TANDING ---
     match /matches_tanding/{matchId} {
-      allow read, write: if request.auth != null;
+      // Dokumen utama (timer, log skor terkonfirmasi)
+      allow read: if true;
+      allow write: if true;
 
+      allow read, write: if request.auth != null; // tambahan dari versi lain
+
+      // Skor dari masing-masing Juri Tanding
       match /juri_scores/{juriId} {
+        allow read: if true;
+        allow write: if true;
+
         allow read, write: if request.auth != null;
       }
+
+      // Log tindakan dari Ketua Pertandingan Tanding
       match /official_actions/{actionId} {
+        allow read: if true;
+        allow write: if true;
+
         allow read, write: if request.auth != null;
       }
+
+      // Data verifikasi yang diminta Ketua Pertandingan Tanding
       match /verifications/{verificationId} {
+        allow read: if true;
+        allow write: if true;
+
         allow read, write: if request.auth != null;
       }
     }
 
-    // TGR Matches & Subcollections:
-    // All operations require authentication.
+    // --- DATA PERTANDINGAN TGR ---
     match /matches_tgr/{matchId} {
+      // Dokumen utama (timer status TGR)
+      allow read: if true;
+      allow write: if true;
+
       allow read, write: if request.auth != null;
 
+      // Skor dari masing-masing Juri TGR
       match /juri_scores_tgr/{juriId} {
+        allow read: if true;
+        allow write: if true;
+
         allow read, write: if request.auth != null;
       }
+
+      // Sub-koleksi lain untuk TGR (hukuman Dewan)
       match /dewan_penalties_tgr/{penaltyId} {
-        allow read, write: if request.auth != null;
+        allow read: if request.auth != null;
+        allow write: if request.auth != null;
       }
-      // If other TGR subcollections are added, they should follow this pattern.
+
+      // Jika ada sub-koleksi lain:
+      // match /dewan_penalties_tgr/{penaltyId} {
+      //   allow read: if true;
+      //   allow write: if true;
+      // }
     }
 
-    // Default deny: By not having a broad "match /{document=**}" rule that allows access,
-    // any path not explicitly matched above will be denied access by default.
-    // This is a secure practice.
+    // --- FALLBACK RULE UNTUK DEVELOPMENT (IZIN AKSES GLOBAL) ---
+    // ⚠️ PERHATIAN: Untuk pengembangan, hapus untuk produksi!
+    match /{document=**} {
+      allow read, write: if request.auth != null;
+      // Untuk akses terbuka tanpa login:
+      // allow read, write: if true;
+      // Untuk keamanan maksimum di produksi:
+      // allow read, write: if false;
+    }
   }
 }
