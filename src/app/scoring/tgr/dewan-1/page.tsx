@@ -6,12 +6,12 @@ import Link from 'next/link';
 import { Header } from '@/components/layout/Header';
 import { PageTitle } from '@/components/shared/PageTitle';
 import { Button } from '@/components/ui/button';
-import { ArrowLeft, Trash2, Loader2, MinusCircle, UserCircle } from 'lucide-react'; // Ditambahkan UserCircle
+import { ArrowLeft, Trash2, Loader2, MinusCircle, UserCircle } from 'lucide-react';
 import type { ScheduleTGR, TGRDewanPenalty, TGRDewanPenaltyType, TGRJuriScore } from '@/lib/types';
-import { db, auth } from '@/lib/firebase'; // Import auth
+import { db, auth } from '@/lib/firebase';
 import { doc, onSnapshot, getDoc, collection, addDoc, query, orderBy, limit, deleteDoc, serverTimestamp, Timestamp, where, getDocs, setDoc, updateDoc, writeBatch } from 'firebase/firestore';
 import { Skeleton } from '@/components/ui/skeleton';
-import { cn } from '@/lib/utils'; // Ditambahkan cn
+import { cn } from '@/lib/utils';
 
 const ACTIVE_TGR_SCHEDULE_CONFIG_PATH = 'app_settings/active_match_tgr';
 const SCHEDULE_TGR_COLLECTION = 'schedules_tgr';
@@ -47,9 +47,8 @@ export default function DewanTGRPenaltyPage() {
   const [isProcessing, setIsProcessing] = useState<Record<string, boolean>>({}); // For individual penalty type processing
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [currentUserEmail, setCurrentUserEmail] = useState<string | null>(null); // State untuk email pengguna
+  const [currentUserEmail, setCurrentUserEmail] = useState<string | null>(null);
 
-  // Fetch active schedule ID
   useEffect(() => {
     const unsubConfig = onSnapshot(doc(db, ACTIVE_TGR_SCHEDULE_CONFIG_PATH), (docSnap) => {
       const newDbConfigId = docSnap.exists() ? docSnap.data()?.activeScheduleId : null;
@@ -57,12 +56,11 @@ export default function DewanTGRPenaltyPage() {
     }, (err) => {
       console.error("Error fetching active TGR schedule config:", err);
       setError("Gagal memuat konfigurasi jadwal aktif TGR.");
-      setConfigMatchId(null); // Explicitly set to null on error
+      setConfigMatchId(null);
     });
     return () => unsubConfig();
   }, []);
 
-  // Update current user email status
   useEffect(() => {
     const unsubscribeAuth = auth.onAuthStateChanged(user => {
       if (user) {
@@ -75,7 +73,6 @@ export default function DewanTGRPenaltyPage() {
   }, []);
 
 
-  // Reset data if active match changes or becomes null
   useEffect(() => {
     if (configMatchId === undefined) { setIsLoading(true); return; }
     
@@ -84,18 +81,17 @@ export default function DewanTGRPenaltyPage() {
       setPenaltiesLog([]);
       setMatchDetailsLoaded(false);
       setError(null);
-      setActiveMatchId(configMatchId); // This will trigger the next useEffect
+      setActiveMatchId(configMatchId);
       if (configMatchId) setIsLoading(true); else setIsLoading(false);
     } else if (configMatchId === null && activeMatchId === null && isLoading) {
-      setIsLoading(false); // Already null, ensure loading is false
+      setIsLoading(false);
     }
   }, [configMatchId, activeMatchId, isLoading]);
 
 
-  // Fetch schedule details and penalties log when activeMatchId is set
   useEffect(() => {
     if (!activeMatchId) {
-      if (isLoading && !configMatchId) setIsLoading(false); // Only stop loading if config is also null
+      if (isLoading && !configMatchId) setIsLoading(false);
       return;
     }
 
@@ -105,7 +101,6 @@ export default function DewanTGRPenaltyPage() {
     const loadData = async () => {
       if (!mounted) return;
       try {
-        // Load Schedule Details
         const scheduleDocRef = doc(db, SCHEDULE_TGR_COLLECTION, activeMatchId);
         const scheduleDocSnap = await getDoc(scheduleDocRef);
         if (!mounted) return;
@@ -127,7 +122,6 @@ export default function DewanTGRPenaltyPage() {
     
     loadData();
     
-    // Listener for penalties log
     const penaltiesQuery = query(
       collection(db, MATCHES_TGR_COLLECTION, activeMatchId, DEWAN_PENALTIES_TGR_SUBCOLLECTION),
       orderBy("timestamp", "asc")
@@ -145,7 +139,7 @@ export default function DewanTGRPenaltyPage() {
       mounted = false;
       unsubPenalties();
     };
-  }, [activeMatchId, matchDetailsLoaded]); // Added matchDetailsLoaded dependency
+  }, [activeMatchId, matchDetailsLoaded]);
 
   useEffect(() => {
     if (isLoading && matchDetailsLoaded) {
@@ -195,7 +189,7 @@ export default function DewanTGRPenaltyPage() {
         console.log(`[handleAddPenalty] Preparing update for Juri: ${juriId}, path: ${juriDocRef.path}`);
         
         const juriDocSnap = await getDoc(juriDocRef);
-        let currentJuriData: TGRJuriScore = { // Ensure all fields are present
+        let currentJuriData: TGRJuriScore = { 
             baseScore: BASE_SCORE_TGR,
             gerakanSalahCount: 0,
             staminaKemantapanBonus: 0,
@@ -208,8 +202,8 @@ export default function DewanTGRPenaltyPage() {
         if (juriDocSnap.exists()) {
             const existingData = juriDocSnap.data() as Partial<TGRJuriScore>;
             currentJuriData = {
-                ...currentJuriData, // Start with defaults
-                ...existingData,    // Override with existing data
+                ...currentJuriData, 
+                ...existingData,    
             };
         }
         
@@ -222,17 +216,17 @@ export default function DewanTGRPenaltyPage() {
             ).toFixed(2)
         );
 
-        const juriUpdateData = { // Create a complete object for set/update
+        const juriUpdateData = { 
             baseScore: currentJuriData.baseScore,
             gerakanSalahCount: currentJuriData.gerakanSalahCount,
             staminaKemantapanBonus: currentJuriData.staminaKemantapanBonus,
             externalDeductions: newExternalDeductions,
             calculatedScore: newCalculatedScore,
-            isReady: currentJuriData.isReady, // Preserve readiness
+            isReady: currentJuriData.isReady, 
             lastUpdated: serverTimestamp(),
         };
         console.log(`[handleAddPenalty] Data for Juri ${juriId}:`, juriUpdateData);
-        batch.set(juriDocRef, juriUpdateData, { merge: true }); // Use merge to create if not exists or update
+        batch.set(juriDocRef, juriUpdateData, { merge: true });
       }
 
       await batch.commit();
@@ -245,6 +239,8 @@ export default function DewanTGRPenaltyPage() {
       let errorMessage = `Gagal menambah pelanggaran & update skor juri: ${firebaseError.message || String(firebaseError)}`;
       if (firebaseError.code === 'permission-denied') {
         errorMessage += " Pastikan Anda telah login dan memiliki izin yang cukup. Periksa juga path Firestore yang diakses.";
+      } else if (firebaseError.code === 'failed-precondition') {
+        errorMessage += " Query memerlukan index Firestore. Silakan buat index melalui link di konsol error atau di Firebase Console.";
       }
       setError(errorMessage);
       alert(errorMessage);
@@ -310,13 +306,13 @@ export default function DewanTGRPenaltyPage() {
                     ).toFixed(2)
                 );
                 
-                const juriUpdateData = { // Only update relevant fields
+                const juriUpdateData = { 
                     externalDeductions: newExternalDeductions,
                     calculatedScore: newCalculatedScore,
                     lastUpdated: serverTimestamp(),
                 };
                 console.log(`[handleDeleteLastPenalty] Data for Juri ${juriId}:`, juriUpdateData);
-                batch.update(juriDocRef, juriUpdateData); // Use update since doc should exist
+                batch.update(juriDocRef, juriUpdateData); 
             } else {
                 console.warn(`[handleDeleteLastPenalty] Juri doc not found for ${juriId}, skipping update for this juri.`);
             }
@@ -334,6 +330,8 @@ export default function DewanTGRPenaltyPage() {
       let errorMessage = `Gagal menghapus pelanggaran & update skor juri: ${firebaseError.message || String(firebaseError)}`;
       if (firebaseError.code === 'permission-denied') {
         errorMessage += " Pastikan Anda telah login dan memiliki izin yang cukup. Periksa juga path Firestore yang diakses.";
+      } else if (firebaseError.code === 'failed-precondition') {
+        errorMessage += " Query Firestore memerlukan index. Silakan buat index melalui link di konsol error atau langsung di Firebase Console.";
       }
       setError(errorMessage);
       alert(errorMessage);
@@ -373,8 +371,9 @@ export default function DewanTGRPenaltyPage() {
         <PageTitle title="Dewan Juri 1 - Pelanggaran TGR" description="Catat pelanggaran untuk penampilan kategori TGR.">
             <div className="flex items-center gap-2">
                 {currentUserEmail ? (
-                    <div className="flex items-center text-sm text-green-600 dark:text-green-400 p-2 border border-green-500 rounded-md">
-                        <UserCircle className="mr-2 h-4 w-4" /> User: {currentUserEmail} (Login Aktif)
+                    <div className={cn("flex items-center text-sm p-2 border rounded-md", currentUserEmail ? "text-green-600 dark:text-green-400 border-green-500" : "text-red-600 dark:text-red-400 border-red-500")}>
+                        <UserCircle className="mr-2 h-4 w-4" /> 
+                        {currentUserEmail ? `User: ${currentUserEmail} (Login Aktif)` : "Belum Login ke Firebase"}
                     </div>
                 ) : (
                     <div className="flex items-center text-sm text-red-600 dark:text-red-400 p-2 border border-red-500 rounded-md">
@@ -382,7 +381,7 @@ export default function DewanTGRPenaltyPage() {
                     </div>
                 )}
                 <Button variant="outline" asChild>
-                    <Link href="/scoring/tgr"><ArrowLeft className="mr-2 h-4 w-4" /> Kembali</Link>
+                    <Link href="/scoring/tgr/login"><ArrowLeft className="mr-2 h-4 w-4" /> Kembali</Link>
                 </Button>
             </div>
         </PageTitle>
@@ -454,8 +453,8 @@ export default function DewanTGRPenaltyPage() {
               
               <div className="grid grid-cols-[1fr_auto_auto_auto] items-center p-3 bg-gray-200 dark:bg-gray-900 font-bold border-t-2 border-gray-400 dark:border-gray-600">
                 <div className="text-md">TOTAL PELANGGARAN</div>
-                <div></div> {/* Spacer */}
-                <div></div> {/* Spacer */}
+                <div></div> 
+                <div></div> 
                 <div className="text-md text-center w-20 text-red-600 dark:text-red-400">
                   {totalOverallPenalty.toFixed(2)}
                 </div>
