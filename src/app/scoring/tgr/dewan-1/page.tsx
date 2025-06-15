@@ -6,11 +6,12 @@ import Link from 'next/link';
 import { Header } from '@/components/layout/Header';
 import { PageTitle } from '@/components/shared/PageTitle';
 import { Button } from '@/components/ui/button';
-import { ArrowLeft, Trash2, Loader2, MinusCircle } from 'lucide-react';
+import { ArrowLeft, Trash2, Loader2, MinusCircle, UserCircle } from 'lucide-react'; // Ditambahkan UserCircle
 import type { ScheduleTGR, TGRDewanPenalty, TGRDewanPenaltyType, TGRJuriScore } from '@/lib/types';
 import { db, auth } from '@/lib/firebase'; // Import auth
 import { doc, onSnapshot, getDoc, collection, addDoc, query, orderBy, limit, deleteDoc, serverTimestamp, Timestamp, where, getDocs, setDoc, updateDoc, writeBatch } from 'firebase/firestore';
 import { Skeleton } from '@/components/ui/skeleton';
+import { cn } from '@/lib/utils'; // Ditambahkan cn
 
 const ACTIVE_TGR_SCHEDULE_CONFIG_PATH = 'app_settings/active_match_tgr';
 const SCHEDULE_TGR_COLLECTION = 'schedules_tgr';
@@ -46,6 +47,7 @@ export default function DewanTGRPenaltyPage() {
   const [isProcessing, setIsProcessing] = useState<Record<string, boolean>>({}); // For individual penalty type processing
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [currentUserEmail, setCurrentUserEmail] = useState<string | null>(null); // State untuk email pengguna
 
   // Fetch active schedule ID
   useEffect(() => {
@@ -59,6 +61,19 @@ export default function DewanTGRPenaltyPage() {
     });
     return () => unsubConfig();
   }, []);
+
+  // Update current user email status
+  useEffect(() => {
+    const unsubscribeAuth = auth.onAuthStateChanged(user => {
+      if (user) {
+        setCurrentUserEmail(user.email);
+      } else {
+        setCurrentUserEmail(null);
+      }
+    });
+    return () => unsubscribeAuth();
+  }, []);
+
 
   // Reset data if active match changes or becomes null
   useEffect(() => {
@@ -356,10 +371,22 @@ export default function DewanTGRPenaltyPage() {
       <Header />
       <main className="flex-1 container mx-auto px-2 py-4 md:p-6">
         <PageTitle title="Dewan Juri 1 - Pelanggaran TGR" description="Catat pelanggaran untuk penampilan kategori TGR.">
-          <Button variant="outline" asChild>
-            <Link href="/scoring/tgr"><ArrowLeft className="mr-2 h-4 w-4" /> Kembali</Link>
-          </Button>
+            <div className="flex items-center gap-2">
+                {currentUserEmail ? (
+                    <div className="flex items-center text-sm text-green-600 dark:text-green-400 p-2 border border-green-500 rounded-md">
+                        <UserCircle className="mr-2 h-4 w-4" /> User: {currentUserEmail} (Login Aktif)
+                    </div>
+                ) : (
+                    <div className="flex items-center text-sm text-red-600 dark:text-red-400 p-2 border border-red-500 rounded-md">
+                        <UserCircle className="mr-2 h-4 w-4" /> Belum Login ke Firebase
+                    </div>
+                )}
+                <Button variant="outline" asChild>
+                    <Link href="/scoring/tgr"><ArrowLeft className="mr-2 h-4 w-4" /> Kembali</Link>
+                </Button>
+            </div>
         </PageTitle>
+
 
         {isLoading && activeMatchId && !matchDetailsLoaded ? (
           <div className="text-center py-10">
@@ -440,3 +467,5 @@ export default function DewanTGRPenaltyPage() {
     </div>
   );
 }
+
+        
