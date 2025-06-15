@@ -20,9 +20,9 @@ const MATCHES_TGR_COLLECTION = 'matches_tgr';
 
 const getPerformanceDurationForRound = (roundName: string | undefined): number => {
   const round = roundName?.toLowerCase() || '';
-  if (round.includes('penyisihan') || round.includes('perempat final')) return 80; // 1 min 20 sec
-  if (round.includes('semi final')) return 100; // 1 min 40 sec
-  if (round.includes('final')) return 180; // 3 min
+  if (round.includes('penyisihan') || round.includes('perempat final')) return 80;
+  if (round.includes('semi final')) return 100;
+  if (round.includes('final')) return 180;
   return 180; // Default
 };
 
@@ -86,108 +86,140 @@ export default function TGRTimerControlPage() {
     let mounted = true;
     if (!matchDetailsLoaded) setIsLoading(true);
 
-    const loadScheduleAndInitializeTimer = async () => {
-      if (!mounted) return;
+    let unsubSchedule: (() => void) | null = null;
+    let unsubTimer: (() => void) | null = null;
+
+    const loadScheduleDetails = async () => {
+      if (!mounted || !activeMatchId) return;
       try {
         const scheduleDocRef = doc(db, SCHEDULE_TGR_COLLECTION, activeMatchId);
         const scheduleDocSnap = await getDoc(scheduleDocRef);
         if (!mounted) return;
 
-        let currentSchedule: ScheduleTGR | null = null;
         if (scheduleDocSnap.exists()) {
           const data = scheduleDocSnap.data() as ScheduleTGR;
-          setScheduleDetails(data);
-          currentSchedule = data;
+          setScheduleDetails(data); // This will trigger the timer listener effect if scheduleDetails is a dep
           setMatchDetailsLoaded(true);
         } else {
           setError(`Detail jadwal TGR ID ${activeMatchId} tidak ditemukan.`);
           setScheduleDetails(null);
           setMatchDetailsLoaded(false);
-          setIsLoading(false);
-          return;
+          if (mounted) setIsLoading(false);
         }
+      } catch (err) {
+        if (mounted) {
+          console.error("Error loading schedule details:", err);
+          setError("Gagal memuat detail jadwal TGR.");
+          setScheduleDetails(null);
+          setMatchDetailsLoaded(false);
+          setIsLoading(false);
+        }
+      }
+    };
 
+    loadScheduleDetails();
+    
+    // This effect will now re-run if scheduleDetails changes, ensuring roundDuration is up-to-date
+    // for the onSnapshot logic.
+    if (scheduleDetails && activeMatchId) {
         const matchDataDocRef = doc(db, MATCHES_TGR_COLLECTION, activeMatchId);
-        const unsubTimer = onSnapshot(matchDataDocRef, async (matchDocSnap) => {
-          if (!mounted) return;
-          const roundDuration = getPerformanceDurationForRound(currentSchedule?.round);
-          let initialSide: 'biru' | 'merah' | null = null;
-          if (currentSchedule?.pesilatBiruName && currentSchedule?.pesilatMerahName) {
-            initialSide = 'biru';
-          } else if (currentSchedule?.pesilatMerahName || currentSchedule?.pesilatBiruName) { // If either is present, default to merah if biru is not.
-            initialSide = 'merah';
-          }
-          
-          if (matchDocSnap.exists()) {
-            const data = matchDocSnap.data();
-            if (data?.timerStatus) {
-              const fsTimerStatus = data.timerStatus as TGRTimerStatus;
-              // If status is 'Finished' overall, or if currentPerformingSide is null (from previous overall finish), re-init for new schedule
-              if (fsTimerStatus.matchStatus === 'Finished' && fsTimerStatus.currentPerformingSide === null) {
-                 const reinitializedStatus: TGRTimerStatus = {
+        unsubTimer = onSnapshot(matchDataDocRef, async (matchDocSnap) => {
+            if (!mounted) return;
+
+            const roundDuration = getPerformanceDurationForRound(scheduleDetails?.round);
+            let initialSide: 'biru' | 'merah' | null = null;
+            if (scheduleDetails?.pesilatBiruName && scheduleDetails?.pesilatMerahName) {
+                initialSide = 'biru';
+            } else if (scheduleDetails?.pesilatMerahName || scheduleDetails?.pesilatBiruName) {
+                initialSide = 'merah';
+            }
+
+            let newStatusToSet: TGRTimerStatus;
+            let firestoreNeedsUpdate = false;
+            let statusForFirestore: TGRTimerStatus | null = null;
+
+            if (matchDocSnap.exists()) {
+                const data = matchDocSnap.data();
+                const fsTimerStatus = data?.timerStatus as TGRTimerStatus | undefined;
+
+                if (fsTimerStatus) {
+                    newStatusToSet = { ...fsTimerStatus }; // Start with what's in Firestore
+
+                    // Correction logic
+                    if (newStatusToSet.currentPerformingSide === undefined || newStatusToSet.currentPerformingSide === null && initialSide !== null && newStatusToSet.matchStatus !== 'Finished') {
+                        newStatusToSet.currentPerformingSide = initialSide;
+                        firestoreNeedsUpdate = true;
+                    }
+                    if (newStatusToSet.performanceDuration !== roundDuration) {
+                        newStatusToSet.performanceDuration = roundDuration;
+                        firestoreNeedsUpdate = true;
+                    }
+                    if ((newStatusToSet.matchStatus === 'Pending' || newStatusToSet.timerSeconds === 0 && newStatusToSet.matchStatus !== 'Finished') && newStatusToSet.timerSeconds !== roundDuration) {
+                        newStatusToSet.timerSeconds = roundDuration;
+                        firestoreNeedsUpdate = true;
+                    }
+                     // If overall match was finished (currentPerformingSide is null), but a new schedule (activeMatchId) has loaded,
+                    // we need to re-initialize for the new schedule's first performer.
+                    if (fsTimerStatus.matchStatus === 'Finished' && fsTimerStatus.currentPerformingSide === null) {
+                         newStatusToSet = {
+                            timerSeconds: roundDuration,
+                            isTimerRunning: false,
+                            matchStatus: 'Pending',
+                            performanceDuration: roundDuration,
+                            currentPerformingSide: initialSide,
+                        };
+                        firestoreNeedsUpdate = true;
+                    }
+
+                } else { // timerStatus field missing
+                    newStatusToSet = {
+                        timerSeconds: roundDuration,
+                        isTimerRunning: false,
+                        matchStatus: 'Pending',
+                        performanceDuration: roundDuration,
+                        currentPerformingSide: initialSide,
+                    };
+                    firestoreNeedsUpdate = true;
+                }
+            } else { // Match document doesn't exist
+                newStatusToSet = {
                     timerSeconds: roundDuration,
                     isTimerRunning: false,
                     matchStatus: 'Pending',
                     performanceDuration: roundDuration,
                     currentPerformingSide: initialSide,
-                  };
-                  setTgrTimerStatus(reinitializedStatus);
-                  await setDoc(matchDataDocRef, { timerStatus: reinitializedStatus }, { merge: true });
-              } else {
-                // Ensure performanceDuration and possibly timerSeconds are correct if schedule changed but status wasn't fully reset
-                 if (fsTimerStatus.performanceDuration !== roundDuration || 
-                    (fsTimerStatus.matchStatus === 'Pending' && fsTimerStatus.timerSeconds !== roundDuration)) {
-                    setTgrTimerStatus({ 
-                        ...fsTimerStatus, 
-                        performanceDuration: roundDuration,
-                        timerSeconds: (fsTimerStatus.matchStatus === 'Pending' || fsTimerStatus.timerSeconds > roundDuration) ? roundDuration : fsTimerStatus.timerSeconds,
-                        currentPerformingSide: fsTimerStatus.currentPerformingSide || initialSide // Ensure side is set
-                    });
-                 } else {
-                    setTgrTimerStatus({...fsTimerStatus, currentPerformingSide: fsTimerStatus.currentPerformingSide || initialSide});
-                 }
-              }
-            } else { // timerStatus field doesn't exist
-              const newStatus: TGRTimerStatus = {
-                timerSeconds: roundDuration,
-                isTimerRunning: false,
-                matchStatus: 'Pending',
-                performanceDuration: roundDuration,
-                currentPerformingSide: initialSide,
-              };
-              setTgrTimerStatus(newStatus);
-              await setDoc(matchDataDocRef, { timerStatus: newStatus }, { merge: true });
+                };
+                firestoreNeedsUpdate = true;
             }
-          } else { // Match document doesn't exist
-            const newStatus: TGRTimerStatus = {
-              timerSeconds: roundDuration,
-              isTimerRunning: false,
-              matchStatus: 'Pending',
-              performanceDuration: roundDuration,
-              currentPerformingSide: initialSide,
-            };
-            setTgrTimerStatus(newStatus);
-            await setDoc(matchDataDocRef, { timerStatus: newStatus });
-          }
-        });
-        return unsubTimer;
-      } catch (err) {
-        if (mounted) {
-          console.error("Error loading schedule and timer:", err);
-          setError("Gagal memuat data pertandingan TGR.");
-          setScheduleDetails(null);
-          setMatchDetailsLoaded(false);
-        }
-      }
-    };
+            
+            // Only update local state if it's different, to prevent unnecessary re-renders
+            setTgrTimerStatus(prevStatus => {
+                if (JSON.stringify(prevStatus) !== JSON.stringify(newStatusToSet)) {
+                    return newStatusToSet;
+                }
+                return prevStatus;
+            });
 
-    const unsubTimerListenerPromise = loadScheduleAndInitializeTimer();
-    
+            if (firestoreNeedsUpdate) {
+                statusForFirestore = { ...newStatusToSet }; // Use a fresh copy for Firestore
+                // Avoid writing if the current Firestore state (if read again) would be identical
+                // This check is a bit complex here, so we rely on the conditions above being mostly for initialization
+                try {
+                    await setDoc(matchDataDocRef, { timerStatus: statusForFirestore }, { merge: true });
+                } catch (e) {
+                    console.error("Error writing initial/corrected timer status to Firestore:", e);
+                }
+            }
+        });
+    }
+
+
     return () => {
       mounted = false;
-      unsubTimerListenerPromise.then(unsub => { if (unsub) unsub(); });
+      if (unsubSchedule) unsubSchedule();
+      if (unsubTimer) unsubTimer();
     };
-  }, [activeMatchId]);
+  }, [activeMatchId, scheduleDetails]); // Added scheduleDetails here
 
 
   useEffect(() => {
@@ -203,13 +235,27 @@ export default function TGRTimerControlPage() {
           if(timerIntervalRef.current) clearInterval(timerIntervalRef.current);
           return;
         }
+        // This interval should only decrement based on local state,
+        // and then push the update. The onSnapshot will handle reflecting it.
+        // However, for more robust sync, it's often better to read from FS then write.
+        // For this interval, we'll try a slightly different approach:
+        // Optimistically update local, then sync. Or, make Dewan 1 authoritative for timer ticks.
+        // Given Dewan 1 is authoritative, this interval mainly updates Firestore.
         try {
           const matchDataDocRef = doc(db, MATCHES_TGR_COLLECTION, activeMatchId);
+          // It's critical to get the LATEST status from Firestore before decrementing
           const currentDBDoc = await getDoc(matchDataDocRef);
           
           if (!currentDBDoc.exists() || !(currentDBDoc.data()?.timerStatus as TGRTimerStatus)?.isTimerRunning) {
+            // If Firestore says timer isn't running (e.g., paused by another action, or match reset), stop this interval.
             if (timerIntervalRef.current) clearInterval(timerIntervalRef.current);
-            if (currentDBDoc.exists()) setTgrTimerStatus(currentDBDoc.data()?.timerStatus as TGRTimerStatus || initialGlobalTgrTimerStatus);
+            // Sync local state if needed
+            if (currentDBDoc.exists() && currentDBDoc.data()?.timerStatus) {
+                 setTgrTimerStatus(currentDBDoc.data()?.timerStatus as TGRTimerStatus);
+            } else {
+                 // Fallback or reset if doc is gone
+                 setTgrTimerStatus(prev => ({ ...prev, isTimerRunning: false }));
+            }
             return;
           }
 
@@ -220,19 +266,22 @@ export default function TGRTimerControlPage() {
 
           if (newSeconds === 0) {
             newIsTimerRunning = false;
-            newMatchStatus = 'Finished'; // Mark current side/phase as finished
+            newMatchStatus = 'Finished';
           }
           
-          const updatedStatus: Partial<TGRTimerStatus> = { 
+          const updatedStatusForFirestore: Partial<TGRTimerStatus> = { 
             timerSeconds: newSeconds, 
             isTimerRunning: newIsTimerRunning,
             matchStatus: newMatchStatus,
+            // currentPerformingSide and performanceDuration should not change here
           };
-          await updateDoc(matchDataDocRef, { timerStatus: {...currentDBTimerStatus, ...updatedStatus} });
+          // Merge with the full currentDBTimerStatus to avoid accidentally removing fields
+          await updateDoc(matchDataDocRef, { timerStatus: {...currentDBTimerStatus, ...updatedStatusForFirestore } });
+          // Local state will be updated by the onSnapshot listener.
         } catch (e) {
           console.error("Error updating timer in interval:", e);
           if(timerIntervalRef.current) clearInterval(timerIntervalRef.current);
-          setTgrTimerStatus(prev => ({ ...prev, isTimerRunning: false }));
+          setTgrTimerStatus(prev => ({ ...prev, isTimerRunning: false })); // Attempt to stop local timer
         }
       }, 1000);
     } else {
@@ -253,9 +302,10 @@ export default function TGRTimerControlPage() {
       const matchDataDocRef = doc(db, MATCHES_TGR_COLLECTION, activeMatchId);
       const docSnap = await getDoc(matchDataDocRef);
       const roundDuration = getPerformanceDurationForRound(scheduleDetails.round);
+      
       const currentDBTimerStatus = docSnap.exists() && docSnap.data()?.timerStatus 
                                    ? docSnap.data()?.timerStatus as TGRTimerStatus 
-                                   : { 
+                                   : { // Sensible default if doc or field is missing
                                        timerSeconds: roundDuration,
                                        isTimerRunning: false,
                                        matchStatus: 'Pending',
@@ -268,6 +318,7 @@ export default function TGRTimerControlPage() {
         ...newStatusUpdates,
       };
       await setDoc(matchDataDocRef, { timerStatus: newFullStatus }, { merge: true });
+      // Local state `tgrTimerStatus` will be updated by the onSnapshot listener.
     } catch (e) {
       console.error("Error updating TGR timer status in Firestore:", e);
       setError("Gagal memperbarui status timer di server.");
@@ -277,8 +328,18 @@ export default function TGRTimerControlPage() {
   }, [activeMatchId, scheduleDetails]);
 
   const handleStartPauseTimer = () => {
-    if (!activeMatchId || !scheduleDetails || (tgrTimerStatus.matchStatus === 'Finished' && tgrTimerStatus.currentPerformingSide === 'merah') || (tgrTimerStatus.matchStatus === 'Finished' && !scheduleDetails.pesilatBiruName)) return;
-
+    if (!activeMatchId || !scheduleDetails) return;
+    // Prevent action if current side is finished and there's another side, or if overall match is finished.
+    if (tgrTimerStatus.matchStatus === 'Finished' && 
+        ( (tgrTimerStatus.currentPerformingSide === 'biru' && scheduleDetails.pesilatMerahName) || 
+          (tgrTimerStatus.currentPerformingSide === 'merah' && !scheduleDetails.pesilatBiruName) || // Single performer is done
+          (tgrTimerStatus.currentPerformingSide === 'merah' && scheduleDetails.pesilatBiruName) // Both done
+        )
+       ) {
+        alert("Penampilan untuk sisi ini atau keseluruhan telah selesai. Gunakan tombol lanjut atau reset.");
+        return;
+    }
+    
     if (tgrTimerStatus.isTimerRunning) { // Pause
       updateTimerStatusInFirestore({ isTimerRunning: false, matchStatus: 'Paused' });
     } else { // Start
@@ -294,7 +355,10 @@ export default function TGRTimerControlPage() {
     if (!activeMatchId || !scheduleDetails) return;
     const roundDuration = getPerformanceDurationForRound(scheduleDetails.round);
     let sideToResetTo = tgrTimerStatus.currentPerformingSide;
-    if (!sideToResetTo) { // If overall finished or not set, determine based on schedule
+
+    // If no current side (e.g. overall match just finished and advanced, or initial load for a new match)
+    // determine the starting side based on schedule.
+    if (!sideToResetTo || (tgrTimerStatus.matchStatus === 'Finished' && tgrTimerStatus.currentPerformingSide === null) ) {
         sideToResetTo = (scheduleDetails.pesilatBiruName && scheduleDetails.pesilatMerahName) ? 'biru' : 'merah';
     }
 
@@ -303,7 +367,7 @@ export default function TGRTimerControlPage() {
       isTimerRunning: false,
       matchStatus: 'Pending',
       performanceDuration: roundDuration,
-      currentPerformingSide: sideToResetTo, // Reset to the current or initial side
+      currentPerformingSide: sideToResetTo,
     });
   };
 
@@ -312,9 +376,9 @@ export default function TGRTimerControlPage() {
     setIsSubmitting(true);
 
     try {
-      // Case 1: Biru just finished, and Merah is next in the same schedule
+      const roundDuration = getPerformanceDurationForRound(scheduleDetails.round);
+      // Case 1: Sudut Biru just finished, and Sudut Merah is next in the same schedule
       if (tgrTimerStatus.currentPerformingSide === 'biru' && tgrTimerStatus.matchStatus === 'Finished' && scheduleDetails.pesilatMerahName) {
-        const roundDuration = getPerformanceDurationForRound(scheduleDetails.round);
         await updateTimerStatusInFirestore({
           currentPerformingSide: 'merah',
           matchStatus: 'Pending',
@@ -323,11 +387,13 @@ export default function TGRTimerControlPage() {
           performanceDuration: roundDuration,
         });
       } 
-      // Case 2: Merah just finished (or single performer finished), advance to next schedule
+      // Case 2: Sudut Merah just finished (or a single performer finished), advance to next schedule
       else if ((tgrTimerStatus.currentPerformingSide === 'merah' && tgrTimerStatus.matchStatus === 'Finished') || 
-               (!scheduleDetails.pesilatBiruName && tgrTimerStatus.matchStatus === 'Finished')) {
-        // Mark current schedule as fully done
-        await updateTimerStatusInFirestore({ matchStatus: 'Finished', currentPerformingSide: null, isTimerRunning: false });
+               (!scheduleDetails.pesilatBiruName && scheduleDetails.pesilatMerahName && tgrTimerStatus.matchStatus === 'Finished') || // Single Merah performer finished
+               (!scheduleDetails.pesilatMerahName && scheduleDetails.pesilatBiruName && tgrTimerStatus.matchStatus === 'Finished') // Single Biru performer finished
+      ) {
+        // Mark current schedule as fully done by setting currentPerformingSide to null
+        await updateTimerStatusInFirestore({ matchStatus: 'Finished', currentPerformingSide: null, isTimerRunning: false, timerSeconds: 0 });
 
         const schedulesRef = collection(db, SCHEDULE_TGR_COLLECTION);
         const q = query(
@@ -343,10 +409,10 @@ export default function TGRTimerControlPage() {
         } else {
           const nextMatchDoc = querySnapshot.docs[0];
           await setDoc(doc(db, ACTIVE_TGR_SCHEDULE_CONFIG_PATH), { activeScheduleId: nextMatchDoc.id });
-          // State will reset via useEffect watching activeMatchId
+          // State will reset via useEffect watching activeMatchId & scheduleDetails
         }
       } else {
-        alert("Pastikan timer untuk sisi saat ini telah selesai (status 'Finished') sebelum melanjutkan.");
+        alert("Pastikan timer untuk sisi/penampilan saat ini telah selesai (status 'Finished') sebelum melanjutkan.");
       }
     } catch (err) {
       console.error("Error advancing TGR state/participant:", err);
@@ -368,37 +434,51 @@ export default function TGRTimerControlPage() {
   const getStartPauseButtonIcon = () => tgrTimerStatus.isTimerRunning ? <PauseIcon className="mr-2 h-5 w-5"/> : <Play className="mr-2 h-5 w-5"/>;
   const getStartPauseButtonDisabled = () => {
     if (getButtonDisabledState()) return true;
-    if (tgrTimerStatus.matchStatus === 'Finished' && tgrTimerStatus.currentPerformingSide === 'merah') return true; // Merah done, overall done for this schedule
-    if (tgrTimerStatus.matchStatus === 'Finished' && !scheduleDetails?.pesilatBiruName) return true; // Single performer done
-    if (tgrTimerStatus.timerSeconds === 0 && !tgrTimerStatus.isTimerRunning && tgrTimerStatus.matchStatus !== 'Pending') return true; // Timer at 0, not running, not pending reset
+    // If the current side is finished and there's another side, disable start/pause for current.
+    if (tgrTimerStatus.matchStatus === 'Finished' && tgrTimerStatus.currentPerformingSide === 'biru' && scheduleDetails?.pesilatMerahName) return true;
+    // If the entire match (both sides or single performer) is finished
+    if (tgrTimerStatus.matchStatus === 'Finished' && tgrTimerStatus.currentPerformingSide === null) return true;
+    if (tgrTimerStatus.matchStatus === 'Finished' && tgrTimerStatus.currentPerformingSide === 'merah') return true; // Merah done, overall done
+    if (tgrTimerStatus.matchStatus === 'Finished' && !scheduleDetails?.pesilatBiruName && scheduleDetails?.pesilatMerahName) return true; // Single Merah done
+
+
+    if (tgrTimerStatus.timerSeconds === 0 && !tgrTimerStatus.isTimerRunning && tgrTimerStatus.matchStatus !== 'Pending') return true;
     return false;
   };
 
 
   const getAdvanceButtonText = () => {
-    if (tgrTimerStatus.currentPerformingSide === 'biru' && scheduleDetails?.pesilatMerahName) {
+    if (tgrTimerStatus.currentPerformingSide === 'biru' && scheduleDetails?.pesilatMerahName && tgrTimerStatus.matchStatus === 'Finished') {
       return "Lanjut ke Sudut Merah";
     }
     return "Lanjut Peserta Berikutnya";
   };
   const getAdvanceButtonDisabled = () => {
     if (getButtonDisabledState()) return true;
-    if (tgrTimerStatus.matchStatus !== 'Finished') return true; // Can only advance if current side/phase is finished
+    if (tgrTimerStatus.matchStatus !== 'Finished') return true;
     if (tgrTimerStatus.isTimerRunning) return true;
-    return false;
+    // If Biru just finished and Merah is next, button should be enabled.
+    if (tgrTimerStatus.currentPerformingSide === 'biru' && scheduleDetails?.pesilatMerahName) return false;
+    // If Merah just finished (or single performer finished), button should be enabled.
+    if (tgrTimerStatus.currentPerformingSide === 'merah' || (!scheduleDetails?.pesilatBiruName && scheduleDetails?.pesilatMerahName) || (!scheduleDetails?.pesilatMerahName && scheduleDetails?.pesilatBiruName) ) return false;
+
+    return true; // Default to disabled if none of the enabling conditions are met
   };
   
   const displayPerformingSide = () => {
     if (!scheduleDetails) return "";
     if (tgrTimerStatus.currentPerformingSide === 'biru' && scheduleDetails.pesilatBiruName) {
-        return `Sudut Biru: ${scheduleDetails.pesilatBiruName} (${scheduleDetails.pesilatBiruContingent || scheduleDetails.pesilatMerahContingent})`;
+        return `Sudut Biru: ${scheduleDetails.pesilatBiruName} (${scheduleDetails.pesilatBiruContingent || scheduleDetails.pesilatMerahContingent || 'N/A'})`;
     }
     if (tgrTimerStatus.currentPerformingSide === 'merah' && scheduleDetails.pesilatMerahName) {
-        return `Sudut Merah: ${scheduleDetails.pesilatMerahName} (${scheduleDetails.pesilatMerahContingent})`;
+        return `Sudut Merah: ${scheduleDetails.pesilatMerahName} (${scheduleDetails.pesilatMerahContingent || 'N/A'})`;
     }
-    // Fallback if only one name is available or side is not determined yet for a single performer
-    if (scheduleDetails.pesilatMerahName) return `Peserta: ${scheduleDetails.pesilatMerahName} (${scheduleDetails.pesilatMerahContingent})`;
-    if (scheduleDetails.pesilatBiruName) return `Peserta: ${scheduleDetails.pesilatBiruName} (${scheduleDetails.pesilatBiruContingent || scheduleDetails.pesilatMerahContingent})`;
+    // Fallback for single performer or if side is not yet determined but names exist
+    if (scheduleDetails.pesilatMerahName && !scheduleDetails.pesilatBiruName) return `Peserta: ${scheduleDetails.pesilatMerahName} (${scheduleDetails.pesilatMerahContingent || 'N/A'})`;
+    if (scheduleDetails.pesilatBiruName && !scheduleDetails.pesilatMerahName) return `Peserta: ${scheduleDetails.pesilatBiruName} (${scheduleDetails.pesilatBiruContingent || 'N/A'})`;
+    // If both names exist but side is null (e.g., after full match finish)
+    if (scheduleDetails.pesilatMerahName && scheduleDetails.pesilatBiruName && tgrTimerStatus.currentPerformingSide === null) return "Pertandingan Selesai";
+    
     return "Peserta";
   };
 
@@ -432,7 +512,7 @@ export default function TGRTimerControlPage() {
         </div>
 
         {error && (
-          <Alert variant="destructive" className="mb-6">
+          <Alert variant="destructive" className="mb-6 max-w-lg mx-auto">
             <Info className="h-4 w-4" />
             <AlertTitle>Error</AlertTitle>
             <AlertDescription>{error}</AlertDescription>
@@ -449,11 +529,14 @@ export default function TGRTimerControlPage() {
               {tgrTimerStatus.isTimerRunning && " (Berjalan)"}
               {!tgrTimerStatus.isTimerRunning && tgrTimerStatus.timerSeconds > 0 && tgrTimerStatus.matchStatus === 'Paused' && " (Jeda)"}
               {tgrTimerStatus.matchStatus === 'Finished' && tgrTimerStatus.currentPerformingSide === 'biru' && scheduleDetails?.pesilatMerahName && " (Sudut Biru Selesai)"}
-              {tgrTimerStatus.matchStatus === 'Finished' && (tgrTimerStatus.currentPerformingSide === 'merah' || !scheduleDetails?.pesilatBiruName) && " (Penampilan Selesai)"}
-
+              {tgrTimerStatus.matchStatus === 'Finished' && 
+               ( (tgrTimerStatus.currentPerformingSide === 'merah' && scheduleDetails?.pesilatMerahName) || 
+                 (tgrTimerStatus.currentPerformingSide === null) || // Overall match finished
+                 (!scheduleDetails?.pesilatBiruName && scheduleDetails?.pesilatMerahName) // Single Merah performer finished
+               ) && " (Penampilan Selesai)"}
             </p>
              <p className="text-xs text-muted-foreground">
-              Durasi Penampilan per Sisi: {formatTime(tgrTimerStatus.performanceDuration)}
+              Target Durasi: {formatTime(tgrTimerStatus.performanceDuration)}
             </p>
           </CardHeader>
           <CardContent className="space-y-3 p-4 md:p-6">
@@ -464,16 +547,17 @@ export default function TGRTimerControlPage() {
                 tgrTimerStatus.isTimerRunning ? "bg-yellow-500 hover:bg-yellow-600 text-black" : "bg-green-500 hover:bg-green-600 text-white"
               )}
               disabled={getStartPauseButtonDisabled()}
+              aria-live="polite"
             >
-              {isSubmitting && tgrTimerStatus.isTimerRunning !== undefined /* check if submitting for this action */ ? <Loader2 className="mr-2 h-5 w-5 animate-spin"/> : getStartPauseButtonIcon()}
+              {isSubmitting && tgrTimerStatus.isTimerRunning !== undefined ? <Loader2 className="mr-2 h-5 w-5 animate-spin"/> : getStartPauseButtonIcon()}
               {getStartPauseButtonText()}
             </Button>
             <Button onClick={handleResetTimer} variant="outline" className="w-full py-3 text-lg" disabled={getButtonDisabledState() || tgrTimerStatus.isTimerRunning}>
-              {isSubmitting && tgrTimerStatus.matchStatus === 'Pending' /* check if submitting for this action */ ? <Loader2 className="mr-2 h-5 w-5 animate-spin"/> : <RotateCcw className="mr-2 h-5 w-5"/>}
+              {isSubmitting && tgrTimerStatus.matchStatus === 'Pending' ? <Loader2 className="mr-2 h-5 w-5 animate-spin"/> : <RotateCcw className="mr-2 h-5 w-5"/>}
               Reset Timer
             </Button>
             <Button onClick={handleAdvanceStateOrParticipant} className="w-full py-3 text-lg bg-blue-600 hover:bg-blue-700 text-white" disabled={getAdvanceButtonDisabled()}>
-              {isSubmitting && (tgrTimerStatus.matchStatus === 'Finished' || tgrTimerStatus.currentPerformingSide === 'biru') /* check if submitting for this action */ ? <Loader2 className="mr-2 h-5 w-5 animate-spin"/> : <ChevronsRight className="mr-2 h-5 w-5"/>}
+              {isSubmitting && (tgrTimerStatus.matchStatus === 'Finished' || tgrTimerStatus.currentPerformingSide === 'biru') ? <Loader2 className="mr-2 h-5 w-5 animate-spin"/> : <ChevronsRight className="mr-2 h-5 w-5"/>}
               {getAdvanceButtonText()}
             </Button>
           </CardContent>
@@ -488,3 +572,4 @@ export default function TGRTimerControlPage() {
     </div>
   );
 }
+
