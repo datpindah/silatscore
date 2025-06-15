@@ -25,6 +25,7 @@ const defaultPartaiOptions = [
 ];
 
 const tgrHalamanOptions = [
+  { value: '/scoring/tgr/timer-control', label: 'Kontrol Timer TGR' },
   { value: '/scoring/tgr/juri/juri-1', label: 'Juri 1 (TGR)' },
   { value: '/scoring/tgr/juri/juri-2', label: 'Juri 2 (TGR)' },
   { value: '/scoring/tgr/juri/juri-3', label: 'Juri 3 (TGR)' },
@@ -34,8 +35,6 @@ const tgrHalamanOptions = [
   { value: '/scoring/tgr/dewan-1', label: 'Dewan 1 (Input Penalti TGR)' },
   { value: '/scoring/tgr/ketua-pertandingan', label: 'Ketua Pertandingan (TGR)' },
   { value: '/scoring/tgr/monitoring-skor', label: 'Monitoring Skor (Display Umum TGR)' },
-  // Admin roles can be added here if needed, or handled separately
-  // Example: { value: '/admin', label: 'Admin Panel (Akses Umum)' }
 ];
 
 
@@ -189,7 +188,7 @@ function TGRLoginPageContent() {
               <div className="space-y-2">
                 <Label htmlFor="partai-tgr" className="font-headline">Partai TGR Aktif</Label>
                  <Input
-                  id="partai-tgr-display" // Changed ID to avoid conflict if Select also gets an id
+                  id="partai-tgr-display" 
                   type="text"
                   value={partaiOptions[0]?.label || 'Memuat...'}
                   readOnly
@@ -237,8 +236,6 @@ function TGRLoginPageContent() {
 
 export default function TGRLoginPage() {
   return (
-    // Suspense is needed if useSearchParams is used directly or in a child component rendered immediately.
-    // For this structure where TGRLoginPageContent uses it, it's good practice.
     <Suspense fallback={<div className="flex h-screen items-center justify-center"><Loader2 className="h-12 w-12 animate-spin text-primary" /> Memuat Halaman Login...</div>}>
       <TGRLoginPageContent />
     </Suspense>
