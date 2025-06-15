@@ -83,7 +83,7 @@ export interface ScheduleTGR {
   round: string; // Babak (e.g., Penyisihan, Final)
   pesilatMerahName: string; // For Tunggal, or primary name for Ganda/Regu
   pesilatMerahContingent: string;
-  pesilatBiruName: string; // Optional: for Ganda second name, or leave empty for Tunggal/Regu
+  pesilatBiruName: string; // Optional: for Ganda second name, or if TGR is structured as Biru vs Merah
   pesilatBiruContingent: string; // Optional: for Ganda second contingent
 }
 
@@ -185,8 +185,9 @@ export interface JuriMatchData {
 export interface TGRTimerStatus {
   timerSeconds: number;
   isTimerRunning: boolean;
-  matchStatus: 'Pending' | 'Ongoing' | 'Paused' | 'Finished';
-  performanceDuration: number; // e.g., 180 seconds for Tunggal
+  matchStatus: 'Pending' | 'Ongoing' | 'Paused' | 'Finished'; // Status for the current side, or overall
+  performanceDuration: number; 
+  currentPerformingSide?: 'biru' | 'merah' | null; // null if overall match finished or not applicable for the current phase
 }
 
 export interface TGRJuriScore {
