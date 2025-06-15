@@ -1,73 +1,102 @@
 
 rules_version = '2';
+
 service cloud.firestore {
   match /databases/{database}/documents {
 
-    // APP SETTINGS
-    // Stores global application settings like active match IDs.
-    // Production: Restrict write access to admin/trusted server. Read access might be public or restricted.
-    match /app_settings/{settingId} {
-      allow read: if request.auth != null; // Or if true; for public read during dev
-      allow write: if request.auth != null; // TODO: Restrict to Admin in production (e.g., request.auth.token.isAdmin == true)
-    }
-
-    // SCHEDULES (Tanding & TGR)
-    // Stores match schedules. Created and managed by Admin.
-    // Production: Write access should be strictly Admin-only. Read access might be public for users to view schedules.
-    match /schedules_tanding/{scheduleId} {
-      allow read: if request.auth != null; // Or if true; for public read during dev
-      allow write: if request.auth != null; // TODO: Restrict to Admin in production (e.g., request.auth.token.isAdmin == true)
-    }
-    match /schedules_tgr/{scheduleId} {
-      allow read: if request.auth != null; // Or if true; for public read during dev
-      allow write: if request.auth != null; // TODO: Restrict to Admin in production (e.g., request.auth.token.isAdmin == true)
-    }
-
-    // LIVE MATCH DATA (TANDING)
-    // Stores live scoring data for Tanding matches.
-    // Production:
-    //   - Overall match document: Write access for Dewan/Timer for timer_status. Read access for Juri, Ketua, Monitor.
-    //   - juri_scores: Juri can only write to their own document. Dewan/Ketua might read all.
-    //   - official_actions: Only Ketua Pertandingan can write.
-    //   - verifications: Ketua creates, Juri update their votes, Dewan/Ketua update status/result.
-    match /matches_tanding/{matchId} {
-      allow read, write: if request.auth != null; // TODO: Granular rules for production.
-
-      match /juri_scores/{juriId} {
-        allow read, write: if request.auth != null; // TODO: Restrict write to specific Juri (e.g., request.auth.uid == juriId or custom claim)
-      }
-
-      match /official_actions/{actionId} {
-        allow read, write: if request.auth != null; // TODO: Restrict write to Ketua Pertandingan
-      }
-
-      match /verifications/{verificationId} {
-        allow read, write: if request.auth != null; // TODO: Granular rules for creation, voting, and completion.
-      }
-    }
-
-    // LIVE MATCH DATA (TGR)
-    // Stores live scoring data for TGR matches.
-    // Production:
-    //   - Overall match document: Write access for Dewan/Timer for timer_status. Read access for Juri, Ketua, Monitor.
-    //   - juri_scores_tgr: Juri can only write to their own document. Ketua might read all.
-    //   - dewan_penalties_tgr: Only Dewan can write.
-    match /matches_tgr/{matchId} {
-      allow read, write: if request.auth != null; // TODO: Granular rules for production.
-
-      match /juri_scores_tgr/{juriId} {
-        allow read, write: if request.auth != null; // TODO: Restrict write to specific Juri
-      }
-
-      match /dewan_penalties_tgr/{penaltyId} {
-        allow read, write: if request.auth != null; // TODO: Restrict write to Dewan
-      }
-    }
-
-    // Default rule (optional, can be removed if all paths are covered above)
-    // Consider a default deny if you want to be explicit.
+    // Default to deny all access unless explicitly allowed
     // match /{document=**} {
     //   allow read, write: if false;
     // }
+
+    // App Settings - e.g., active match IDs
+    // For production: consider restricting write access to admin/specific roles
+    match /app_settings/{settingId} {
+      allow read: if request.auth != null; // Allow authenticated users to read
+      allow write: if request.auth != null; // DEV ONLY: Allow authenticated to write
+      // Production: allow write: if request.auth != null && request.auth.token.isAdmin == true;
+    }
+
+    // Schedules - Tanding & TGR
+    // For production: restrict write access to admin roles
+    match /schedules_tanding/{scheduleId} {
+      allow read: if request.auth != null;
+      allow write: if request.auth != null; // DEV ONLY
+      // Production: allow write: if request.auth != null && request.auth.token.isAdmin == true;
+    }
+    match /schedules_tgr/{scheduleId} {
+      allow read: if request.auth != null;
+      allow write: if request.auth != null; // DEV ONLY
+      // Production: allow write: if request.auth != null && request.auth.token.isAdmin == true;
+    }
+
+    // Live Match Data - Tanding
+    match /matches_tanding/{matchId} {
+      allow read: if request.auth != null;
+      allow write: if request.auth != null; // DEV ONLY: For Dewan 1 control, Ketua actions
+      // Production: More granular rules needed (e.g., Dewan role for timer_status)
+
+      // Juri Scores for Tanding
+      // For production: Juri should only write to their own score document. Dewan/Ketua might read.
+      match /juri_scores/{juriId} {
+        allow read: if request.auth != null;
+        allow write: if request.auth != null; // DEV ONLY: Juri and Dewan (if Dewan needs to initialize/reset)
+        // Production for Juri: allow write: if request.auth != null && request.auth.uid == juriId; // (if juriId is UID)
+        // Or, if juriId is like 'juri-1', need a custom claim for the juri role and ID.
+      }
+
+      // Official Actions (Ketua Pertandingan Tanding)
+      // For production: Restrict write to Ketua role
+      match /official_actions/{actionId} {
+        allow read: if request.auth != null;
+        allow write: if request.auth != null; // DEV ONLY
+        // Production: allow write: if request.auth != null && request.auth.token.isKetua == true;
+      }
+
+      // Verification Requests (Tanding)
+      // For production: Ketua creates, Juri updates their vote, Ketua updates result.
+      match /verifications/{verificationId} {
+        allow read: if request.auth != null;
+        allow create: if request.auth != null; // DEV ONLY: Ketua creates
+        allow update: if request.auth != null; // DEV ONLY: Juri votes, Ketua finalizes
+        // Production:
+        // allow create: if request.auth != null && request.auth.token.isKetua == true;
+        // allow update: if request.auth != null && (
+        //   (request.resource.data.votes[request.auth.token.juriId] != resource.data.votes[request.auth.token.juriId] && request.resource.data.status == 'pending') || // Juri voting
+        //   (request.resource.data.status != resource.data.status && request.auth.token.isKetua == true) // Ketua finalizing
+        // );
+        allow delete: if request.auth != null; // DEV ONLY, or admin
+      }
+    }
+
+    // Live Match Data - TGR
+    match /matches_tgr/{matchId} {
+      allow read: if request.auth != null;
+      allow write: if request.auth != null; // DEV ONLY: For Dewan TGR control, Ketua TGR actions
+      // Production: More granular rules needed
+
+      // Juri Scores for TGR
+      // For production: Juri writes to own. Dewan TGR writes `externalDeductions`. Ketua TGR reads.
+      match /juri_scores_tgr/{juriId} {
+        allow read: if request.auth != null;
+        allow write: if request.auth != null; // DEV ONLY: Juri input, Dewan TGR updates `externalDeductions` & calculatedScore
+        // Production for Juri:
+        // allow write: if request.auth != null && request.auth.token.juriId == juriId &&
+        //                 request.resource.data.keys().hasAll(['baseScore', 'gerakanSalahCount', 'staminaKemantapanBonus', 'isReady', 'calculatedScore', 'lastUpdated', 'externalDeductions']) &&
+        //                 request.resource.data.externalDeductions == resource.data.externalDeductions; // Juri cannot change externalDeductions
+        // Production for Dewan TGR (updating externalDeductions):
+        // allow update: if request.auth != null && request.auth.token.isDewanTGR == true &&
+        //                  request.resource.data.externalDeductions != resource.data.externalDeductions;
+      }
+
+      // Dewan Penalties for TGR
+      // For production: Restrict write to Dewan TGR role
+      match /dewan_penalties_tgr/{penaltyId} {
+        allow read: if request.auth != null;
+        // allow write: if request.auth != null; // Original DEV ONLY
+        allow create, delete: if request.auth != null; // DEV ONLY: More specific for Dewan add/delete
+        // Production: allow write: if request.auth != null && request.auth.token.isDewanTGR == true;
+      }
+    }
   }
 }
