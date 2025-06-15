@@ -40,7 +40,8 @@ const defaultInitialTgrTimerStatus: TGRTimerStatus = {
   timerSeconds: 0,
   isTimerRunning: false,
   matchStatus: 'Pending',
-  performanceDuration: 0,
+  performanceDurationBiru: 0,
+  performanceDurationMerah: 0,
   currentPerformingSide: null,
 };
 
@@ -155,7 +156,7 @@ export default function JuriTGRPage({ params: paramsPromise }: { params: Promise
 
         biruScore.calculatedScore = calculateSideScore(biruScore.gerakanSalahCount, biruScore.staminaKemantapanBonus, biruScore.externalDeductions);
         merahScore.calculatedScore = calculateSideScore(merahScore.gerakanSalahCount, merahScore.staminaKemantapanBonus, merahScore.externalDeductions);
-
+        
         setJuriScore({
           baseScore: data.baseScore ?? BASE_SCORE_TGR,
           biru: biruScore,
@@ -203,7 +204,7 @@ export default function JuriTGRPage({ params: paramsPromise }: { params: Promise
   }, [isLoading, matchDetailsLoaded, activeMatchId]);
 
   const saveJuriScore = useCallback(async (updatedScoreData: TGRJuriScore) => {
-    if (!activeMatchId || isSaving || !currentSide) { // currentSide check added here
+    if (!activeMatchId || isSaving || !currentSide) {
       console.warn("Save aborted: No activeMatchId, isSaving, or no currentSide.");
       return;
     }
@@ -221,10 +222,31 @@ export default function JuriTGRPage({ params: paramsPromise }: { params: Promise
     } finally {
       setIsSaving(false);
     }
-  }, [activeMatchId, juriId, currentSide, isSaving]); // Added currentSide and isSaving
+  }, [activeMatchId, juriId, currentSide, isSaving]);
+
+  // For Gerakan Salah & Stamina Bonus buttons
+  const scoreActionButtonsDisabled =
+    isLoading ||
+    isSaving ||
+    !activeMatchId ||
+    !matchDetailsLoaded ||
+    !currentSide || // No side is active from Dewan
+    (tgrTimerStatus.matchStatus !== 'Ongoing' && tgrTimerStatus.matchStatus !== 'Paused') || // Timer not running or paused for the current side by Dewan
+    (tgrTimerStatus.matchStatus === 'Finished' && tgrTimerStatus.currentPerformingSide === currentSide); // Dewan has finished this side's performance
+
+  // For the "SIAP" button
+  const juriSiapButtonDisabled =
+    isLoading ||
+    isSaving ||
+    !activeMatchId ||
+    !matchDetailsLoaded ||
+    !currentSide || // No side is active from Dewan
+    (currentSideScore?.isReady ?? false) || // This Juri already marked this side as ready
+    (tgrTimerStatus.matchStatus === 'Finished' && tgrTimerStatus.currentPerformingSide === currentSide); // Dewan has finished this side's performance
+
 
   const handleGerakanSalah = () => {
-    if (isInputDisabled || !currentSide || !currentSideScore) return;
+    if (scoreActionButtonsDisabled || !currentSide || !currentSideScore) return;
     setJuriScore(prev => {
       const updatedSideScore = { ...currentSideScore };
       updatedSideScore.gerakanSalahCount = (updatedSideScore.gerakanSalahCount || 0) + 1;
@@ -236,7 +258,7 @@ export default function JuriTGRPage({ params: paramsPromise }: { params: Promise
   };
 
   const handleStaminaBonusChange = (bonusValue: number) => {
-    if (isInputDisabled || !currentSide || !currentSideScore) return;
+    if (scoreActionButtonsDisabled || !currentSide || !currentSideScore) return;
     setJuriScore(prev => {
       const updatedSideScore = { ...currentSideScore };
       updatedSideScore.staminaKemantapanBonus = bonusValue;
@@ -248,8 +270,7 @@ export default function JuriTGRPage({ params: paramsPromise }: { params: Promise
   };
 
   const handleJuriSiap = () => {
-    // buttonSiapDisabled already checks isInputDisabled and isJuriSideReady
-    if (buttonSiapDisabled || !currentSide || !currentSideScore) return;
+    if (juriSiapButtonDisabled || !currentSide || !currentSideScore) return;
     setJuriScore(prev => {
       const updatedSideScore = { ...currentSideScore, isReady: true };
       const newFullScore = { ...prev, [currentSide]: updatedSideScore };
@@ -261,22 +282,13 @@ export default function JuriTGRPage({ params: paramsPromise }: { params: Promise
   const formatDisplayDate = (dateString: string | undefined) => {
     if (!dateString) return <Skeleton className="h-4 w-28 inline-block" />;
     try {
-      const date = new Date(dateString + 'T00:00:00'); // Ensure correct local date parsing
+      const date = new Date(dateString + 'T00:00:00');
       return new Intl.DateTimeFormat('id-ID', { day: 'numeric', month: 'long', year: 'numeric' }).format(date);
     } catch (e) { return dateString; }
   };
 
   const isJuriSideReady = currentSide && currentSideScore ? currentSideScore.isReady : false;
 
-  const isInputDisabled =
-    isLoading ||
-    isSaving ||
-    !activeMatchId ||
-    !matchDetailsLoaded ||
-    !tgrTimerStatus.currentPerformingSide || // No side is active from Dewan
-    (tgrTimerStatus.matchStatus !== 'Ongoing' && tgrTimerStatus.matchStatus !== 'Paused'); // Only allow input if Dewan says Ongoing or Paused
-
-  const buttonSiapDisabled = isInputDisabled || isJuriSideReady;
 
   const inputDisabledReason = () => {
     if (configMatchId === undefined && isLoading) return "Memuat konfigurasi global...";
@@ -285,20 +297,49 @@ export default function JuriTGRPage({ params: paramsPromise }: { params: Promise
     if (activeMatchId && !matchDetailsLoaded && !isLoading) return "Menunggu detail pertandingan...";
     if (isSaving) return "Menyimpan skor...";
     if (error) return `Error: ${error}`;
-    if (!tgrTimerStatus.currentPerformingSide) return "Menunggu arahan sisi dari Timer Kontrol.";
-    if (tgrTimerStatus.matchStatus === 'Pending') return `Sisi ${tgrTimerStatus.currentPerformingSide === 'biru' ? 'Biru' : 'Merah'} menunggu Dewan memulai.`;
-    if (tgrTimerStatus.matchStatus === 'Finished') return `Penampilan sisi ${tgrTimerStatus.currentPerformingSide === 'biru' ? 'Biru' : 'Merah'} telah Selesai. Input ditutup.`;
-    if (tgrTimerStatus.matchStatus !== 'Ongoing' && tgrTimerStatus.matchStatus !== 'Paused') return `Status tidak valid untuk input: ${tgrTimerStatus.matchStatus}`;
+    if (!currentSide) return "Menunggu arahan sisi dari Timer Kontrol.";
+
+    if (juriSiapButtonDisabled && scoreActionButtonsDisabled) { // Both disabled
+        if (currentSideScore?.isReady) return `Juri SIAP. Penampilan sisi ${currentSide === 'biru' ? 'Biru' : 'Merah'} telah selesai.`;
+        if (tgrTimerStatus.matchStatus === 'Finished' && tgrTimerStatus.currentPerformingSide === currentSide) return `Penampilan sisi ${currentSide === 'biru' ? 'Biru' : 'Merah'} telah Selesai. Input ditutup.`;
+    }
+    
+    if (scoreActionButtonsDisabled) { // Only score buttons disabled
+        if (tgrTimerStatus.matchStatus === 'Pending') return `Sisi ${currentSide === 'biru' ? 'Biru' : 'Merah'} menunggu Timer Kontrol memulai. Tombol SIAP aktif.`;
+        if (tgrTimerStatus.matchStatus === 'Finished' && tgrTimerStatus.currentPerformingSide === currentSide) return `Penampilan sisi ${currentSide === 'biru' ? 'Biru' : 'Merah'} telah Selesai. Input skor ditutup.`;
+        if (tgrTimerStatus.matchStatus !== 'Ongoing' && tgrTimerStatus.matchStatus !== 'Paused') return `Status Timer Kontrol (${tgrTimerStatus.matchStatus}) tidak mengizinkan input skor. Tombol SIAP mungkin aktif.`;
+    }
     return "";
   };
-
+  
   const getStatusText = () => {
-    const reason = inputDisabledReason();
-    if (reason) return reason;
-    if (isJuriSideReady && !isInputDisabled) return "Juri Siap. Skor masih dapat diubah jika Dewan belum menyelesaikan sisi ini.";
-    if (activeMatchId && matchDetailsLoaded && !isInputDisabled) return "Input Nilai Terbuka";
-    if (isLoading || (activeMatchId && !matchDetailsLoaded)) return `Memuat data...`;
-    return `Memeriksa status...`;
+    const reasonForScoreButtons = inputDisabledReason();
+
+    if (configMatchId === undefined && isLoading) return "Memuat konfigurasi global...";
+    if (isLoading && activeMatchId) return `Sinkronisasi data pertandingan...`;
+    if (!activeMatchId && !isLoading && configMatchId === null) return "Tidak ada pertandingan TGR aktif.";
+    if (activeMatchId && !matchDetailsLoaded && !isLoading) return "Menunggu detail pertandingan...";
+    if (isSaving) return "Menyimpan skor...";
+    if (error) return `Error: ${error}`;
+    if (!currentSide) return "Menunggu arahan sisi dari Timer Kontrol.";
+
+    if (currentSideScore?.isReady) {
+        if (tgrTimerStatus.matchStatus === 'Finished' && tgrTimerStatus.currentPerformingSide === currentSide) {
+            return `Juri SIAP. Penampilan sisi ${currentSide === 'biru' ? 'Biru' : 'Merah'} telah selesai.`;
+        }
+        return `Juri SIAP. ${ (tgrTimerStatus.matchStatus === 'Ongoing' || tgrTimerStatus.matchStatus === 'Paused') ? 'Skor masih dapat diubah.' : (tgrTimerStatus.matchStatus === 'Pending' ? 'Menunggu Timer Kontrol.' : '')}`;
+    }
+
+    if (tgrTimerStatus.matchStatus === 'Pending' && tgrTimerStatus.currentPerformingSide === currentSide) {
+        return `Sisi ${currentSide === 'biru' ? 'Biru' : 'Merah'} menunggu Timer Kontrol. Tekan SIAP jika penilaian awal selesai.`;
+    }
+    if (tgrTimerStatus.matchStatus === 'Ongoing' || tgrTimerStatus.matchStatus === 'Paused') {
+        return `Input Nilai Terbuka untuk sisi ${currentSide === 'biru' ? 'Biru' : 'Merah'}. Tekan SIAP jika penilaian selesai.`;
+    }
+     if (tgrTimerStatus.matchStatus === 'Finished' && tgrTimerStatus.currentPerformingSide === currentSide) {
+        return `Penampilan sisi ${currentSide === 'biru' ? 'Biru' : 'Merah'} telah selesai. Input ditutup.`;
+    }
+    return reasonForScoreButtons || "Status tidak diketahui.";
   };
 
 
@@ -312,7 +353,7 @@ export default function JuriTGRPage({ params: paramsPromise }: { params: Promise
     if (sideToDisplay === 'biru' && scheduleDetails.pesilatBiruName) {
         name = scheduleDetails.pesilatBiruName;
         contingent = scheduleDetails.pesilatBiruContingent || scheduleDetails.pesilatMerahContingent || "";
-    } else if (scheduleDetails.pesilatMerahName) { // Catches single merah or if current is merah
+    } else if (scheduleDetails.pesilatMerahName) {
         name = scheduleDetails.pesilatMerahName;
         contingent = scheduleDetails.pesilatMerahContingent || "";
     }
@@ -351,7 +392,7 @@ export default function JuriTGRPage({ params: paramsPromise }: { params: Promise
             variant="default"
             className="w-full md:w-auto h-40 md:h-64 text-5xl md:text-7xl bg-blue-600 hover:bg-blue-700 text-white shadow-lg rounded-lg flex items-center justify-center p-2 md:flex-[2_2_0%]"
             onClick={handleGerakanSalah}
-            disabled={isInputDisabled}
+            disabled={scoreActionButtonsDisabled}
             aria-label="Kesalahan Gerakan (-0.01)"
           >
             <XIcon className="w-36 h-36 md:w-60 md:h-60" strokeWidth={3} />
@@ -368,11 +409,11 @@ export default function JuriTGRPage({ params: paramsPromise }: { params: Promise
             className={cn(
               "w-full md:w-auto h-40 md:h-64 text-lg md:text-2xl font-semibold rounded-lg shadow-lg flex flex-col items-center justify-center p-2 sm:p-4 md:flex-[2_2_0%]",
               isJuriSideReady ? "bg-green-600 hover:bg-green-700 text-white" : "bg-yellow-500 hover:bg-yellow-600 text-black",
-              buttonSiapDisabled && !isJuriSideReady ? "opacity-50 cursor-not-allowed" : "",
+              juriSiapButtonDisabled && !isJuriSideReady ? "opacity-50 cursor-not-allowed" : "",
               isJuriSideReady ? "opacity-75 cursor-default" : ""
             )}
             onClick={handleJuriSiap}
-            disabled={buttonSiapDisabled}
+            disabled={juriSiapButtonDisabled}
           >
             {isJuriSideReady ? <CheckCircle2 className="w-8 h-8 md:w-12 md:h-12 mb-1 md:mb-2" /> : <Info className="w-8 h-8 md:w-12 md:h-12 mb-1 md:mb-2" />}
             <span className="block text-center">{isJuriSideReady ? "MENILAI" : "SIAP"}</span>
@@ -398,7 +439,7 @@ export default function JuriTGRPage({ params: paramsPromise }: { params: Promise
                     currentSideScore?.staminaKemantapanBonus === bonus ? "bg-gray-600 dark:bg-gray-400 text-white dark:text-black" : "bg-gray-300 dark:bg-gray-700 text-gray-700 dark:text-gray-300 border-gray-400 dark:border-gray-600 hover:bg-gray-400 dark:hover:bg-gray-600"
                   )}
                   onClick={() => handleStaminaBonusChange(bonus)}
-                  disabled={isInputDisabled}
+                  disabled={scoreActionButtonsDisabled}
                 >
                   {bonus.toFixed(2)}
                 </Button>
@@ -419,10 +460,10 @@ export default function JuriTGRPage({ params: paramsPromise }: { params: Promise
 
         <div className="flex flex-col items-center gap-3 mt-6">
           <div className="w-full max-w-md">
-             {inputDisabledReason() && (
+             {(scoreActionButtonsDisabled || juriSiapButtonDisabled) && ( // Show if any button set is disabled
                 <div className={cn("text-xs text-center p-2 rounded-md mb-2 shadow", error ? "bg-red-100 text-red-700 border border-red-300 dark:bg-red-900/30 dark:text-red-300 dark:border-red-700" : "bg-yellow-100 text-yellow-800 border border-yellow-300 dark:bg-yellow-900/30 dark:text-yellow-300 dark:border-yellow-700")}>
                     {error ? <AlertCircle className="inline mr-1 h-4 w-4"/> : <Info className="inline mr-1 h-4 w-4"/>}
-                    {getStatusText()} {/* Changed from inputDisabledReason() to getStatusText() for more complete info */}
+                    {getStatusText()}
                 </div>
              )}
           </div>
@@ -434,3 +475,4 @@ export default function JuriTGRPage({ params: paramsPromise }: { params: Promise
     </div>
   );
 }
+
