@@ -8,8 +8,8 @@ import { PageTitle } from '@/components/shared/PageTitle';
 import { Button } from '@/components/ui/button';
 import { ArrowLeft, Trash2, Loader2, MinusCircle, UserCircle } from 'lucide-react';
 import type { ScheduleTGR, TGRDewanPenalty, TGRDewanPenaltyType, TGRJuriScore } from '@/lib/types';
-import { db, auth } from '@/lib/firebase';
-import { doc, onSnapshot, getDoc, collection, addDoc, query, orderBy, limit, deleteDoc, serverTimestamp, Timestamp, where, getDocs, setDoc, updateDoc, writeBatch } from 'firebase/firestore';
+import { db, auth } from '@/lib/firebase'; // Import auth
+import { doc, onSnapshot, getDoc, collection, addDoc, query, orderBy, limit, deleteDoc, serverTimestamp, Timestamp, where, getDocs, setDoc, writeBatch } from 'firebase/firestore';
 import { Skeleton } from '@/components/ui/skeleton';
 import { cn } from '@/lib/utils';
 
@@ -331,7 +331,7 @@ export default function DewanTGRPenaltyPage() {
       if (firebaseError.code === 'permission-denied') {
         errorMessage += " Pastikan Anda telah login dan memiliki izin yang cukup. Periksa juga path Firestore yang diakses.";
       } else if (firebaseError.code === 'failed-precondition') {
-        errorMessage += " Query Firestore memerlukan index. Silakan buat index melalui link di konsol error atau langsung di Firebase Console.";
+         errorMessage += ` Query memerlukan index Firestore. ${firebaseError.message.includes("currently building") ? "Index sedang dibuat, tunggu beberapa saat." : "Silakan buat index melalui link di konsol error atau di Firebase Console."}`;
       }
       setError(errorMessage);
       alert(errorMessage);
@@ -466,5 +466,6 @@ export default function DewanTGRPenaltyPage() {
     </div>
   );
 }
-
         
+
+    
