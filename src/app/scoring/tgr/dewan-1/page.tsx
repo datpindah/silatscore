@@ -171,12 +171,6 @@ export default function DewanTGRPenaltyPage() {
         const juriDocRef = doc(db, MATCHES_TGR_COLLECTION, activeMatchId, JURI_SCORES_TGR_SUBCOLLECTION, juriId);
         console.log(`[handleAddPenalty] Preparing update for Juri: ${juriId}, path: ${juriDocRef.path}`);
         
-        // It's crucial to get the current state of the Juri's document if we need to base calculations on it.
-        // However, since Firestore batch writes are not transactional reads, we'll assume a default or base calculation.
-        // If a juri doc doesn't exist, setDoc will create it. If it exists, merge will update.
-        
-        // Let's fetch the current juri document to be safe, even if it adds a bit of latency for this specific operation.
-        // For a production app, you might optimize this if read-before-write becomes a bottleneck for many juris.
         const juriDocSnap = await getDoc(juriDocRef);
         let currentJuriData: Partial<TGRJuriScore> = {
             baseScore: BASE_SCORE_TGR,

@@ -227,3 +227,4 @@ export interface TGRMatchData {
   status: 'Pending' | 'Ongoing' | 'Paused' | 'Finished';
 }
 // --- End TGR Scoring Types ---
+
