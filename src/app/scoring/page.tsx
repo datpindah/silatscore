@@ -48,7 +48,7 @@ export default function ScoringSelectionPage() {
             </CardHeader>
             <CardContent>
               <Button asChild className="w-full bg-primary hover:bg-primary/90 text-primary-foreground">
-                <Link href="/scoring/tgr">Mulai Scoring TGR</Link>
+                <Link href="/scoring/tgr/login">Mulai Scoring TGR</Link>
               </Button>
             </CardContent>
           </Card>

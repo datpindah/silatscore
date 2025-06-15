@@ -1,68 +1,29 @@
 
-"use client";
+// This page is now obsolete.
+// The functionality for selecting TGR roles has been moved to /scoring/tgr/login/page.tsx
+// Users will be directed to /scoring/tgr/login from /scoring page.
 
 import Link from "next/link";
 import { Header } from "@/components/layout/Header";
 import { PageTitle } from "@/components/shared/PageTitle";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
-import { Users, User, Settings, Award, Eye, ClipboardCheck } from 'lucide-react';
 
-interface RoleCardProps {
-  title: string;
-  description: string;
-  destinationHref: string; // Changed from href to destinationHref
-  icon: React.ElementType;
-}
-
-function RoleCard({ title, description, destinationHref, icon: Icon }: RoleCardProps) {
-  // Updated link to point to the new TGR login page, passing the original destination
-  const loginHref = `/scoring/tgr/login?destination=${encodeURIComponent(destinationHref)}`;
-  return (
-    <Card className="shadow-lg hover:shadow-xl transition-shadow duration-300 flex flex-col">
-      <CardHeader className="flex-grow">
-        <CardTitle className="flex items-center font-headline text-primary">
-          <Icon className="mr-3 h-7 w-7" />
-          {title}
-        </CardTitle>
-        <CardDescription className="font-body mt-1">
-          {description}
-        </CardDescription>
-      </CardHeader>
-      <CardContent>
-        <Button asChild className="w-full bg-primary hover:bg-primary/90 text-primary-foreground">
-          <Link href={loginHref}>Pilih Peran Ini</Link>
-        </Button>
-      </CardContent>
-    </Card>
-  );
-}
-
-export default function TGRRoleSelectionPage() {
-  const roles = [
-    { title: "Juri 1 (TGR)", description: "Input penilaian untuk kategori TGR dari Juri 1.", destinationHref: "/scoring/tgr/juri/juri-1", icon: User },
-    { title: "Juri 2 (TGR)", description: "Input penilaian untuk kategori TGR dari Juri 2.", destinationHref: "/scoring/tgr/juri/juri-2", icon: User },
-    { title: "Juri 3 (TGR)", description: "Input penilaian untuk kategori TGR dari Juri 3.", destinationHref: "/scoring/tgr/juri/juri-3", icon: User },
-    { title: "Juri 4 (TGR)", description: "Input penilaian untuk kategori TGR dari Juri 4.", destinationHref: "/scoring/tgr/juri/juri-4", icon: User },
-    { title: "Juri 5 (TGR)", description: "Input penilaian untuk kategori TGR dari Juri 5.", destinationHref: "/scoring/tgr/juri/juri-5", icon: User },
-    { title: "Juri 6 (TGR)", description: "Input penilaian untuk kategori TGR dari Juri 6.", destinationHref: "/scoring/tgr/juri/juri-6", icon: User },
-    { title: "Dewan 1 (TGR)", description: "Kontrol timer, input hukuman untuk TGR.", destinationHref: "/scoring/tgr/dewan-1", icon: Settings },
-    { title: "Ketua Pertandingan (TGR)", description: "Monitoring skor juri, kalkulasi median, finalisasi TGR.", destinationHref: "/scoring/tgr/ketua-pertandingan", icon: Award },
-    { title: "Monitor Skor (TGR)", description: "Tampilan skor langsung untuk pertandingan TGR.", destinationHref: "/scoring/tgr/monitoring-skor", icon: Eye },
-  ];
-
+export default function ObsoleteTGRRoleSelectionPage() {
   return (
     <div className="flex flex-col min-h-screen">
       <Header />
-      <main className="flex-1 container mx-auto px-4 py-8">
+      <main className="flex-1 container mx-auto px-4 py-8 text-center">
         <PageTitle
-          title="Pilih Peran - Scoring TGR"
-          description="Pilih peran Anda dalam sistem scoring pertandingan TGR (Tunggal, Ganda, Regu)."
+          title="Halaman Pindah"
+          description="Pemilihan peran untuk TGR sekarang dilakukan setelah login."
         />
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6 mt-8">
-          {roles.map(role => (
-            <RoleCard key={role.title} {...role} />
-          ))}
+        <div className="mt-8">
+          <Button asChild>
+            <Link href="/scoring/tgr/login">Lanjut ke Login Panel TGR</Link>
+          </Button>
+           <p className="mt-4 text-sm text-muted-foreground">
+            Atau <Link href="/scoring" className="underline hover:text-primary">kembali ke pilihan mode scoring</Link>.
+          </p>
         </div>
       </main>
     </div>

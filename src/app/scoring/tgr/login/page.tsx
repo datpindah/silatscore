@@ -2,13 +2,13 @@
 "use client";
 
 import { useState, type FormEvent, useEffect, Suspense } from 'react';
-import { useRouter, useSearchParams } from 'next/navigation';
+import { useRouter } from 'next/navigation';
 import { Header } from '@/components/layout/Header';
-import { PageTitle } from '@/components/shared/PageTitle';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { LogIn, AlertCircle, Loader2 } from 'lucide-react';
 import type { ScheduleTGR } from '@/lib/types';
@@ -24,14 +24,28 @@ const defaultPartaiOptions = [
   { value: NO_ACTIVE_TGR_SCHEDULE_VALUE, label: 'Tidak ada jadwal TGR aktif' },
 ];
 
+const tgrHalamanOptions = [
+  { value: '/scoring/tgr/juri/juri-1', label: 'Juri 1 (TGR)' },
+  { value: '/scoring/tgr/juri/juri-2', label: 'Juri 2 (TGR)' },
+  { value: '/scoring/tgr/juri/juri-3', label: 'Juri 3 (TGR)' },
+  { value: '/scoring/tgr/juri/juri-4', label: 'Juri 4 (TGR)' },
+  { value: '/scoring/tgr/juri/juri-5', label: 'Juri 5 (TGR)' },
+  { value: '/scoring/tgr/juri/juri-6', label: 'Juri 6 (TGR)' },
+  { value: '/scoring/tgr/dewan-1', label: 'Dewan 1 (Input Penalti TGR)' },
+  { value: '/scoring/tgr/ketua-pertandingan', label: 'Ketua Pertandingan (TGR)' },
+  { value: '/scoring/tgr/monitoring-skor', label: 'Monitoring Skor (Display Umum TGR)' },
+  // Admin roles can be added here if needed, or handled separately
+  // Example: { value: '/admin', label: 'Admin Panel (Akses Umum)' }
+];
+
+
 function TGRLoginPageContent() {
   const router = useRouter();
-  const searchParams = useSearchParams();
   const { user, signIn, loading: authLoading, error: authError, setError: setAuthError } = useAuth();
 
   const [partaiOptions, setPartaiOptions] = useState<{value: string; label: string}[]>(defaultPartaiOptions);
   const [selectedPartai, setSelectedPartai] = useState<string>(NO_ACTIVE_TGR_SCHEDULE_VALUE);
-  const [destinationPage, setDestinationPage] = useState<string | null>(null);
+  const [selectedHalaman, setSelectedHalaman] = useState<string>('');
   const [email, setEmail] = useState<string>('');
   const [password, setPassword] = useState<string>('');
   
@@ -40,20 +54,10 @@ function TGRLoginPageContent() {
   const [scheduleLoading, setScheduleLoading] = useState<boolean>(true);
 
   useEffect(() => {
-    const dest = searchParams.get('destination');
-    if (dest) {
-      setDestinationPage(dest);
-    } else {
-      // Fallback if no destination is provided, e.g., redirect to TGR roles page
-      setDestinationPage('/scoring/tgr'); 
+    if (user && selectedHalaman) {
+        router.push(selectedHalaman);
     }
-  }, [searchParams]);
-
-  useEffect(() => {
-    if (user && destinationPage) {
-        router.push(destinationPage);
-    }
-  }, [user, destinationPage, router]);
+  }, [user, selectedHalaman, router]);
   
   useEffect(() => {
     setScheduleLoading(true);
@@ -115,12 +119,12 @@ function TGRLoginPageContent() {
     e.preventDefault();
     setPageError(null);
     
-    if (selectedPartai === NO_ACTIVE_TGR_SCHEDULE_VALUE && destinationPage && !destinationPage.startsWith('/admin')) {
+    if (selectedPartai === NO_ACTIVE_TGR_SCHEDULE_VALUE && selectedHalaman && !selectedHalaman.startsWith('/admin')) {
       setPageError('Tidak ada jadwal TGR aktif yang bisa dipilih. Silakan aktifkan jadwal di halaman Admin.');
       return;
     }
-    if (!destinationPage) {
-      setPageError('Halaman tujuan tidak ditemukan. Silakan kembali dan pilih peran.');
+    if (!selectedHalaman) {
+      setPageError('Silakan pilih halaman tujuan TGR terlebih dahulu.');
       return;
     }
     if (!email || !password) {
@@ -131,10 +135,10 @@ function TGRLoginPageContent() {
     setIsSubmitting(true);
     await signIn(email, password);
     setIsSubmitting(false);
-    // Redirection is handled by the useEffect hook monitoring `user` and `destinationPage`
+    // Redirection is handled by the useEffect hook monitoring `user` and `selectedHalaman`
   };
 
-  const isLoadingOverall = authLoading || isSubmitting || scheduleLoading || !destinationPage;
+  const isLoadingOverall = authLoading || isSubmitting || scheduleLoading;
 
   return (
     <div className="flex flex-col min-h-screen">
@@ -142,9 +146,9 @@ function TGRLoginPageContent() {
       <main className="flex-1 flex items-center justify-center p-4 bg-gradient-to-br from-background to-muted/50">
         <Card className="w-full max-w-md shadow-2xl">
           <CardHeader>
-            <CardTitle className="text-3xl font-headline text-primary text-center">Login Panel TGR</CardTitle>
+            <CardTitle className="text-3xl font-headline text-primary text-center">Login Panel Scoring TGR</CardTitle>
             <CardDescription className="text-center font-body">
-              Masukkan email dan password Firebase Anda.
+              Masukkan email dan password Anda. Pilih partai TGR dan halaman tujuan.
             </CardDescription>
           </CardHeader>
           <form onSubmit={handleSubmit}>
@@ -185,7 +189,7 @@ function TGRLoginPageContent() {
               <div className="space-y-2">
                 <Label htmlFor="partai-tgr" className="font-headline">Partai TGR Aktif</Label>
                  <Input
-                  id="partai-tgr"
+                  id="partai-tgr-display" // Changed ID to avoid conflict if Select also gets an id
                   type="text"
                   value={partaiOptions[0]?.label || 'Memuat...'}
                   readOnly
@@ -195,12 +199,19 @@ function TGRLoginPageContent() {
                  {scheduleLoading && partaiOptions[0]?.value === NO_ACTIVE_TGR_SCHEDULE_VALUE && <p className="text-xs text-muted-foreground">Memuat jadwal TGR aktif...</p>}
                  {!scheduleLoading && partaiOptions[0]?.value === NO_ACTIVE_TGR_SCHEDULE_VALUE && <p className="text-xs text-destructive">Tidak ada jadwal TGR aktif. Silakan atur di Admin.</p>}
               </div>
-              {destinationPage && (
-                <div className="space-y-1">
-                  <Label className="font-headline">Halaman Tujuan</Label>
-                  <p className="text-sm text-muted-foreground bg-muted/30 p-2 rounded-md">{decodeURIComponent(destinationPage)}</p>
-                </div>
-              )}
+              <div className="space-y-2">
+                <Label htmlFor="halaman-tgr" className="font-headline">Pilih Halaman Tujuan TGR</Label>
+                <Select onValueChange={setSelectedHalaman} value={selectedHalaman} disabled={isLoadingOverall}>
+                  <SelectTrigger id="halaman-tgr">
+                    <SelectValue placeholder="Pilih Halaman Tujuan TGR" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {tgrHalamanOptions.map(option => (
+                      <SelectItem key={option.value} value={option.value}>{option.label}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
             </CardContent>
             <CardFooter>
               <Button type="submit" className="w-full bg-primary hover:bg-primary/90 text-primary-foreground" disabled={isLoadingOverall}>
@@ -226,7 +237,9 @@ function TGRLoginPageContent() {
 
 export default function TGRLoginPage() {
   return (
-    <Suspense fallback={<div className="flex h-screen items-center justify-center"><Loader2 className="h-12 w-12 animate-spin text-primary" /></div>}>
+    // Suspense is needed if useSearchParams is used directly or in a child component rendered immediately.
+    // For this structure where TGRLoginPageContent uses it, it's good practice.
+    <Suspense fallback={<div className="flex h-screen items-center justify-center"><Loader2 className="h-12 w-12 animate-spin text-primary" /> Memuat Halaman Login...</div>}>
       <TGRLoginPageContent />
     </Suspense>
   )
