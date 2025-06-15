@@ -16,6 +16,7 @@ interface RoleCardProps {
 }
 
 function RoleCard({ title, description, destinationHref, icon: Icon }: RoleCardProps) {
+  // Updated link to point to the new TGR login page, passing the original destination
   const loginHref = `/scoring/tgr/login?destination=${encodeURIComponent(destinationHref)}`;
   return (
     <Card className="shadow-lg hover:shadow-xl transition-shadow duration-300 flex flex-col">

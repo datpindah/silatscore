@@ -198,7 +198,7 @@ function TGRLoginPageContent() {
               {destinationPage && (
                 <div className="space-y-1">
                   <Label className="font-headline">Halaman Tujuan</Label>
-                  <p className="text-sm text-muted-foreground bg-muted/30 p-2 rounded-md">{destinationPage}</p>
+                  <p className="text-sm text-muted-foreground bg-muted/30 p-2 rounded-md">{decodeURIComponent(destinationPage)}</p>
                 </div>
               )}
             </CardContent>
