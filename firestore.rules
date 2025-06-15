@@ -3,74 +3,71 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
-    // --- App Settings (Global Config) ---
-    // Typically read by many, written by admin.
-    // For production: restrict write to admin (e.g., request.auth.token.isAdmin == true)
-    match /app_settings/{setting} {
-      allow read: if request.auth != null;
-      allow write: if request.auth != null; // DEVELOPER NOTE: Restrict to admin in production
+    // APP SETTINGS
+    // Stores global application settings like active match IDs.
+    // Production: Restrict write access to admin/trusted server. Read access might be public or restricted.
+    match /app_settings/{settingId} {
+      allow read: if request.auth != null; // Or if true; for public read during dev
+      allow write: if request.auth != null; // TODO: Restrict to Admin in production (e.g., request.auth.token.isAdmin == true)
     }
 
-    // --- Schedules (Tanding & TGR) ---
-    // Created and managed by Admin. Read by authenticated users.
-    // For production: restrict write to admin (e.g., request.auth.token.isAdmin == true)
+    // SCHEDULES (Tanding & TGR)
+    // Stores match schedules. Created and managed by Admin.
+    // Production: Write access should be strictly Admin-only. Read access might be public for users to view schedules.
     match /schedules_tanding/{scheduleId} {
-      allow read: if request.auth != null;
-      allow write: if request.auth != null; // DEVELOPER NOTE: Restrict to admin in production
+      allow read: if request.auth != null; // Or if true; for public read during dev
+      allow write: if request.auth != null; // TODO: Restrict to Admin in production (e.g., request.auth.token.isAdmin == true)
     }
     match /schedules_tgr/{scheduleId} {
-      allow read: if request.auth != null;
-      allow write: if request.auth != null; // DEVELOPER NOTE: Restrict to admin in production
+      allow read: if request.auth != null; // Or if true; for public read during dev
+      allow write: if request.auth != null; // TODO: Restrict to Admin in production (e.g., request.auth.token.isAdmin == true)
     }
 
-    // --- Live Match Data (Tanding) ---
-    // Accessed by Juri, Dewan, Ketua.
+    // LIVE MATCH DATA (TANDING)
+    // Stores live scoring data for Tanding matches.
+    // Production:
+    //   - Overall match document: Write access for Dewan/Timer for timer_status. Read access for Juri, Ketua, Monitor.
+    //   - juri_scores: Juri can only write to their own document. Dewan/Ketua might read all.
+    //   - official_actions: Only Ketua Pertandingan can write.
+    //   - verifications: Ketua creates, Juri update their votes, Dewan/Ketua update status/result.
     match /matches_tanding/{matchId} {
-      allow read, write: if request.auth != null; // Base document for timer, logs
+      allow read, write: if request.auth != null; // TODO: Granular rules for production.
 
-      // Juri scores for Tanding
-      // Juri should only write to their own document. Read by Dewan, Ketua.
-      // For production: allow write: if request.auth.uid == juriId && /* other conditions */;
       match /juri_scores/{juriId} {
-        allow read, write: if request.auth != null; // DEVELOPER NOTE: Refine write access in production
+        allow read, write: if request.auth != null; // TODO: Restrict write to specific Juri (e.g., request.auth.uid == juriId or custom claim)
       }
 
-      // Official actions by Ketua Pertandingan (Tanding)
-      // For production: restrict write to Ketua (e.g., request.auth.token.isKetua == true)
       match /official_actions/{actionId} {
-        allow read, write: if request.auth != null; // DEVELOPER NOTE: Restrict write access in production
+        allow read, write: if request.auth != null; // TODO: Restrict write to Ketua Pertandingan
       }
 
-      // Verification requests for Tanding
-      // Requested by Ketua, Juri vote.
-      // For production: complex rules based on roles and status.
       match /verifications/{verificationId} {
-        allow read, write: if request.auth != null; // DEVELOPER NOTE: Refine access in production
+        allow read, write: if request.auth != null; // TODO: Granular rules for creation, voting, and completion.
       }
     }
 
-    // --- Live Match Data (TGR) ---
-    // Accessed by Juri TGR, Dewan TGR, Ketua TGR.
+    // LIVE MATCH DATA (TGR)
+    // Stores live scoring data for TGR matches.
+    // Production:
+    //   - Overall match document: Write access for Dewan/Timer for timer_status. Read access for Juri, Ketua, Monitor.
+    //   - juri_scores_tgr: Juri can only write to their own document. Ketua might read all.
+    //   - dewan_penalties_tgr: Only Dewan can write.
     match /matches_tgr/{matchId} {
-      allow read, write: if request.auth != null; // Base document for timer
+      allow read, write: if request.auth != null; // TODO: Granular rules for production.
 
-      // Juri scores for TGR
-      // For production: allow write: if request.auth.uid == juriId && /* other conditions */;
       match /juri_scores_tgr/{juriId} {
-        allow read, write: if request.auth != null; // DEVELOPER NOTE: Refine write access in production
+        allow read, write: if request.auth != null; // TODO: Restrict write to specific Juri
       }
 
-      // Dewan penalties for TGR
-      // For production: restrict write to Dewan TGR (e.g., request.auth.token.isDewanTGR == true)
       match /dewan_penalties_tgr/{penaltyId} {
-        allow read, write: if request.auth != null; // DEVELOPER NOTE: Restrict write access in production
+        allow read, write: if request.auth != null; // TODO: Restrict write to Dewan
       }
     }
 
-    // Default deny all access if not explicitly allowed by above rules
-    // This line is often implicitly covered, but can be explicit.
+    // Default rule (optional, can be removed if all paths are covered above)
+    // Consider a default deny if you want to be explicit.
     // match /{document=**} {
-    //  allow read, write: if false;
+    //   allow read, write: if false;
     // }
   }
 }
