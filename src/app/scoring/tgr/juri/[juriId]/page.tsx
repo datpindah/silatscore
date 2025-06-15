@@ -125,7 +125,7 @@ export default function JuriTGRPage({ params: paramsPromise }: { params: Promise
           let processedDate: string;
           if (rawData.date instanceof Timestamp) {
             processedDate = rawData.date.toDate().toISOString().split('T')[0];
-          } else if (typeof rawData.date === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(rawData.date)) {
+          } else if (typeof rawData.date === 'string' && /^\\d{4}-\\d{2}-\\d{2}$/.test(rawData.date)) {
             processedDate = rawData.date;
           } else if (rawData.date && typeof rawData.date.seconds === 'number' && typeof rawData.date.nanoseconds === 'number') {
             processedDate = new Date(rawData.date.seconds * 1000).toISOString().split('T')[0];

@@ -142,16 +142,14 @@ export default function DewanTGRPenaltyPage() {
   const handleAddPenalty = async (penalty: PenaltyConfig) => {
     console.log(`[handleAddPenalty] Triggered for penalty: ${penalty.id}, activeMatchId: ${activeMatchId}`);
     
-    // --- ADDED AUTH CHECK ---
     const currentUser = auth.currentUser;
     console.log("[handleAddPenalty] Current Firebase Auth User:", currentUser ? currentUser.uid : "NULL");
     if (!currentUser) {
       setError("User tidak terautentikasi. Silakan login ulang dan coba lagi.");
       alert("User tidak terautentikasi. Silakan login ulang dan coba lagi.");
-      setIsProcessing(prev => ({ ...prev, [penalty.id]: false })); // Ensure processing state is reset
+      setIsProcessing(prev => ({ ...prev, [penalty.id]: false }));
       return;
     }
-    // --- END AUTH CHECK ---
 
     if (!activeMatchId || activeMatchId.trim() === "" || isProcessing[penalty.id]) {
       if (!activeMatchId || activeMatchId.trim() === "") {
@@ -171,32 +169,36 @@ export default function DewanTGRPenaltyPage() {
 
       const batch = writeBatch(db);
       
-      // 1. Add Dewan Penalty
       const newPenaltyRef = doc(collection(db, MATCHES_TGR_COLLECTION, activeMatchId, DEWAN_PENALTIES_TGR_SUBCOLLECTION));
       batch.set(newPenaltyRef, penaltyData);
       console.log(`[handleAddPenalty] Prepared to add penalty doc: ${newPenaltyRef.path}`);
 
-      // 2. Update all Juri scores
-      const deductionAmount = Math.abs(penalty.points); // e.g., 0.50
+      const deductionAmount = Math.abs(penalty.points); 
 
       for (const juriId of TGR_JURI_IDS) {
         const juriDocRef = doc(db, MATCHES_TGR_COLLECTION, activeMatchId, JURI_SCORES_TGR_SUBCOLLECTION, juriId);
         console.log(`[handleAddPenalty] Preparing update for Juri: ${juriId}, path: ${juriDocRef.path}`);
         
         const juriDocSnap = await getDoc(juriDocRef);
-        let currentJuriData: Partial<TGRJuriScore> = {
+        let currentJuriData: TGRJuriScore = { // Ensure all fields are present
             baseScore: BASE_SCORE_TGR,
             gerakanSalahCount: 0,
             staminaKemantapanBonus: 0,
             externalDeductions: 0,
+            calculatedScore: BASE_SCORE_TGR,
             isReady: false, 
+            lastUpdated: null,
         };
 
         if (juriDocSnap.exists()) {
-            currentJuriData = juriDocSnap.data() as TGRJuriScore;
+            const existingData = juriDocSnap.data() as Partial<TGRJuriScore>;
+            currentJuriData = {
+                ...currentJuriData, // Start with defaults
+                ...existingData,    // Override with existing data
+            };
         }
         
-        const newExternalDeductions = (currentJuriData.externalDeductions || 0) + deductionAmount;
+        const newExternalDeductions = (currentJuriData.externalDeductions ?? 0) + deductionAmount;
         const newCalculatedScore = parseFloat(
             ( (currentJuriData.baseScore ?? BASE_SCORE_TGR) -
               ((currentJuriData.gerakanSalahCount ?? 0) * GERAKAN_SALAH_DEDUCTION) +
@@ -205,24 +207,24 @@ export default function DewanTGRPenaltyPage() {
             ).toFixed(2)
         );
 
-        const juriUpdateData = {
-            baseScore: currentJuriData.baseScore ?? BASE_SCORE_TGR,
-            gerakanSalahCount: currentJuriData.gerakanSalahCount ?? 0,
-            staminaKemantapanBonus: currentJuriData.staminaKemantapanBonus ?? 0,
+        const juriUpdateData = { // Create a complete object for set/update
+            baseScore: currentJuriData.baseScore,
+            gerakanSalahCount: currentJuriData.gerakanSalahCount,
+            staminaKemantapanBonus: currentJuriData.staminaKemantapanBonus,
             externalDeductions: newExternalDeductions,
             calculatedScore: newCalculatedScore,
-            isReady: currentJuriData.isReady ?? false,
+            isReady: currentJuriData.isReady, // Preserve readiness
             lastUpdated: serverTimestamp(),
         };
         console.log(`[handleAddPenalty] Data for Juri ${juriId}:`, juriUpdateData);
-        batch.set(juriDocRef, juriUpdateData, { merge: true });
+        batch.set(juriDocRef, juriUpdateData, { merge: true }); // Use merge to create if not exists or update
       }
 
       await batch.commit();
       console.log(`[handleAddPenalty] Batch commit successful for penalty ${penalty.id}`);
 
     } catch (err) {
-      const firebaseError = err as any; // Cast to any to access potential code property
+      const firebaseError = err as any; 
       console.error("[handleAddPenalty] Error processing penalty or updating Juri scores. ActiveMatchId:", activeMatchId, "Penalty:", penalty.id, "Error:", firebaseError);
       
       let errorMessage = `Gagal menambah pelanggaran & update skor juri: ${firebaseError.message || String(firebaseError)}`;
@@ -239,16 +241,14 @@ export default function DewanTGRPenaltyPage() {
   const handleDeleteLastPenalty = async (penaltyType: TGRDewanPenaltyType) => {
     console.log(`[handleDeleteLastPenalty] Triggered for penaltyType: ${penaltyType}, activeMatchId: ${activeMatchId}`);
     
-    // --- ADDED AUTH CHECK ---
     const currentUser = auth.currentUser;
     console.log("[handleDeleteLastPenalty] Current Firebase Auth User:", currentUser ? currentUser.uid : "NULL");
     if (!currentUser) {
       setError("User tidak terautentikasi. Silakan login ulang dan coba lagi.");
       alert("User tidak terautentikasi. Silakan login ulang dan coba lagi.");
-      setIsProcessing(prev => ({ ...prev, [penaltyType]: false })); // Reset processing state
+      setIsProcessing(prev => ({ ...prev, [penaltyType]: false })); 
       return;
     }
-    // --- END AUTH CHECK ---
 
      if (!activeMatchId || activeMatchId.trim() === "" || isProcessing[penaltyType]) {
         if (!activeMatchId || activeMatchId.trim() === "") {
@@ -281,7 +281,7 @@ export default function DewanTGRPenaltyPage() {
             const juriDocRef = doc(db, MATCHES_TGR_COLLECTION, activeMatchId, JURI_SCORES_TGR_SUBCOLLECTION, juriId);
             console.log(`[handleDeleteLastPenalty] Preparing update for Juri: ${juriId}, path: ${juriDocRef.path}`);
             
-            const juriDocSnap = await getDoc(juriDocRef); // Fetch current data
+            const juriDocSnap = await getDoc(juriDocRef); 
 
             if (juriDocSnap.exists()) {
                 const currentJuriData = juriDocSnap.data() as TGRJuriScore;
@@ -295,13 +295,13 @@ export default function DewanTGRPenaltyPage() {
                     ).toFixed(2)
                 );
                 
-                const juriUpdateData = {
+                const juriUpdateData = { // Only update relevant fields
                     externalDeductions: newExternalDeductions,
                     calculatedScore: newCalculatedScore,
                     lastUpdated: serverTimestamp(),
                 };
                 console.log(`[handleDeleteLastPenalty] Data for Juri ${juriId}:`, juriUpdateData);
-                batch.update(juriDocRef, juriUpdateData);
+                batch.update(juriDocRef, juriUpdateData); // Use update since doc should exist
             } else {
                 console.warn(`[handleDeleteLastPenalty] Juri doc not found for ${juriId}, skipping update for this juri.`);
             }
