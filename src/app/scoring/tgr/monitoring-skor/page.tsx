@@ -10,7 +10,7 @@ import { db } from '@/lib/firebase';
 import { doc, onSnapshot, getDoc, collection, query, orderBy, Timestamp, where, limit, setDoc } from 'firebase/firestore';
 import { cn } from '@/lib/utils';
 import { Skeleton } from '@/components/ui/skeleton';
-import { Header } from '@/components/layout/Header'; // Import Header
+import { Header } from '@/components/layout/Header';
 
 const ACTIVE_TGR_SCHEDULE_CONFIG_PATH = 'app_settings/active_match_tgr';
 const SCHEDULE_TGR_COLLECTION = 'schedules_tgr';
@@ -165,8 +165,6 @@ export default function MonitoringSkorTGRPage() {
     try {
         const currentLotNumber = scheduleDetails.lotNumber;
         const schedulesRef = collection(db, SCHEDULE_TGR_COLLECTION);
-        // Assuming lotNumber is numeric and sequential for simplicity.
-        // If lotNumber can be non-numeric or non-sequential, this query needs adjustment.
         const q = query(
             schedulesRef,
             where('lotNumber', '>', currentLotNumber),
@@ -206,7 +204,7 @@ export default function MonitoringSkorTGRPage() {
 
   return (
     <div className={cn("flex flex-col min-h-screen font-sans overflow-hidden relative", pageTheme === 'light' ? 'tgr-monitoring-theme-light' : 'tgr-monitoring-theme-dark', "bg-[var(--monitor-bg)] text-[var(--monitor-text)]")}>
-      <Header /> {/* Header component added here */}
+      <Header />
       <Button
         variant="outline"
         size="icon"
@@ -217,58 +215,62 @@ export default function MonitoringSkorTGRPage() {
         {pageTheme === 'dark' ? <Sun className="h-[1.2rem] w-[1.2rem]" /> : <Moon className="h-[1.2rem] w-[1.2rem]" />}
       </Button>
 
-      {/* Header Bar */}
-      <div className="bg-[var(--monitor-header-section-bg)] p-3 md:p-4 text-center text-sm md:text-base font-semibold text-[var(--monitor-text)]">
-        <div className="grid grid-cols-4 gap-1 items-center"> {/* Updated to 4 columns */}
-          <div>{mainParticipantName}</div>
-          <div>Partai/Pool: {scheduleDetails?.lotNumber || <Skeleton className="h-5 w-16 inline-block bg-[var(--monitor-skeleton-bg)]" />}</div>
-          <div>{scheduleDetails?.category || <Skeleton className="h-5 w-20 inline-block bg-[var(--monitor-skeleton-bg)]" />}</div>
-          <div>Babak: {scheduleDetails?.round || <Skeleton className="h-5 w-20 inline-block bg-[var(--monitor-skeleton-bg)]" />}</div> {/* Added Babak */}
+      {/* Wrapper for content below sticky header */}
+      <div className="flex-1 flex flex-col pt-16"> {/* pt-16 for h-16 Header */}
+        {/* Header Bar specific to this page */}
+        <div className="bg-[var(--monitor-header-section-bg)] p-3 md:p-4 text-center text-sm md:text-base font-semibold text-[var(--monitor-text)]">
+          <div className="grid grid-cols-4 gap-1 items-center">
+            <div>{mainParticipantName}</div>
+            <div>Partai/Pool: {scheduleDetails?.lotNumber || <Skeleton className="h-5 w-16 inline-block bg-[var(--monitor-skeleton-bg)]" />}</div>
+            <div>{scheduleDetails?.category || <Skeleton className="h-5 w-20 inline-block bg-[var(--monitor-skeleton-bg)]" />}</div>
+            <div>Babak: {scheduleDetails?.round || <Skeleton className="h-5 w-20 inline-block bg-[var(--monitor-skeleton-bg)]" />}</div>
+          </div>
         </div>
-      </div>
 
-      <div className="flex-grow flex flex-col p-2 md:p-4">
-        {/* Kontingen and Timer */}
-        <div className="flex justify-between items-center mb-3 md:mb-6 px-1">
-          <div className="text-left">
-            <div className="text-xs md:text-sm font-medium text-[var(--monitor-text-muted)]">KONTINGEN</div>
-            <div className="text-lg md:text-2xl font-bold text-[var(--monitor-text)]">
-              {mainParticipantContingent}
+        <div className="flex-grow flex flex-col p-2 md:p-4">
+          {/* Kontingen and Timer */}
+          <div className="flex justify-between items-center mb-3 md:mb-6 px-1">
+            <div className="text-left">
+              <div className="text-xs md:text-sm font-medium text-[var(--monitor-text-muted)]">KONTINGEN</div>
+              <div className="text-lg md:text-2xl font-bold text-[var(--monitor-text)]">
+                {mainParticipantContingent}
+              </div>
+            </div>
+            <div className="text-right">
+              <div className="text-xs md:text-sm font-medium text-[var(--monitor-text-muted)]">TIMER</div>
+              <div className="text-3xl md:text-5xl font-mono font-bold text-[var(--monitor-timer-text)]">
+                {formatTime(tgrTimerStatus.timerSeconds)}
+              </div>
             </div>
           </div>
-          <div className="text-right">
-            <div className="text-xs md:text-sm font-medium text-[var(--monitor-text-muted)]">TIMER</div>
-            <div className="text-3xl md:text-5xl font-mono font-bold text-[var(--monitor-timer-text)]">
-              {formatTime(tgrTimerStatus.timerSeconds)}
+
+          {/* Juri Scores Table */}
+          <div className="w-full max-w-3xl mx-auto">
+            <div className="grid grid-cols-6 gap-1 md:gap-2 mb-1">
+              {TGR_JURI_IDS.map((juriId, index) => (
+                <JuriLabelCell key={`label-${juriId}`} label={`JURI ${index + 1}`} />
+              ))}
+            </div>
+            <div className="grid grid-cols-6 gap-1 md:gap-2">
+              {TGR_JURI_IDS.map(juriId => {
+                const scoreData = allJuriScores[juriId];
+                const displayScore = scoreData && scoreData.isReady ? scoreData.calculatedScore.toFixed(2) : '-';
+                return <ScoreCell key={`score-${juriId}`} value={displayScore} isLoadingValue={isLoading && !matchDetailsLoaded} />;
+              })}
             </div>
           </div>
-        </div>
 
-        {/* Juri Scores Table */}
-        <div className="w-full max-w-3xl mx-auto">
-          <div className="grid grid-cols-6 gap-1 md:gap-2 mb-1">
-            {TGR_JURI_IDS.map((juriId, index) => (
-              <JuriLabelCell key={`label-${juriId}`} label={`JURI ${index + 1}`} />
-            ))}
-          </div>
-          <div className="grid grid-cols-6 gap-1 md:gap-2">
-            {TGR_JURI_IDS.map(juriId => {
-              const scoreData = allJuriScores[juriId];
-              const displayScore = scoreData && scoreData.isReady ? scoreData.calculatedScore.toFixed(2) : '-';
-              return <ScoreCell key={`score-${juriId}`} value={displayScore} isLoadingValue={isLoading && !matchDetailsLoaded} />;
-            })}
-          </div>
+          {/* Status Message */}
+          {tgrTimerStatus.matchStatus && (
+            <div className="mt-auto pt-4 text-center text-xs md:text-sm text-[var(--monitor-status-text)]">
+              Status: {tgrTimerStatus.matchStatus}
+              {tgrTimerStatus.isTimerRunning && " (Berjalan)"}
+            </div>
+          )}
         </div>
-
-        {/* Status Message */}
-        {tgrTimerStatus.matchStatus && (
-          <div className="mt-auto pt-4 text-center text-xs md:text-sm text-[var(--monitor-status-text)]">
-            Status: {tgrTimerStatus.matchStatus}
-            {tgrTimerStatus.isTimerRunning && " (Berjalan)"}
-          </div>
-        )}
-      </div>
+      </div> {/* End of pt-16 wrapper */}
       
+      {/* Overlays and Fixed Buttons remain outside the pt-16 wrapper to ensure correct positioning */}
       {isLoading && activeScheduleId && !matchDetailsLoaded && (
          <div className="absolute inset-0 bg-[var(--monitor-overlay-bg)] flex flex-col items-center justify-center z-50">
             <Loader2 className="h-12 w-12 animate-spin text-[var(--monitor-overlay-accent-text)] mb-4" />
@@ -304,5 +306,3 @@ export default function MonitoringSkorTGRPage() {
     </div>
   );
 }
-
-    
