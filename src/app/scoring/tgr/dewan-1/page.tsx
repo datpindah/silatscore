@@ -9,7 +9,7 @@ import { Button } from '@/components/ui/button';
 import { ArrowLeft, Trash2, Loader2, MinusCircle } from 'lucide-react';
 import type { ScheduleTGR, TGRDewanPenalty, TGRDewanPenaltyType, TGRJuriScore } from '@/lib/types';
 import { db } from '@/lib/firebase';
-import { doc, onSnapshot, getDoc, collection, addDoc, query, orderBy, limit, deleteDoc, serverTimestamp, Timestamp, where, getDocs, setDoc } from 'firebase/firestore';
+import { doc, onSnapshot, getDoc, collection, addDoc, query, orderBy, limit, deleteDoc, serverTimestamp, Timestamp, where, getDocs, setDoc, updateDoc } from 'firebase/firestore';
 import { Skeleton } from '@/components/ui/skeleton';
 
 const ACTIVE_TGR_SCHEDULE_CONFIG_PATH = 'app_settings/active_match_tgr';
@@ -169,7 +169,7 @@ export default function DewanTGRPenaltyPage() {
             gerakanSalahCount: 0,
             staminaKemantapanBonus: 0,
             externalDeductions: 0,
-            isReady: false, // Default to not ready if creating new
+            isReady: false, 
         };
 
         if (juriDocSnap.exists()) {
@@ -377,4 +377,3 @@ export default function DewanTGRPenaltyPage() {
     </div>
   );
 }
-

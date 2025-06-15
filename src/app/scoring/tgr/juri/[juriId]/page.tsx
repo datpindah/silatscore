@@ -4,7 +4,7 @@
 import { useState, useEffect, useCallback, use } from 'react';
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
-import { Header } from '@/components/layout/Header'; // Ditambahkan
+import { Header } from '@/components/layout/Header'; 
 import { ArrowLeft, Loader2, Info, XIcon, AlertCircle, CheckCircle2 } from 'lucide-react';
 import type { ScheduleTGR, TGRJuriScore, TGRTimerStatus } from '@/lib/types';
 import { db } from '@/lib/firebase';
@@ -25,17 +25,17 @@ const initialJuriScore: TGRJuriScore = {
   baseScore: BASE_SCORE_TGR,
   gerakanSalahCount: 0,
   staminaKemantapanBonus: 0.00,
-  externalDeductions: 0, // Added
+  externalDeductions: 0, 
   calculatedScore: BASE_SCORE_TGR,
   isReady: false,
   lastUpdated: null,
 };
 
 const defaultInitialTgrTimerStatus: TGRTimerStatus = {
-  timerSeconds: 0, // Initialize with 0, actual value will be set based on round
+  timerSeconds: 0, 
   isTimerRunning: false,
   matchStatus: 'Pending',
-  performanceDuration: 0, // Initialize with 0
+  performanceDuration: 0, 
 };
 
 const getPerformanceDurationForRound = (roundName: string | undefined): number => {
@@ -482,4 +482,3 @@ export default function JuriTGRPage({ params: paramsPromise }: { params: Promise
     </div>
   );
 }
-
