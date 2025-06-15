@@ -83,8 +83,8 @@ export interface ScheduleTGR {
   round: string; // Babak (e.g., Penyisihan, Final)
   pesilatMerahName: string; // For Tunggal, or primary name for Ganda/Regu
   pesilatMerahContingent: string;
-  pesilatBiruName: string; // Optional: for Ganda second name, or if TGR is structured as Biru vs Merah
-  pesilatBiruContingent: string; // Optional: for Ganda second contingent
+  pesilatBiruName?: string; // Optional: for Ganda second name, or Biru side in two-sided TGR
+  pesilatBiruContingent?: string; // Optional: for Ganda second contingent, or Biru side
 }
 
 
@@ -105,8 +105,7 @@ export interface KetuaActionLogEntry {
 }
 
 export const JATUHAN_POINTS = 3;
-export const TEGURAN_POINTS = -1; // Teguran selalu -1
-// Binaan pertama 0 poin, binaan kedua (dan seterusnya dalam babak yg sama) jadi teguran -1
+export const TEGURAN_POINTS = -1; 
 export const PERINGATAN_POINTS_FIRST_PRESS = -5;
 export const PERINGATAN_POINTS_SECOND_PRESS = -10;
 
@@ -123,15 +122,15 @@ export interface JuriVotes {
 }
 
 export interface VerificationRequest {
-  id: string; // Firestore document ID
+  id: string; 
   matchId: string;
   type: VerificationType;
   status: VerificationStatus;
   round: 1 | 2 | 3;
-  timestamp: FirebaseTimestamp | Date | { seconds: number; nanoseconds: number }; // Firestore Timestamp
+  timestamp: FirebaseTimestamp | Date | { seconds: number; nanoseconds: number }; 
   votes: JuriVotes;
-  result?: JuriVoteValue | 'tie'; // Final result of the verification
-  requestingOfficial: 'ketua'; // Initially only Ketua can request
+  result?: JuriVoteValue | 'tie'; 
+  requestingOfficial: 'ketua'; 
 }
 // --- END VERIFICATION TYPES ---
 
@@ -185,47 +184,54 @@ export interface JuriMatchData {
 export interface TGRTimerStatus {
   timerSeconds: number;
   isTimerRunning: boolean;
-  matchStatus: 'Pending' | 'Ongoing' | 'Paused' | 'Finished'; // Status for the current side, or overall
+  matchStatus: 'Pending' | 'Ongoing' | 'Paused' | 'Finished'; 
   performanceDuration: number; 
-  currentPerformingSide?: 'biru' | 'merah' | null; // null if overall match finished or not applicable for the current phase
+  currentPerformingSide: 'biru' | 'merah' | null; // Tracks if Biru or Merah is performing, or null if overall match/phase done
+}
+
+export interface SideSpecificTGRScore {
+  gerakanSalahCount: number;
+  staminaKemantapanBonus: number; 
+  externalDeductions: number; 
+  calculatedScore: number; 
+  isReady?: boolean; 
 }
 
 export interface TGRJuriScore {
-  id?: string; // juriId, e.g., 'juri-1'
+  id?: string; 
   baseScore: number; // Default 9.90
-  gerakanSalahCount: number;
-  staminaKemantapanBonus: number; // 0.00 to 0.10
-  externalDeductions: number; // Sum of absolute values of Dewan penalties
-  calculatedScore: number; // baseScore - (gerakanSalahCount * 0.01) + staminaKemantapanBonus - externalDeductions
-  isReady?: boolean; // Juri status kesiapan
+  biru?: SideSpecificTGRScore;
+  merah?: SideSpecificTGRScore;
   lastUpdated?: FirebaseTimestamp | Date | { seconds: number; nanoseconds: number } | null;
 }
 
 export type TGRDewanPenaltyType =
-  | 'arena_out' // Penampilan Keluar Gelanggang 10mx10m
-  | 'weapon_touch_floor' // Menjatuhkan Senjata Menyentuh Lantai
-  | 'time_tolerance_violation' // Penampilan melebihi atau kurang dari toleransi waktu 5 Detik S/d 10 Detik
-  | 'costume_violation' // Pakaian tidak sesuai aturan
-  | 'movement_hold_violation'; // Menahan gerakan lebih dari 5 (lima) detik.
+  | 'arena_out' 
+  | 'weapon_touch_floor' 
+  | 'time_tolerance_violation' 
+  | 'costume_violation' 
+  | 'movement_hold_violation'; 
 
 export interface TGRDewanPenalty {
-  id?: string; // Firestore document ID
+  id?: string; 
   type: TGRDewanPenaltyType;
-  description: string; // Can be denormalized from PenaltyConfig
-  pointsDeducted: number; // e.g., -0.50
+  description: string; 
+  pointsDeducted: number; 
+  side: 'biru' | 'merah'; // Indicates which side the penalty applies to
   timestamp: FirebaseTimestamp | Date | { seconds: number; nanoseconds: number };
 }
 
 export interface TGRMatchData {
-  id: string; // Corresponds to ScheduleTGR id
-  scheduleDetails: ScheduleTGR; // Denormalized or linked
+  id: string; 
+  scheduleDetails: ScheduleTGR; 
   timerStatus: TGRTimerStatus;
-  // Juri scores will be in a subcollection: juri_scores_tgr/{juriId} -> TGRJuriScore
-  // Dewan penalties will be in a subcollection: dewan_penalties_tgr/{penaltyId} -> TGRDewanPenalty
-  finalMedianScore?: number; // Calculated by Ketua
-  totalDewanPenaltyPoints?: number; // Calculated by Ketua
-  overallScore?: number; // finalMedianScore + totalDewanPenaltyPoints
-  status: 'Pending' | 'Ongoing' | 'Paused' | 'Finished';
+  finalMedianScoreBiru?: number;
+  finalMedianScoreMerah?: number;
+  totalDewanPenaltyPointsBiru?: number;
+  totalDewanPenaltyPointsMerah?: number;
+  overallScoreBiru?: number;
+  overallScoreMerah?: number;
+  status: 'Pending' | 'OngoingBiru' | 'OngoingMerah' | 'PausedBiru' | 'PausedMerah' | 'FinishedBiru' | 'FinishedMerah' | 'MatchFinished';
 }
 // --- End TGR Scoring Types ---
 

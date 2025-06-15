@@ -75,8 +75,12 @@ function TGRLoginPageContent() {
 
           if (scheduleDoc.exists()) {
             const activeScheduleData = scheduleDoc.data() as ScheduleTGR;
-            const formattedLabel = `Partai ${activeScheduleData.lotNumber}: ${activeScheduleData.pesilatMerahName} (${activeScheduleData.category})`;
-            setPartaiOptions([{ value: activeScheduleId, label: formattedLabel }]);
+            let displayLabel = `Partai ${activeScheduleData.lotNumber}: ${activeScheduleData.pesilatMerahName}`;
+            if (activeScheduleData.pesilatBiruName) {
+              displayLabel += ` & ${activeScheduleData.pesilatBiruName}`;
+            }
+            displayLabel += ` (${activeScheduleData.category})`;
+            setPartaiOptions([{ value: activeScheduleId, label: displayLabel }]);
             setSelectedPartai(activeScheduleId);
           } else {
             setPartaiOptions(defaultPartaiOptions);
@@ -134,7 +138,6 @@ function TGRLoginPageContent() {
     setIsSubmitting(true);
     await signIn(email, password);
     setIsSubmitting(false);
-    // Redirection is handled by the useEffect hook monitoring `user` and `selectedHalaman`
   };
 
   const isLoadingOverall = authLoading || isSubmitting || scheduleLoading;

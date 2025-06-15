@@ -7,8 +7,8 @@ import { Header } from '@/components/layout/Header';
 import { PageTitle } from '@/components/shared/PageTitle';
 import { Button } from '@/components/ui/button';
 import { ArrowLeft, Trash2, Loader2, MinusCircle, UserCircle } from 'lucide-react';
-import type { ScheduleTGR, TGRDewanPenalty, TGRDewanPenaltyType, TGRJuriScore } from '@/lib/types';
-import { db, auth } from '@/lib/firebase'; // Import auth
+import type { ScheduleTGR, TGRDewanPenalty, TGRDewanPenaltyType, TGRJuriScore, TGRTimerStatus, SideSpecificTGRScore } from '@/lib/types';
+import { db, auth } from '@/lib/firebase'; 
 import { doc, onSnapshot, getDoc, collection, addDoc, query, orderBy, limit, deleteDoc, serverTimestamp, Timestamp, where, getDocs, setDoc, writeBatch } from 'firebase/firestore';
 import { Skeleton } from '@/components/ui/skeleton';
 import { cn } from '@/lib/utils';
@@ -38,16 +38,26 @@ const PENALTY_TYPES: PenaltyConfig[] = [
   { id: 'movement_hold_violation', description: "Menahan gerakan lebih dari 5 (lima) detik.", points: -0.50 },
 ];
 
+const initialTgrTimerStatus: TGRTimerStatus = {
+  timerSeconds: 0,
+  isTimerRunning: false,
+  matchStatus: 'Pending',
+  performanceDuration: 0,
+  currentPerformingSide: null,
+};
+
 export default function DewanTGRPenaltyPage() {
   const [configMatchId, setConfigMatchId] = useState<string | null | undefined>(undefined);
   const [activeMatchId, setActiveMatchId] = useState<string | null>(null);
   const [scheduleDetails, setScheduleDetails] = useState<ScheduleTGR | null>(null);
   const [matchDetailsLoaded, setMatchDetailsLoaded] = useState(false);
   const [penaltiesLog, setPenaltiesLog] = useState<TGRDewanPenalty[]>([]);
-  const [isProcessing, setIsProcessing] = useState<Record<string, boolean>>({}); // For individual penalty type processing
+  const [isProcessing, setIsProcessing] = useState<Record<string, boolean>>({});
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [currentUserEmail, setCurrentUserEmail] = useState<string | null>(null);
+  const [tgrTimerStatus, setTgrTimerStatus] = useState<TGRTimerStatus>(initialTgrTimerStatus);
+
 
   useEffect(() => {
     const unsubConfig = onSnapshot(doc(db, ACTIVE_TGR_SCHEDULE_CONFIG_PATH), (docSnap) => {
@@ -63,11 +73,7 @@ export default function DewanTGRPenaltyPage() {
 
   useEffect(() => {
     const unsubscribeAuth = auth.onAuthStateChanged(user => {
-      if (user) {
-        setCurrentUserEmail(user.email);
-      } else {
-        setCurrentUserEmail(null);
-      }
+      setCurrentUserEmail(user ? user.email : null);
     });
     return () => unsubscribeAuth();
   }, []);
@@ -81,6 +87,7 @@ export default function DewanTGRPenaltyPage() {
       setPenaltiesLog([]);
       setMatchDetailsLoaded(false);
       setError(null);
+      setTgrTimerStatus(initialTgrTimerStatus);
       setActiveMatchId(configMatchId);
       if (configMatchId) setIsLoading(true); else setIsLoading(false);
     } else if (configMatchId === null && activeMatchId === null && isLoading) {
@@ -97,6 +104,8 @@ export default function DewanTGRPenaltyPage() {
 
     let mounted = true;
     if (!matchDetailsLoaded) setIsLoading(true);
+
+    const unsubscribers: (() => void)[] = [];
 
     const loadData = async () => {
       if (!mounted) return;
@@ -126,18 +135,28 @@ export default function DewanTGRPenaltyPage() {
       collection(db, MATCHES_TGR_COLLECTION, activeMatchId, DEWAN_PENALTIES_TGR_SUBCOLLECTION),
       orderBy("timestamp", "asc")
     );
-    const unsubPenalties = onSnapshot(penaltiesQuery, (snapshot) => {
+    unsubscribers.push(onSnapshot(penaltiesQuery, (snapshot) => {
       if (!mounted) return;
       const log: TGRDewanPenalty[] = [];
       snapshot.forEach(doc => log.push({ id: doc.id, ...doc.data() } as TGRDewanPenalty));
       setPenaltiesLog(log);
     }, (err) => {
       if (mounted) setError(`Gagal memuat log pelanggaran: ${err.message}`);
-    });
+    }));
+
+    const matchTimerRef = doc(db, MATCHES_TGR_COLLECTION, activeMatchId);
+    unsubscribers.push(onSnapshot(matchTimerRef, (docSnap) => {
+        if (!mounted) return;
+        if (docSnap.exists() && docSnap.data()?.timerStatus) {
+            setTgrTimerStatus(docSnap.data()?.timerStatus as TGRTimerStatus);
+        } else {
+            setTgrTimerStatus(initialTgrTimerStatus);
+        }
+    }));
 
     return () => {
       mounted = false;
-      unsubPenalties();
+      unsubscribers.forEach(unsub => unsub());
     };
   }, [activeMatchId, matchDetailsLoaded]);
 
@@ -149,20 +168,22 @@ export default function DewanTGRPenaltyPage() {
 
 
   const handleAddPenalty = async (penalty: PenaltyConfig) => {
-    console.log(`[handleAddPenalty] Triggered for penalty: ${penalty.id}, activeMatchId: ${activeMatchId}`);
-    
     const currentUser = auth.currentUser;
-    console.log("[handleAddPenalty] Current Firebase Auth User:", currentUser ? currentUser.uid : "NULL");
     if (!currentUser) {
       setError("User tidak terautentikasi. Silakan login ulang dan coba lagi.");
       alert("User tidak terautentikasi. Silakan login ulang dan coba lagi.");
-      setIsProcessing(prev => ({ ...prev, [penalty.id]: false }));
       return;
+    }
+    
+    const currentPerformingSide = tgrTimerStatus.currentPerformingSide;
+    if (!currentPerformingSide) {
+        setError("Tidak ada sisi (Biru/Merah) yang aktif untuk diberikan penalti. Tunggu Timer Kontrol memulai sisi.");
+        alert("Tidak ada sisi (Biru/Merah) yang aktif untuk diberikan penalti. Tunggu Timer Kontrol memulai sisi.");
+        return;
     }
 
     if (!activeMatchId || activeMatchId.trim() === "" || isProcessing[penalty.id]) {
       if (!activeMatchId || activeMatchId.trim() === "") {
-        console.error("handleAddPenalty aborted: activeMatchId is invalid.", { activeMatchId });
         setError("ID pertandingan aktif tidak valid. Tidak dapat menambah pelanggaran.");
       }
       return;
@@ -173,74 +194,61 @@ export default function DewanTGRPenaltyPage() {
         type: penalty.id,
         description: penalty.description,
         pointsDeducted: penalty.points,
+        side: currentPerformingSide, // Assign penalty to the current performing side
         timestamp: serverTimestamp(),
       };
 
       const batch = writeBatch(db);
-      
       const newPenaltyRef = doc(collection(db, MATCHES_TGR_COLLECTION, activeMatchId, DEWAN_PENALTIES_TGR_SUBCOLLECTION));
       batch.set(newPenaltyRef, penaltyData);
-      console.log(`[handleAddPenalty] Prepared to add penalty doc: ${newPenaltyRef.path}`);
 
       const deductionAmount = Math.abs(penalty.points); 
 
       for (const juriId of TGR_JURI_IDS) {
         const juriDocRef = doc(db, MATCHES_TGR_COLLECTION, activeMatchId, JURI_SCORES_TGR_SUBCOLLECTION, juriId);
-        console.log(`[handleAddPenalty] Preparing update for Juri: ${juriId}, path: ${juriDocRef.path}`);
-        
         const juriDocSnap = await getDoc(juriDocRef);
-        let currentJuriData: TGRJuriScore = { 
-            baseScore: BASE_SCORE_TGR,
-            gerakanSalahCount: 0,
-            staminaKemantapanBonus: 0,
-            externalDeductions: 0,
-            calculatedScore: BASE_SCORE_TGR,
-            isReady: false, 
-            lastUpdated: null,
-        };
-
+        
+        let currentJuriData: TGRJuriScore;
         if (juriDocSnap.exists()) {
-            const existingData = juriDocSnap.data() as Partial<TGRJuriScore>;
-            currentJuriData = {
-                ...currentJuriData, 
-                ...existingData,    
+            currentJuriData = juriDocSnap.data() as TGRJuriScore;
+        } else {
+            currentJuriData = { 
+                baseScore: BASE_SCORE_TGR,
+                biru: { gerakanSalahCount: 0, staminaKemantapanBonus: 0, externalDeductions: 0, calculatedScore: BASE_SCORE_TGR, isReady: false },
+                merah: { gerakanSalahCount: 0, staminaKemantapanBonus: 0, externalDeductions: 0, calculatedScore: BASE_SCORE_TGR, isReady: false },
+                lastUpdated: null,
             };
         }
-        
-        const newExternalDeductions = (currentJuriData.externalDeductions ?? 0) + deductionAmount;
-        const newCalculatedScore = parseFloat(
+
+        const sideDataToUpdate: SideSpecificTGRScore = currentJuriData[currentPerformingSide] 
+            ? { ...currentJuriData[currentPerformingSide]! } 
+            : { gerakanSalahCount: 0, staminaKemantapanBonus: 0, externalDeductions: 0, calculatedScore: BASE_SCORE_TGR, isReady: false };
+
+        sideDataToUpdate.externalDeductions = (sideDataToUpdate.externalDeductions ?? 0) + deductionAmount;
+        sideDataToUpdate.calculatedScore = parseFloat(
             ( (currentJuriData.baseScore ?? BASE_SCORE_TGR) -
-              ((currentJuriData.gerakanSalahCount ?? 0) * GERAKAN_SALAH_DEDUCTION) +
-              (currentJuriData.staminaKemantapanBonus ?? 0) -
-              newExternalDeductions
+              ((sideDataToUpdate.gerakanSalahCount ?? 0) * GERAKAN_SALAH_DEDUCTION) +
+              (sideDataToUpdate.staminaKemantapanBonus ?? 0) -
+              sideDataToUpdate.externalDeductions
             ).toFixed(2)
         );
 
-        const juriUpdateData = { 
-            baseScore: currentJuriData.baseScore,
-            gerakanSalahCount: currentJuriData.gerakanSalahCount,
-            staminaKemantapanBonus: currentJuriData.staminaKemantapanBonus,
-            externalDeductions: newExternalDeductions,
-            calculatedScore: newCalculatedScore,
-            isReady: currentJuriData.isReady, 
+        const juriUpdatePayload: Partial<TGRJuriScore> = {
+            [currentPerformingSide]: sideDataToUpdate,
             lastUpdated: serverTimestamp(),
         };
-        console.log(`[handleAddPenalty] Data for Juri ${juriId}:`, juriUpdateData);
-        batch.set(juriDocRef, juriUpdateData, { merge: true });
+        
+        batch.set(juriDocRef, juriUpdatePayload, { merge: true });
       }
-
       await batch.commit();
-      console.log(`[handleAddPenalty] Batch commit successful for penalty ${penalty.id}`);
-
     } catch (err) {
       const firebaseError = err as any; 
-      console.error("[handleAddPenalty] Error processing penalty or updating Juri scores. ActiveMatchId:", activeMatchId, "Penalty:", penalty.id, "Error:", firebaseError);
-      
+      console.error("[handleAddPenalty] Dewan TGR Error. ActiveMatchId:", activeMatchId, "Penalty:", penalty.id, "Error:", firebaseError);
       let errorMessage = `Gagal menambah pelanggaran & update skor juri: ${firebaseError.message || String(firebaseError)}`;
       if (firebaseError.code === 'permission-denied') {
-        errorMessage += " Pastikan Anda telah login dan memiliki izin yang cukup. Periksa juga path Firestore yang diakses.";
-      } else if (firebaseError.code === 'failed-precondition') {
-        errorMessage += " Query memerlukan index Firestore. Silakan buat index melalui link di konsol error atau di Firebase Console.";
+        errorMessage += " Pastikan Anda telah login dan memiliki izin yang cukup.";
+      } else if (firebaseError.code === 'failed-precondition' && firebaseError.message.includes("index")) {
+        errorMessage += ` Query memerlukan index Firestore. ${firebaseError.message.includes("currently building") ? "Index sedang dibuat, tunggu beberapa saat." : "Silakan buat index melalui link di konsol error atau di Firebase Console."}`;
       }
       setError(errorMessage);
       alert(errorMessage);
@@ -250,20 +258,22 @@ export default function DewanTGRPenaltyPage() {
   };
 
   const handleDeleteLastPenalty = async (penaltyType: TGRDewanPenaltyType) => {
-    console.log(`[handleDeleteLastPenalty] Triggered for penaltyType: ${penaltyType}, activeMatchId: ${activeMatchId}`);
-    
     const currentUser = auth.currentUser;
-    console.log("[handleDeleteLastPenalty] Current Firebase Auth User:", currentUser ? currentUser.uid : "NULL");
     if (!currentUser) {
       setError("User tidak terautentikasi. Silakan login ulang dan coba lagi.");
       alert("User tidak terautentikasi. Silakan login ulang dan coba lagi.");
-      setIsProcessing(prev => ({ ...prev, [penaltyType]: false })); 
       return;
+    }
+    
+    const currentPerformingSide = tgrTimerStatus.currentPerformingSide;
+    if (!currentPerformingSide) {
+        setError("Tidak ada sisi (Biru/Merah) yang aktif untuk menghapus penalti. Tunggu Timer Kontrol memulai sisi.");
+        alert("Tidak ada sisi (Biru/Merah) yang aktif untuk menghapus penalti. Tunggu Timer Kontrol memulai sisi.");
+        return;
     }
 
      if (!activeMatchId || activeMatchId.trim() === "" || isProcessing[penaltyType]) {
         if (!activeMatchId || activeMatchId.trim() === "") {
-          console.error("[handleDeleteLastPenalty] Aborted: activeMatchId is invalid.", { activeMatchId });
           setError("ID pertandingan aktif tidak valid. Tidak dapat menghapus pelanggaran.");
         }
         return;
@@ -273,6 +283,7 @@ export default function DewanTGRPenaltyPage() {
       const q = query(
         collection(db, MATCHES_TGR_COLLECTION, activeMatchId, DEWAN_PENALTIES_TGR_SUBCOLLECTION),
         where("type", "==", penaltyType),
+        where("side", "==", currentPerformingSide), // Only delete for the current side
         orderBy("timestamp", "desc"),
         limit(1)
       );
@@ -280,57 +291,49 @@ export default function DewanTGRPenaltyPage() {
       if (!snapshot.empty) {
         const docToDelete = snapshot.docs[0];
         const deletedPenaltyPoints = (docToDelete.data() as TGRDewanPenalty).pointsDeducted;
-        console.log(`[handleDeleteLastPenalty] Found penalty to delete: ${docToDelete.id}, points: ${deletedPenaltyPoints}`);
 
         const batch = writeBatch(db);
         batch.delete(doc(db, MATCHES_TGR_COLLECTION, activeMatchId, DEWAN_PENALTIES_TGR_SUBCOLLECTION, docToDelete.id));
-        console.log(`[handleDeleteLastPenalty] Prepared to delete penalty doc: ${docToDelete.ref.path}`);
 
         const deductionAmountToRevert = Math.abs(deletedPenaltyPoints);
 
         for (const juriId of TGR_JURI_IDS) {
             const juriDocRef = doc(db, MATCHES_TGR_COLLECTION, activeMatchId, JURI_SCORES_TGR_SUBCOLLECTION, juriId);
-            console.log(`[handleDeleteLastPenalty] Preparing update for Juri: ${juriId}, path: ${juriDocRef.path}`);
-            
             const juriDocSnap = await getDoc(juriDocRef); 
 
             if (juriDocSnap.exists()) {
                 const currentJuriData = juriDocSnap.data() as TGRJuriScore;
-                const newExternalDeductions = Math.max(0, (currentJuriData.externalDeductions || 0) - deductionAmountToRevert);
-                
-                const newCalculatedScore = parseFloat(
+                const sideDataToUpdate = currentJuriData[currentPerformingSide] 
+                    ? { ...currentJuriData[currentPerformingSide]! }
+                    : { gerakanSalahCount: 0, staminaKemantapanBonus: 0, externalDeductions: 0, calculatedScore: BASE_SCORE_TGR, isReady: false };
+
+                sideDataToUpdate.externalDeductions = Math.max(0, (sideDataToUpdate.externalDeductions || 0) - deductionAmountToRevert);
+                sideDataToUpdate.calculatedScore = parseFloat(
                     ( (currentJuriData.baseScore ?? BASE_SCORE_TGR) -
-                      ((currentJuriData.gerakanSalahCount ?? 0) * GERAKAN_SALAH_DEDUCTION) +
-                      (currentJuriData.staminaKemantapanBonus ?? 0) -
-                      newExternalDeductions
+                      ((sideDataToUpdate.gerakanSalahCount ?? 0) * GERAKAN_SALAH_DEDUCTION) +
+                      (sideDataToUpdate.staminaKemantapanBonus ?? 0) -
+                      sideDataToUpdate.externalDeductions
                     ).toFixed(2)
                 );
                 
-                const juriUpdateData = { 
-                    externalDeductions: newExternalDeductions,
-                    calculatedScore: newCalculatedScore,
+                const juriUpdatePayload: Partial<TGRJuriScore> = {
+                    [currentPerformingSide]: sideDataToUpdate,
                     lastUpdated: serverTimestamp(),
                 };
-                console.log(`[handleDeleteLastPenalty] Data for Juri ${juriId}:`, juriUpdateData);
-                batch.update(juriDocRef, juriUpdateData); 
-            } else {
-                console.warn(`[handleDeleteLastPenalty] Juri doc not found for ${juriId}, skipping update for this juri.`);
+                batch.set(juriDocRef, juriUpdatePayload, { merge: true });
             }
         }
         await batch.commit();
-        console.log(`[handleDeleteLastPenalty] Batch commit successful for deleting penalty ${penaltyType}`);
-
       } else {
-        alert(`Tidak ada pelanggaran tipe "${penaltyType}" yang bisa dihapus.`);
-        console.log(`[handleDeleteLastPenalty] No penalty of type "${penaltyType}" found to delete.`);
+        alert(`Tidak ada pelanggaran tipe "${penaltyType}" untuk sisi ${currentPerformingSide} yang bisa dihapus.`);
       }
     } catch (err) {
       const firebaseError = err as any;
-      console.error("[handleDeleteLastPenalty] Error processing penalty deletion or updating Juri scores. ActiveMatchId:", activeMatchId, "PenaltyType:", penaltyType, "Error:", firebaseError);
+      console.error("[handleDeleteLastPenalty] Dewan TGR Error. ActiveMatchId:", activeMatchId, "PenaltyType:", penaltyType, "Error:", firebaseError);
       let errorMessage = `Gagal menghapus pelanggaran & update skor juri: ${firebaseError.message || String(firebaseError)}`;
       if (firebaseError.code === 'permission-denied') {
-        errorMessage += " Pastikan Anda telah login dan memiliki izin yang cukup. Periksa juga path Firestore yang diakses.";
-      } else if (firebaseError.code === 'failed-precondition') {
+        errorMessage += " Pastikan Anda telah login dan memiliki izin yang cukup.";
+      } else if (firebaseError.code === 'failed-precondition' && firebaseError.message.includes("index")) {
          errorMessage += ` Query memerlukan index Firestore. ${firebaseError.message.includes("currently building") ? "Index sedang dibuat, tunggu beberapa saat." : "Silakan buat index melalui link di konsol error atau di Firebase Console."}`;
       }
       setError(errorMessage);
@@ -340,17 +343,26 @@ export default function DewanTGRPenaltyPage() {
     }
   };
 
-  const calculateTotalPointsForType = (penaltyType: TGRDewanPenaltyType): number => {
+  const calculateTotalPointsForTypeAndSide = (penaltyType: TGRDewanPenaltyType, side: 'biru' | 'merah' | null): number => {
+    if (!side) return 0;
     return penaltiesLog
-      .filter(p => p.type === penaltyType)
+      .filter(p => p.type === penaltyType && p.side === side)
       .reduce((sum, p) => sum + p.pointsDeducted, 0);
   };
 
-  const totalOverallPenalty = penaltiesLog.reduce((sum, p) => sum + p.pointsDeducted, 0);
-
-  const mainParticipantName = scheduleDetails?.pesilatMerahName || 'Peserta';
-  const mainParticipantContingent = scheduleDetails?.pesilatMerahContingent || 'Kontingen Tidak Diketahui';
-
+  const totalOverallPenaltyForCurrentSide = tgrTimerStatus.currentPerformingSide 
+    ? penaltiesLog
+        .filter(p => p.side === tgrTimerStatus.currentPerformingSide)
+        .reduce((sum, p) => sum + p.pointsDeducted, 0)
+    : 0;
+  
+  const performingSideName = () => {
+    if (!scheduleDetails || !tgrTimerStatus.currentPerformingSide) return "Peserta (Sisi Belum Aktif)";
+    if (tgrTimerStatus.currentPerformingSide === 'biru') {
+        return `Sudut Biru: ${scheduleDetails.pesilatBiruName || 'N/A'} (${scheduleDetails.pesilatBiruContingent || scheduleDetails.pesilatMerahContingent || 'N/A'})`;
+    }
+    return `Sudut Merah: ${scheduleDetails.pesilatMerahName || 'N/A'} (${scheduleDetails.pesilatMerahContingent || 'N/A'})`;
+  };
 
   if (isLoading && configMatchId === undefined) {
     return (
@@ -368,12 +380,12 @@ export default function DewanTGRPenaltyPage() {
     <div className="flex flex-col min-h-screen">
       <Header />
       <main className="flex-1 container mx-auto px-2 py-4 md:p-6">
-        <PageTitle title="Dewan Juri 1 - Pelanggaran TGR" description="Catat pelanggaran untuk penampilan kategori TGR.">
+        <PageTitle title="Dewan Juri 1 - Pelanggaran TGR" description={`Catat pelanggaran untuk ${performingSideName()}.`}>
             <div className="flex items-center gap-2">
                 {currentUserEmail ? (
                     <div className={cn("flex items-center text-sm p-2 border rounded-md", currentUserEmail ? "text-green-600 dark:text-green-400 border-green-500" : "text-red-600 dark:text-red-400 border-red-500")}>
                         <UserCircle className="mr-2 h-4 w-4" /> 
-                        {currentUserEmail ? `User: ${currentUserEmail} (Login Aktif)` : "Belum Login ke Firebase"}
+                        {currentUserEmail ? `User: ${currentUserEmail}` : "Belum Login"}
                     </div>
                 ) : (
                     <div className="flex items-center text-sm text-red-600 dark:text-red-400 p-2 border border-red-500 rounded-md">
@@ -386,7 +398,6 @@ export default function DewanTGRPenaltyPage() {
             </div>
         </PageTitle>
 
-
         {isLoading && activeMatchId && !matchDetailsLoaded ? (
           <div className="text-center py-10">
             <Loader2 className="mx-auto h-16 w-16 text-primary animate-spin mb-4" />
@@ -396,19 +407,34 @@ export default function DewanTGRPenaltyPage() {
           <div className="text-center py-10">
             <MinusCircle className="mx-auto h-16 w-16 text-destructive mb-4" />
             <p className="text-xl font-semibold text-destructive">{error || "Tidak ada jadwal TGR yang aktif."}</p>
-            <p className="text-muted-foreground mt-2">Silakan aktifkan jadwal TGR di halaman Admin.</p>
+            <p className="text-muted-foreground mt-2">Silakan aktifkan jadwal TGR di halaman Admin atau tunggu Timer Kontrol.</p>
+          </div>
+        ) : !tgrTimerStatus.currentPerformingSide ? (
+           <div className="text-center py-10">
+            <MinusCircle className="mx-auto h-16 w-16 text-yellow-500 mb-4" />
+            <p className="text-xl font-semibold text-yellow-600">Menunggu Sisi Aktif</p>
+            <p className="text-muted-foreground mt-2">Timer Kontrol belum memulai penampilan untuk Sudut Biru atau Merah.</p>
           </div>
         ) : (
           <>
             <div className="mb-6 p-4 border rounded-lg shadow bg-card">
               <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2">
                 <div>
-                  <h2 className="text-xl font-bold text-primary">{mainParticipantContingent}</h2>
-                  <p className="text-md text-foreground">{mainParticipantName} ({scheduleDetails?.category || 'N/A'})</p>
+                  <h2 className="text-xl font-bold text-primary">{scheduleDetails?.pesilatMerahContingent }</h2>
+                  <p className="text-md text-foreground">
+                    {scheduleDetails?.pesilatMerahName} 
+                    {scheduleDetails?.pesilatBiruName && ` & ${scheduleDetails.pesilatBiruName}`}
+                    {' '}({scheduleDetails?.category || 'N/A'})
+                  </p>
                 </div>
                 <div className="text-sm text-muted-foreground text-left sm:text-right">
                   <p>Partai/Undian: {scheduleDetails?.lotNumber || 'N/A'} | Babak: {scheduleDetails?.round || 'N/A'}</p>
                   <p>Gelanggang: {scheduleDetails?.place || 'N/A'}</p>
+                  <p className="font-semibold text-lg mt-1">
+                    Aktif: <span className={tgrTimerStatus.currentPerformingSide === 'biru' ? 'text-blue-600' : 'text-red-600'}>
+                        {tgrTimerStatus.currentPerformingSide === 'biru' ? 'Sudut Biru' : 'Sudut Merah'}
+                    </span>
+                  </p>
                 </div>
               </div>
             </div>
@@ -420,7 +446,7 @@ export default function DewanTGRPenaltyPage() {
                 <div className="text-sm">Pelanggaran</div>
                 <div className="text-sm text-center w-24">Hapus</div>
                 <div className="text-sm text-center w-28">Skor</div>
-                <div className="text-sm text-center w-20">Subtotal</div>
+                <div className="text-sm text-center w-20">Subtotal ({tgrTimerStatus.currentPerformingSide === 'biru' ? 'Biru' : 'Merah'})</div>
               </div>
 
               {PENALTY_TYPES.map((penalty) => (
@@ -431,9 +457,9 @@ export default function DewanTGRPenaltyPage() {
                     size="sm"
                     className="w-24 bg-blue-500 hover:bg-blue-600 text-white dark:bg-blue-600 dark:hover:bg-blue-700"
                     onClick={() => handleDeleteLastPenalty(penalty.id)}
-                    disabled={isProcessing[penalty.id] || penaltiesLog.filter(p => p.type === penalty.id).length === 0}
+                    disabled={isProcessing[penalty.id] || penaltiesLog.filter(p => p.type === penalty.id && p.side === tgrTimerStatus.currentPerformingSide).length === 0 || !tgrTimerStatus.currentPerformingSide}
                   >
-                    {isProcessing[penalty.id] && penaltiesLog.filter(p => p.type === penalty.id).length > 0 ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4 mr-1 sm:mr-2" /> }
+                    {isProcessing[penalty.id] && penaltiesLog.filter(p => p.type === penalty.id && p.side === tgrTimerStatus.currentPerformingSide).length > 0 ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4 mr-1 sm:mr-2" /> }
                      Hapus
                   </Button>
                   <Button
@@ -441,22 +467,22 @@ export default function DewanTGRPenaltyPage() {
                     size="sm"
                     className="w-28 mx-1 bg-red-600 hover:bg-red-700 text-white"
                     onClick={() => handleAddPenalty(penalty)}
-                    disabled={isProcessing[penalty.id]}
+                    disabled={isProcessing[penalty.id] || !tgrTimerStatus.currentPerformingSide}
                   >
                     {isProcessing[penalty.id] ? <Loader2 className="h-4 w-4 animate-spin" /> : `${penalty.points.toFixed(2)}`}
                   </Button>
                   <div className="w-20 text-center text-sm font-medium text-gray-700 dark:text-gray-300">
-                    {calculateTotalPointsForType(penalty.id).toFixed(2)}
+                    {calculateTotalPointsForTypeAndSide(penalty.id, tgrTimerStatus.currentPerformingSide).toFixed(2)}
                   </div>
                 </div>
               ))}
               
               <div className="grid grid-cols-[1fr_auto_auto_auto] items-center p-3 bg-gray-200 dark:bg-gray-900 font-bold border-t-2 border-gray-400 dark:border-gray-600">
-                <div className="text-md">TOTAL PELANGGARAN</div>
+                <div className="text-md">TOTAL PELANGGARAN ({tgrTimerStatus.currentPerformingSide === 'biru' ? 'BIRU' : 'MERAH'})</div>
                 <div></div> 
                 <div></div> 
                 <div className="text-md text-center w-20 text-red-600 dark:text-red-400">
-                  {totalOverallPenalty.toFixed(2)}
+                  {totalOverallPenaltyForCurrentSide.toFixed(2)}
                 </div>
               </div>
             </div>
@@ -467,5 +493,3 @@ export default function DewanTGRPenaltyPage() {
   );
 }
         
-
-    
