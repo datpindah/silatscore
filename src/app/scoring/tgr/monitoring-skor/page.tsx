@@ -1,7 +1,7 @@
 
 "use client";
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
 import { ArrowLeft, Loader2, Sun, Moon, ChevronsRight, AlertTriangle } from 'lucide-react';
@@ -203,104 +203,105 @@ export default function MonitoringSkorTGRPage() {
   const mainParticipantContingent = scheduleDetails?.pesilatMerahContingent || 'Kontingen';
 
   return (
-    <div className={cn("flex flex-col min-h-screen font-sans overflow-hidden relative", pageTheme === 'light' ? 'tgr-monitoring-theme-light' : 'tgr-monitoring-theme-dark', "bg-[var(--monitor-bg)] text-[var(--monitor-text)]")}>
+    <>
       <Header />
-      <Button
-        variant="outline"
-        size="icon"
-        onClick={() => setPageTheme(prev => prev === 'light' ? 'dark' : 'light')}
-        className="absolute top-20 right-2 z-[100] bg-[var(--monitor-dialog-bg)] text-[var(--monitor-text)] border-[var(--monitor-border)] hover:bg-[var(--monitor-neutral-bg)]"
-        aria-label={pageTheme === "dark" ? "Ganti ke mode terang" : "Ganti ke mode gelap"}
-      >
-        {pageTheme === 'dark' ? <Sun className="h-[1.2rem] w-[1.2rem]" /> : <Moon className="h-[1.2rem] w-[1.2rem]" />}
-      </Button>
+      <div className={cn("flex flex-col min-h-screen font-sans overflow-hidden relative", pageTheme === 'light' ? 'tgr-monitoring-theme-light' : 'tgr-monitoring-theme-dark', "bg-[var(--monitor-bg)] text-[var(--monitor-text)]")}>
+        <Button
+          variant="outline"
+          size="icon"
+          onClick={() => setPageTheme(prev => prev === 'light' ? 'dark' : 'light')}
+          className="absolute top-2 right-2 z-[100] bg-[var(--monitor-dialog-bg)] text-[var(--monitor-text)] border-[var(--monitor-border)] hover:bg-[var(--monitor-neutral-bg)]" // Adjusted top to be above header
+          aria-label={pageTheme === "dark" ? "Ganti ke mode terang" : "Ganti ke mode gelap"}
+        >
+          {pageTheme === 'dark' ? <Sun className="h-[1.2rem] w-[1.2rem]" /> : <Moon className="h-[1.2rem] w-[1.2rem]" />}
+        </Button>
 
-      {/* Header Bar specific to this page */}
-      <div className="bg-[var(--monitor-header-section-bg)] p-3 md:p-4 text-center text-sm md:text-base font-semibold text-[var(--monitor-text)]">
-        <div className="grid grid-cols-4 gap-1 items-center">
-          <div>{mainParticipantName}</div>
-          <div>Partai/Pool: {scheduleDetails?.lotNumber || <Skeleton className="h-5 w-16 inline-block bg-[var(--monitor-skeleton-bg)]" />}</div>
-          <div>{scheduleDetails?.category || <Skeleton className="h-5 w-20 inline-block bg-[var(--monitor-skeleton-bg)]" />}</div>
-          <div>Babak: {scheduleDetails?.round || <Skeleton className="h-5 w-20 inline-block bg-[var(--monitor-skeleton-bg)]" />}</div>
+        {/* Header Bar specific to this page */}
+        <div className="bg-[var(--monitor-header-section-bg)] p-3 md:p-4 text-center text-sm md:text-base font-semibold text-[var(--monitor-text)]">
+          <div className="grid grid-cols-4 gap-1 items-center">
+            <div>{mainParticipantName}</div>
+            <div>Partai/Pool: {scheduleDetails?.lotNumber || <Skeleton className="h-5 w-16 inline-block bg-[var(--monitor-skeleton-bg)]" />}</div>
+            <div>{scheduleDetails?.category || <Skeleton className="h-5 w-20 inline-block bg-[var(--monitor-skeleton-bg)]" />}</div>
+            <div>Babak: {scheduleDetails?.round || <Skeleton className="h-5 w-20 inline-block bg-[var(--monitor-skeleton-bg)]" />}</div>
+          </div>
         </div>
-      </div>
 
-      <div className="flex-grow flex flex-col p-2 md:p-4">
-        {/* Kontingen and Timer */}
-        <div className="flex justify-between items-center mb-3 md:mb-6 px-1">
-          <div className="text-left">
-            <div className="text-xs md:text-sm font-medium text-[var(--monitor-text-muted)]">KONTINGEN</div>
-            <div className="text-lg md:text-2xl font-bold text-[var(--monitor-text)]">
-              {mainParticipantContingent}
+        <div className="flex-grow flex flex-col p-2 md:p-4">
+          {/* Kontingen and Timer */}
+          <div className="flex justify-between items-center mb-3 md:mb-6 px-1">
+            <div className="text-left">
+              <div className="text-xs md:text-sm font-medium text-[var(--monitor-text-muted)]">KONTINGEN</div>
+              <div className="text-lg md:text-2xl font-bold text-[var(--monitor-text)]">
+                {mainParticipantContingent}
+              </div>
+            </div>
+            <div className="text-right">
+              <div className="text-xs md:text-sm font-medium text-[var(--monitor-text-muted)]">TIMER</div>
+              <div className="text-3xl md:text-5xl font-mono font-bold text-[var(--monitor-timer-text)]">
+                {formatTime(tgrTimerStatus.timerSeconds)}
+              </div>
             </div>
           </div>
-          <div className="text-right">
-            <div className="text-xs md:text-sm font-medium text-[var(--monitor-text-muted)]">TIMER</div>
-            <div className="text-3xl md:text-5xl font-mono font-bold text-[var(--monitor-timer-text)]">
-              {formatTime(tgrTimerStatus.timerSeconds)}
+
+          {/* Juri Scores Table */}
+          <div className="w-full max-w-3xl mx-auto">
+            <div className="grid grid-cols-6 gap-1 md:gap-2 mb-1">
+              {TGR_JURI_IDS.map((juriId, index) => (
+                <JuriLabelCell key={`label-${juriId}`} label={`JURI ${index + 1}`} />
+              ))}
+            </div>
+            <div className="grid grid-cols-6 gap-1 md:gap-2">
+              {TGR_JURI_IDS.map(juriId => {
+                const scoreData = allJuriScores[juriId];
+                const displayScore = scoreData && scoreData.isReady ? scoreData.calculatedScore.toFixed(2) : '-';
+                return <ScoreCell key={`score-${juriId}`} value={displayScore} isLoadingValue={isLoading && !matchDetailsLoaded} />;
+              })}
             </div>
           </div>
-        </div>
 
-        {/* Juri Scores Table */}
-        <div className="w-full max-w-3xl mx-auto">
-          <div className="grid grid-cols-6 gap-1 md:gap-2 mb-1">
-            {TGR_JURI_IDS.map((juriId, index) => (
-              <JuriLabelCell key={`label-${juriId}`} label={`JURI ${index + 1}`} />
-            ))}
-          </div>
-          <div className="grid grid-cols-6 gap-1 md:gap-2">
-            {TGR_JURI_IDS.map(juriId => {
-              const scoreData = allJuriScores[juriId];
-              const displayScore = scoreData && scoreData.isReady ? scoreData.calculatedScore.toFixed(2) : '-';
-              return <ScoreCell key={`score-${juriId}`} value={displayScore} isLoadingValue={isLoading && !matchDetailsLoaded} />;
-            })}
-          </div>
+          {/* Status Message */}
+          {tgrTimerStatus.matchStatus && (
+            <div className="mt-auto pt-4 text-center text-xs md:text-sm text-[var(--monitor-status-text)]">
+              Status: {tgrTimerStatus.matchStatus}
+              {tgrTimerStatus.isTimerRunning && " (Berjalan)"}
+            </div>
+          )}
         </div>
-
-        {/* Status Message */}
-        {tgrTimerStatus.matchStatus && (
-          <div className="mt-auto pt-4 text-center text-xs md:text-sm text-[var(--monitor-status-text)]">
-            Status: {tgrTimerStatus.matchStatus}
-            {tgrTimerStatus.isTimerRunning && " (Berjalan)"}
-          </div>
+        
+        {/* Overlays and Fixed Buttons */}
+        {isLoading && activeScheduleId && !matchDetailsLoaded && (
+           <div className="absolute inset-0 bg-[var(--monitor-overlay-bg)] flex flex-col items-center justify-center z-50">
+              <Loader2 className="h-12 w-12 animate-spin text-[var(--monitor-overlay-accent-text)] mb-4" />
+              <p className="text-lg text-[var(--monitor-overlay-text-primary)]">Memuat Data Monitor TGR...</p>
+           </div>
+        )}
+         {!activeScheduleId && !isLoading && (
+           <div className="absolute inset-0 bg-[var(--monitor-overlay-bg)] flex flex-col items-center justify-center z-50 p-4">
+              <AlertTriangle className="h-16 w-16 text-[var(--monitor-overlay-accent-text)] mb-4" />
+              <p className="text-xl text-center text-[var(--monitor-overlay-text-primary)] mb-2">{error || "Tidak ada pertandingan TGR yang aktif untuk dimonitor."}</p>
+              <p className="text-sm text-center text-[var(--monitor-overlay-text-secondary)] mb-6">Silakan aktifkan jadwal TGR di panel admin atau tunggu pertandingan dimulai.</p>
+              <Button variant="outline" asChild className="bg-[var(--monitor-overlay-button-bg)] border-[var(--monitor-overlay-button-border)] hover:bg-[var(--monitor-overlay-button-hover-bg)] text-[var(--monitor-overlay-button-text)]">
+                <Link href="/scoring/tgr"><ArrowLeft className="mr-2 h-4 w-4" /> Kembali</Link>
+              </Button>
+           </div>
+        )}
+        
+        {tgrTimerStatus.matchStatus === 'Finished' && (
+            <Button
+                onClick={handleNextMatchNavigation}
+                disabled={isNavigatingNextMatch || isLoading}
+                className="fixed bottom-6 right-6 z-50 shadow-lg bg-green-600 hover:bg-green-700 text-white py-3 px-4 text-sm md:text-base rounded-full"
+                title="Lanjut ke Partai TGR Berikutnya"
+            >
+                {isNavigatingNextMatch ? (
+                    <Loader2 className="mr-2 h-5 w-5 animate-spin" />
+                ) : (
+                    <ChevronsRight className="mr-2 h-5 w-5" />
+                )}
+                Partai Berikutnya
+            </Button>
         )}
       </div>
-      
-      {/* Overlays and Fixed Buttons */}
-      {isLoading && activeScheduleId && !matchDetailsLoaded && (
-         <div className="absolute inset-0 bg-[var(--monitor-overlay-bg)] flex flex-col items-center justify-center z-50">
-            <Loader2 className="h-12 w-12 animate-spin text-[var(--monitor-overlay-accent-text)] mb-4" />
-            <p className="text-lg text-[var(--monitor-overlay-text-primary)]">Memuat Data Monitor TGR...</p>
-         </div>
-      )}
-       {!activeScheduleId && !isLoading && (
-         <div className="absolute inset-0 bg-[var(--monitor-overlay-bg)] flex flex-col items-center justify-center z-50 p-4">
-            <AlertTriangle className="h-16 w-16 text-[var(--monitor-overlay-accent-text)] mb-4" />
-            <p className="text-xl text-center text-[var(--monitor-overlay-text-primary)] mb-2">{error || "Tidak ada pertandingan TGR yang aktif untuk dimonitor."}</p>
-            <p className="text-sm text-center text-[var(--monitor-overlay-text-secondary)] mb-6">Silakan aktifkan jadwal TGR di panel admin atau tunggu pertandingan dimulai.</p>
-            <Button variant="outline" asChild className="bg-[var(--monitor-overlay-button-bg)] border-[var(--monitor-overlay-button-border)] hover:bg-[var(--monitor-overlay-button-hover-bg)] text-[var(--monitor-overlay-button-text)]">
-              <Link href="/scoring/tgr"><ArrowLeft className="mr-2 h-4 w-4" /> Kembali</Link>
-            </Button>
-         </div>
-      )}
-      
-      {tgrTimerStatus.matchStatus === 'Finished' && (
-          <Button
-              onClick={handleNextMatchNavigation}
-              disabled={isNavigatingNextMatch || isLoading}
-              className="fixed bottom-6 right-6 z-50 shadow-lg bg-green-600 hover:bg-green-700 text-white py-3 px-4 text-sm md:text-base rounded-full"
-              title="Lanjut ke Partai TGR Berikutnya"
-          >
-              {isNavigatingNextMatch ? (
-                  <Loader2 className="mr-2 h-5 w-5 animate-spin" />
-              ) : (
-                  <ChevronsRight className="mr-2 h-5 w-5" />
-              )}
-              Partai Berikutnya
-          </Button>
-      )}
-    </div>
+    </>
   );
 }
-
