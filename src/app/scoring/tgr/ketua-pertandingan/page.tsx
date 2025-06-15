@@ -37,15 +37,17 @@ const PENALTY_DISPLAY_ORDER: TGRDewanPenaltyType[] = [
   'movement_hold_violation',
 ];
 
-const initialTgrTimerStatus: TGRTimerStatus = {
-  timerSeconds: 0,
+// Define initialGlobalTgrTimerStatus locally
+const initialGlobalTgrTimerStatus: TGRTimerStatus = {
+  timerSeconds: 180, // Default target duration for TGR
   isTimerRunning: false,
   matchStatus: 'Pending',
-  performanceDuration: 180,
+  performanceDuration: 180, // Target duration
   currentPerformingSide: null,
-  performanceDurationBiru: 0,
-  performanceDurationMerah: 0,
+  performanceDurationBiru: 0, // Actual recorded duration for Biru
+  performanceDurationMerah: 0, // Actual recorded duration for Merah
 };
+
 
 const initialSideScores = { biru: 0, merah: 0 };
 const initialSideSpecificTGRScore: SideSpecificTGRScore = {
@@ -93,7 +95,7 @@ export default function KetuaPertandinganTGRPage() {
   const [activeMatchId, setActiveMatchId] = useState<string | null>(null);
   const [scheduleDetails, setScheduleDetails] = useState<ScheduleTGR | null>(null);
   
-  const [tgrTimerStatus, setTgrTimerStatus] = useState<TGRTimerStatus>(initialTgrTimerStatus);
+  const [tgrTimerStatus, setTgrTimerStatus] = useState<TGRTimerStatus>(initialGlobalTgrTimerStatus);
   const [allJuriScores, setAllJuriScores] = useState<Record<string, TGRJuriScore | null>>(initialAllJuriScores);
   const [dewanPenalties, setDewanPenalties] = useState<TGRDewanPenalty[]>([]);
 
@@ -109,7 +111,7 @@ export default function KetuaPertandinganTGRPage() {
 
   const resetPageData = useCallback(() => {
     setScheduleDetails(null);
-    setTgrTimerStatus(initialTgrTimerStatus);
+    setTgrTimerStatus(initialGlobalTgrTimerStatus);
     setAllJuriScores(initialAllJuriScores);
     setDewanPenalties([]);
     setMatchDetailsLoaded(false);
@@ -162,7 +164,7 @@ export default function KetuaPertandinganTGRPage() {
     const loadData = async (currentMatchId: string) => {
       if (!mounted || !currentMatchId) return;
       
-      // setMatchDetailsLoaded(false); // Start with not loaded for new ID
+      setMatchDetailsLoaded(false); // Start with not loaded for new ID
 
       try {
         const scheduleDocRef = doc(db, SCHEDULE_TGR_COLLECTION, currentMatchId);
