@@ -12,7 +12,7 @@ import { db } from '@/lib/firebase';
 import { doc, onSnapshot, getDoc, setDoc, serverTimestamp, Timestamp } from 'firebase/firestore';
 import { Skeleton } from '@/components/ui/skeleton';
 import { cn } from '@/lib/utils';
-import { Card, CardHeader, CardContent, CardTitle, CardDescription } from '@/components/ui/card'; // Added import
+import { Card, CardHeader, CardContent, CardTitle, CardDescription } from '@/components/ui/card';
 
 const ACTIVE_TGR_SCHEDULE_CONFIG_PATH = 'app_settings/active_match_tgr';
 const SCHEDULE_TGR_COLLECTION = 'schedules_tgr';
@@ -40,7 +40,7 @@ const getInitialSideSpecificScore = (category?: TGRCategoryType): SideSpecificTG
   gerakanSalahCount: category === 'Ganda' ? undefined : 0,
   staminaKemantapanBonus: category === 'Ganda' ? undefined : 0,
   gandaElements: category === 'Ganda' ? { ...initialGandaElementScores } : undefined,
-  externalDeductions: 0, // Not directly used by Juri for their primary calculation display
+  externalDeductions: 0,
   calculatedScore: category === 'Ganda' ? BASE_SCORE_GANDA : BASE_SCORE_TUNGGAL_REGU,
   isReady: false,
 });
@@ -72,7 +72,6 @@ export default function JuriTGRPage({ params: paramsPromise }: { params: Promise
   const [scheduleDetails, setScheduleDetails] = useState<ScheduleTGR | null>(null);
   const [matchDetailsLoaded, setMatchDetailsLoaded] = useState(false);
 
-  // Initialize juriScore based on potential scheduleDetails (category)
   const [juriScore, setJuriScore] = useState<TGRJuriScore>(getInitialJuriScoreData(scheduleDetails?.category));
   const [tgrTimerStatus, setTgrTimerStatus] = useState<TGRTimerStatus>(defaultInitialTgrTimerStatus);
 
@@ -110,7 +109,6 @@ export default function JuriTGRPage({ params: paramsPromise }: { params: Promise
   }, []);
   
   useEffect(() => {
-    // Recalculate scores if category changes after initial load, or juriScore parts change
     if (currentCategory && juriScore) {
         setJuriScore(prev => ({
             ...prev,
@@ -141,32 +139,49 @@ export default function JuriTGRPage({ params: paramsPromise }: { params: Promise
     return () => unsub();
   }, [juriDisplayName]);
 
+  // Effect to manage overall loading state
   useEffect(() => {
-    if (configMatchId === undefined) { setIsLoading(true); return; }
+    if (configMatchId === undefined) {
+      setIsLoading(true); // Global config not yet known
+    } else if (activeMatchId === null) {
+      setIsLoading(false); // No active match, so not loading
+      setError(null); 
+    } else {
+      // activeMatchId is set, loading state depends on whether scheduleDetails are loaded.
+      setIsLoading(!matchDetailsLoaded);
+    }
+  }, [configMatchId, activeMatchId, matchDetailsLoaded]);
+
+  // Effect to sync activeMatchId with configMatchId and reset states
+  useEffect(() => {
+    if (configMatchId === undefined) {
+      return; // Wait for configMatchId to be defined
+    }
+
     if (configMatchId !== activeMatchId) {
-      // Reset based on the new category (or lack thereof if configMatchId is null)
-      const newCategory = configMatchId ? undefined : scheduleDetails?.category; // Keep current if no change, else undefined
-      setJuriScore(getInitialJuriScoreData(newCategory));
-      setTgrTimerStatus(defaultInitialTgrTimerStatus);
       setActiveMatchId(configMatchId);
+      
+      // Reset states for the new match (or no match if configMatchId is null)
       setScheduleDetails(null);
       setMatchDetailsLoaded(false);
+      setJuriScore(getInitialJuriScoreData(undefined)); // Reset with undefined category
+      setTgrTimerStatus(defaultInitialTgrTimerStatus);
       setError(null);
-      if (configMatchId) setIsLoading(true); else setIsLoading(false);
-    } else if (configMatchId === null && activeMatchId === null && isLoading) {
-      setIsLoading(false);
+      setIsSaving(false);
     }
-  }, [configMatchId, activeMatchId, isLoading, scheduleDetails?.category]);
+  }, [configMatchId, activeMatchId]);
+
 
   useEffect(() => {
     if (!activeMatchId) {
+      // No active match, ensure dependent states are cleared if not already
       setScheduleDetails(null);
       setMatchDetailsLoaded(false);
-      if(isLoading) setIsLoading(false);
+      // isLoading is managed by the dedicated effect
       return;
     }
     let mounted = true;
-    if (!isLoading) setIsLoading(true);
+    // If activeMatchId is set but details aren't loaded, isLoading should be true (handled by dedicated effect)
 
     const loadSchedule = async () => {
       if (!mounted) return;
@@ -188,16 +203,8 @@ export default function JuriTGRPage({ params: paramsPromise }: { params: Promise
           }
           const loadedScheduleDetails = { ...rawData, id: scheduleDocSnap.id, date: processedDate } as ScheduleTGR;
           setScheduleDetails(loadedScheduleDetails);
-          setMatchDetailsLoaded(true);
-          // Initialize juriScore again here if category is now known and score wasn't set yet
-          setJuriScore(prev => {
-              if (prev.biru.calculatedScore === (loadedScheduleDetails.category === 'Ganda' ? BASE_SCORE_GANDA : BASE_SCORE_TUNGGAL_REGU)) {
-                  // Potentially re-init if it seems like default state, or rely on Firestore listener to populate
-              }
-              return getInitialJuriScoreData(loadedScheduleDetails.category); // Reset with new category
-          });
-
-
+          setMatchDetailsLoaded(true); 
+          // JuriScore re-initialization based on new category is handled by the juriScore effect
         } else {
           setError(`Detail Jadwal TGR (ID: ${activeMatchId}) tidak ditemukan.`);
           setScheduleDetails(null); setMatchDetailsLoaded(false);
@@ -209,15 +216,38 @@ export default function JuriTGRPage({ params: paramsPromise }: { params: Promise
     };
     loadSchedule();
     return () => { mounted = false; };
-  }, [activeMatchId]);
+  }, [activeMatchId]); // Only re-run when activeMatchId changes
 
   useEffect(() => {
-    if (!activeMatchId || !juriId || !currentCategory) {
-      if (currentCategory) { // Only reset if category is known but other deps are missing
-        setJuriScore(getInitialJuriScoreData(currentCategory));
-      }
+    // This effect now correctly depends on currentCategory (derived from scheduleDetails)
+    // to initialize or reset juriScore when the category changes or becomes known.
+    if (!activeMatchId || !juriId) {
+      // If no active match or juriId, reset to a very basic default.
+      // This might happen if configMatchId becomes null.
+      setJuriScore(getInitialJuriScoreData(undefined));
       return;
     }
+    
+    if (!currentCategory && scheduleDetails) {
+        // This case should be rare if scheduleDetails implies a category,
+        // but as a fallback, reset if category is somehow still unknown despite having scheduleDetails.
+        setJuriScore(getInitialJuriScoreData(undefined));
+        return;
+    }
+    if (!scheduleDetails && currentCategory) {
+        // This means scheduleDetails was reset (e.g. activeMatchId changed),
+        // but currentCategory (from previous render's scheduleDetails) might still be lingering.
+        // Reset juriScore to an undefined category state.
+        setJuriScore(getInitialJuriScoreData(undefined));
+        return;
+    }
+    if (!scheduleDetails && !currentCategory) {
+        // Both are null/undefined, ensure juriScore is at its most basic default.
+        setJuriScore(getInitialJuriScoreData(undefined));
+        return;
+    }
+
+
     let mounted = true;
     const juriScoreDocRef = doc(db, MATCHES_TGR_COLLECTION, activeMatchId, JURI_SCORES_TGR_SUBCOLLECTION, juriId);
     const unsubJuriScore = onSnapshot(juriScoreDocRef, (docSnap) => {
@@ -225,7 +255,7 @@ export default function JuriTGRPage({ params: paramsPromise }: { params: Promise
       if (docSnap.exists()) {
         const data = docSnap.data() as Partial<TGRJuriScore>;
         const getSideData = (sideData: Partial<SideSpecificTGRScore> | undefined): SideSpecificTGRScore => {
-            const initial = getInitialSideSpecificScore(currentCategory);
+            const initial = getInitialSideSpecificScore(currentCategory); // Use currentCategory here
             const merged = { ...initial, ...sideData };
             if (currentCategory === 'Ganda') {
                 merged.gandaElements = { ...initialGandaElementScores, ...sideData?.gandaElements };
@@ -239,13 +269,14 @@ export default function JuriTGRPage({ params: paramsPromise }: { params: Promise
           lastUpdated: data.lastUpdated,
         });
       } else {
+        // Document doesn't exist, initialize with category if available
         setJuriScore(getInitialJuriScoreData(currentCategory));
       }
     }, (err) => {
       if (mounted) setError(`Gagal memuat skor juri: ${err.message}`);
     });
     return () => { mounted = false; unsubJuriScore(); };
-  }, [activeMatchId, juriId, currentCategory, calculateSideScoreForJuriDisplay]);
+  }, [activeMatchId, juriId, currentCategory, calculateSideScoreForJuriDisplay, scheduleDetails]);
 
 
   useEffect(() => {
@@ -273,11 +304,6 @@ export default function JuriTGRPage({ params: paramsPromise }: { params: Promise
     return () => { mounted = false; unsubMatchData(); };
   }, [activeMatchId]);
 
-  useEffect(() => {
-     if (isLoading && (matchDetailsLoaded || activeMatchId === null)) {
-       setIsLoading(false);
-     }
-  }, [isLoading, matchDetailsLoaded, activeMatchId]);
 
   const saveJuriScore = useCallback(async (updatedScoreData: TGRJuriScore) => {
     if (!activeMatchId || isSaving || !currentSide || !currentCategory) {
@@ -315,7 +341,7 @@ export default function JuriTGRPage({ params: paramsPromise }: { params: Promise
     !activeMatchId ||
     !matchDetailsLoaded ||
     !currentSide || 
-    (currentSideScoreData?.isReady && !(currentCategory === 'Ganda' && (tgrTimerStatus.matchStatus === 'Ongoing' || tgrTimerStatus.matchStatus === 'Paused'))) || // If ready, Ganda can still edit if timer is active
+    (currentSideScoreData?.isReady && !(currentCategory === 'Ganda' && (tgrTimerStatus.matchStatus === 'Ongoing' || tgrTimerStatus.matchStatus === 'Paused'))) ||
     (tgrTimerStatus.matchStatus !== 'Ongoing' && tgrTimerStatus.matchStatus !== 'Paused') || 
     (tgrTimerStatus.matchStatus === 'Finished' && tgrTimerStatus.currentPerformingSide === currentSide); 
 
@@ -334,7 +360,6 @@ export default function JuriTGRPage({ params: paramsPromise }: { params: Promise
     setJuriScore(prev => {
       const updatedSideScore = { ...currentSideScoreData };
       updatedSideScore.gerakanSalahCount = (updatedSideScore.gerakanSalahCount || 0) + 1;
-      // Recalculation of calculatedScore will be handled by the useEffect hook
       const newFullScore = { ...prev, [currentSide]: updatedSideScore };
       saveJuriScore(newFullScore);
       return newFullScore;
@@ -380,7 +405,7 @@ export default function JuriTGRPage({ params: paramsPromise }: { params: Promise
   const formatDisplayDate = (dateString: string | undefined) => {
     if (!dateString) return <Skeleton className="h-4 w-28 inline-block" />;
     try {
-      const date = new Date(dateString + 'T00:00:00'); // Ensure it's treated as local date
+      const date = new Date(dateString + 'T00:00:00'); 
       return new Intl.DateTimeFormat('id-ID', { day: 'numeric', month: 'long', year: 'numeric' }).format(date);
     } catch (e) { return dateString; }
   };
@@ -425,7 +450,6 @@ export default function JuriTGRPage({ params: paramsPromise }: { params: Promise
     if (currentSide === 'merah' && scheduleDetails.pesilatMerahName) {
         return { name: scheduleDetails.pesilatMerahName, contingent: scheduleDetails.pesilatMerahContingent || "N/A" };
     }
-     // Fallback if side not active but schedule has one participant
     if (scheduleDetails.pesilatMerahName && !scheduleDetails.pesilatBiruName) {
         return { name: scheduleDetails.pesilatMerahName, contingent: scheduleDetails.pesilatMerahContingent || "N/A" };
     }
@@ -495,7 +519,6 @@ export default function JuriTGRPage({ params: paramsPromise }: { params: Promise
             ))}
           </div>
         ) : currentCategory && (currentCategory === 'Tunggal' || currentCategory === 'Regu') ? (
-          // UI for Tunggal and Regu
           <div className="grid grid-cols-1 md:grid-cols-2 gap-2 md:gap-4 mb-4 md:mb-6">
             <Button
               className="w-full h-40 md:h-64 text-5xl md:text-7xl bg-blue-600 hover:bg-blue-700 text-white shadow-lg rounded-lg flex items-center justify-center p-2"
@@ -583,3 +606,5 @@ export default function JuriTGRPage({ params: paramsPromise }: { params: Promise
     </div>
   );
 }
+
+    
