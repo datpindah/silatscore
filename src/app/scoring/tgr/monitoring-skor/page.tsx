@@ -63,7 +63,7 @@ function calculateStandardDeviation(scores: number[]): number {
   if (scores.length < 2) return 0; 
   const mean = scores.reduce((sum, score) => sum + score, 0) / scores.length;
   const variance = scores.reduce((sum, score) => sum + Math.pow(score - mean, 2), 0) / scores.length; 
-  return parseFloat(Math.sqrt(variance).toFixed(3)); 
+  return parseFloat(Math.sqrt(variance).toFixed(3));
 }
 
 
@@ -306,11 +306,12 @@ export default function MonitoringSkorTGRPage() {
       const timePerformance = side === 'biru' ? (tgrTimerStatus.performanceDurationBiru ?? 0) : (tgrTimerStatus.performanceDurationMerah ?? 0);
       
       let hasPerformedForSummary = false;
-      if (side === 'biru' && (tgrTimerStatus.performanceDurationBiru ?? 0) > 0) {
+      if (side === 'biru' && (tgrTimerStatus.performanceDurationBiru ?? 0) > 0 && (tgrTimerStatus.matchStatus === 'Finished' || tgrTimerStatus.currentPerformingSide === 'merah')) {
         hasPerformedForSummary = true;
-      } else if (side === 'merah' && (tgrTimerStatus.performanceDurationMerah ?? 0) > 0) {
+      } else if (side === 'merah' && (tgrTimerStatus.performanceDurationMerah ?? 0) > 0 && tgrTimerStatus.matchStatus === 'Finished') {
         hasPerformedForSummary = true;
       } else if (tgrTimerStatus.matchStatus === 'Finished' && tgrTimerStatus.currentPerformingSide === null) {
+          // If overall match is finished, check if this side participated and has scores
           const sideScheduled = (side === 'biru' && scheduleDetails?.pesilatBiruName) || (side === 'merah' && scheduleDetails?.pesilatMerahName);
           if (sideScheduled && validJuriScoresForSide.length > 0) {
             hasPerformedForSummary = true;
@@ -387,6 +388,7 @@ export default function MonitoringSkorTGRPage() {
     let sideToConsider: 'biru' | 'merah' | null = tgrTimerStatus.currentPerformingSide;
     
     if (tgrTimerStatus.matchStatus === 'Finished' && !tgrTimerStatus.currentPerformingSide) {
+        // If match is fully finished, try to determine which side's score to show based on schedule
         if (scheduleDetails?.pesilatMerahName && juriScoreData?.merah?.isReady && (tgrTimerStatus.performanceDurationMerah ?? 0) > 0) {
             sideToConsider = 'merah';
         } else if (scheduleDetails?.pesilatBiruName && juriScoreData?.biru?.isReady && (tgrTimerStatus.performanceDurationBiru ?? 0) > 0) {
@@ -422,84 +424,75 @@ export default function MonitoringSkorTGRPage() {
     </div>
   );
 
-  const getTopBarParticipantInfo = () => {
+  const ParticipantInfo = () => {
     if (isLoading && !scheduleDetails) {
       return (
-        <div className="flex flex-col items-center">
-          <Skeleton className="h-5 w-32 bg-[var(--monitor-skeleton-bg)]" />
-          <Skeleton className="h-4 w-24 mt-1 bg-[var(--monitor-skeleton-bg)]" />
+        <div className="text-center my-4">
+          <Skeleton className="h-7 w-40 mx-auto bg-[var(--monitor-skeleton-bg)] mb-1" />
+          <Skeleton className="h-5 w-32 mx-auto bg-[var(--monitor-skeleton-bg)]" />
         </div>
       );
     }
-  
-    let side: 'biru' | 'merah' | null = tgrTimerStatus.currentPerformingSide;
-    let name = "Nama Peserta";
-    let contingent = "Kontingen";
-    let textColorClass = "text-[var(--monitor-text)]"; 
-  
-    if (!side && tgrTimerStatus.matchStatus === 'Finished') {
-      if (summaryDataMerah.hasPerformed && scheduleDetails?.pesilatMerahName) {
-        side = 'merah';
-      } else if (summaryDataBiru.hasPerformed && scheduleDetails?.pesilatBiruName) {
-        side = 'biru';
-      }
+    if (!scheduleDetails) return null;
+
+    let name = "";
+    let contingent = "";
+    let textColorClass = "text-[var(--monitor-text)]";
+    let currentSideLabel = "Peserta";
+
+    let sideToDisplayDetails: 'biru' | 'merah' | null = tgrTimerStatus.currentPerformingSide;
+
+    // If match is totally finished, try to show summary for Merah if available, else Biru, else none specific.
+    if (tgrTimerStatus.matchStatus === 'Finished' && tgrTimerStatus.currentPerformingSide === null) {
+        if (summaryDataMerah.hasPerformed && scheduleDetails.pesilatMerahName) sideToDisplayDetails = 'merah';
+        else if (summaryDataBiru.hasPerformed && scheduleDetails.pesilatBiruName) sideToDisplayDetails = 'biru';
+        else if (scheduleDetails.pesilatMerahName) sideToDisplayDetails = 'merah'; // Fallback to a scheduled side
+        else if (scheduleDetails.pesilatBiruName) sideToDisplayDetails = 'biru';
     }
-    
-    if (!side && scheduleDetails) {
-      if (scheduleDetails.pesilatMerahName && !scheduleDetails.pesilatBiruName) side = 'merah';
-      else if (scheduleDetails.pesilatBiruName && !scheduleDetails.pesilatMerahName) side = 'biru';
-      else if (scheduleDetails.pesilatBiruName) side = 'biru'; 
-      else if (scheduleDetails.pesilatMerahName) side = 'merah';
-    }
-  
-    if (side === 'biru' && scheduleDetails?.pesilatBiruName) {
+
+
+    if (sideToDisplayDetails === 'biru' && scheduleDetails.pesilatBiruName) {
       name = scheduleDetails.pesilatBiruName;
       contingent = scheduleDetails.pesilatBiruContingent || scheduleDetails.pesilatMerahContingent || "Kontingen";
       textColorClass = "text-[var(--monitor-pesilat-biru-name-text)]";
-    } else if (side === 'merah' && scheduleDetails?.pesilatMerahName) {
+      currentSideLabel = "SUDUT BIRU";
+    } else if (sideToDisplayDetails === 'merah' && scheduleDetails.pesilatMerahName) {
       name = scheduleDetails.pesilatMerahName;
       contingent = scheduleDetails.pesilatMerahContingent || "Kontingen";
       textColorClass = "text-[var(--monitor-pesilat-merah-name-text)]";
-    } else if (scheduleDetails) { 
-      if (scheduleDetails.pesilatMerahName) {
+      currentSideLabel = "SUDUT MERAH";
+    } else if (scheduleDetails.pesilatMerahName) { // Fallback for single participant listed as Merah
         name = scheduleDetails.pesilatMerahName;
         contingent = scheduleDetails.pesilatMerahContingent || "Kontingen";
         textColorClass = "text-[var(--monitor-pesilat-merah-name-text)]";
-      } else if (scheduleDetails.pesilatBiruName) {
+        currentSideLabel = "PESERTA";
+    } else if (scheduleDetails.pesilatBiruName) { // Fallback for single participant listed as Biru
         name = scheduleDetails.pesilatBiruName;
         contingent = scheduleDetails.pesilatBiruContingent || "Kontingen";
-         textColorClass = "text-[var(--monitor-pesilat-biru-name-text)]";
-      }
+        textColorClass = "text-[var(--monitor-pesilat-biru-name-text)]";
+        currentSideLabel = "PESERTA";
     }
-  
-  
+
+
     return (
-      <div className={cn("flex flex-col items-center", textColorClass)}>
-        <span className="font-bold text-sm md:text-base block truncate max-w-[180px] sm:max-w-[200px] md:max-w-[250px]">{name.toUpperCase()}</span>
-        <span className="text-xs md:text-sm block truncate max-w-[180px] sm:max-w-[200px] md:max-w-[250px]">({contingent.toUpperCase()})</span>
+      <div className={cn("text-center my-4 py-2", textColorClass)}>
+        <div className="font-bold text-xl md:text-2xl uppercase">{name || (isLoading ? "" : "N/A")}</div>
+        <div className="text-md md:text-lg uppercase">({contingent || (isLoading ? "" : "N/A")})</div>
       </div>
     );
   };
   
-  const conditionToHideBiruSummary = 
-    !!scheduleDetails?.pesilatMerahName && 
-    tgrTimerStatus.currentPerformingSide === 'merah' && 
-    (tgrTimerStatus.matchStatus === 'Pending' || tgrTimerStatus.matchStatus === 'Ongoing' || tgrTimerStatus.matchStatus === 'Paused'); 
+  const showBiruSummaryTable = summaryDataBiru.hasPerformed && !!scheduleDetails?.pesilatBiruName &&
+    !(tgrTimerStatus.currentPerformingSide === 'merah' && (tgrTimerStatus.matchStatus === 'Pending' || tgrTimerStatus.matchStatus === 'Ongoing' || tgrTimerStatus.matchStatus === 'Paused'));
 
-  const showBiruSummaryTable = 
-    summaryDataBiru.hasPerformed && 
-    !!scheduleDetails?.pesilatBiruName &&
-    !conditionToHideBiruSummary;
+  const showMerahSummaryTable = summaryDataMerah.hasPerformed && !!scheduleDetails?.pesilatMerahName;
 
-  const showMerahSummaryTable = 
-    summaryDataMerah.hasPerformed && 
-    !!scheduleDetails?.pesilatMerahName;
 
   return (
     <>
       <Header />
       <div className={cn(
-          "flex flex-col min-h-screen font-sans overflow-hidden relative -mt-16", 
+          "flex flex-col min-h-screen font-sans overflow-hidden relative -mt-16 pt-16", // Added pt-16 to offset header
           pageTheme === 'light' ? 'tgr-monitoring-theme-light' : 'tgr-monitoring-theme-dark', 
           "bg-[var(--monitor-bg)] text-[var(--monitor-text)]"
         )}
@@ -508,20 +501,22 @@ export default function MonitoringSkorTGRPage() {
           variant="outline"
           size="icon"
           onClick={() => setPageTheme(prev => prev === 'light' ? 'dark' : 'light')}
-          className="absolute top-2 right-2 z-[100] bg-[var(--monitor-dialog-bg)] text-[var(--monitor-text)] border-[var(--monitor-border)] hover:bg-[var(--monitor-neutral-bg)]"
+          className="absolute top-18 right-2 z-[100] bg-[var(--monitor-dialog-bg)] text-[var(--monitor-text)] border-[var(--monitor-border)] hover:bg-[var(--monitor-neutral-bg)]"
           aria-label={pageTheme === "dark" ? "Ganti ke mode terang" : "Ganti ke mode gelap"}
         >
           {pageTheme === 'dark' ? <Sun className="h-[1.2rem] w-[1.2rem]" /> : <Moon className="h-[1.2rem] w-[1.2rem]" />}
         </Button>
 
         <div className="bg-[var(--monitor-header-section-bg)] p-3 md:p-4 text-center text-sm md:text-base font-semibold text-[var(--monitor-text)]">
-          <div className="grid grid-cols-[1.5fr_1fr_1fr_1fr] gap-1 items-center">
-             <div>{getTopBarParticipantInfo()}</div>
-            <div>Partai/Pool: {scheduleDetails?.lotNumber || <Skeleton className="h-5 w-16 inline-block bg-[var(--monitor-skeleton-bg)]" />}</div>
-            <div>{scheduleDetails?.category || <Skeleton className="h-5 w-20 inline-block bg-[var(--monitor-skeleton-bg)]" />}</div>
-            <div>Babak: {scheduleDetails?.round || <Skeleton className="h-5 w-20 inline-block bg-[var(--monitor-skeleton-bg)]" />}</div>
+          <div className="grid grid-cols-4 gap-1 items-center">
+            <div>Gelanggang: {scheduleDetails?.place || <Skeleton className="h-5 w-16 inline-block bg-[var(--monitor-skeleton-bg)]" />}</div>
+            <div>Partai/Pool: {scheduleDetails?.lotNumber || <Skeleton className="h-5 w-10 inline-block bg-[var(--monitor-skeleton-bg)]" />}</div>
+            <div>Babak: {scheduleDetails?.round || <Skeleton className="h-5 w-16 inline-block bg-[var(--monitor-skeleton-bg)]" />}</div>
+            <div>Kategori: {scheduleDetails?.category || <Skeleton className="h-5 w-20 inline-block bg-[var(--monitor-skeleton-bg)]" />}</div>
           </div>
         </div>
+        
+        <ParticipantInfo />
 
         <div className="flex-grow flex flex-col p-2 md:p-4">
            <div className="text-center mb-3 md:mb-6">
@@ -616,4 +611,3 @@ export default function MonitoringSkorTGRPage() {
     </>
   );
 }
-
