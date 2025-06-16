@@ -10,7 +10,7 @@ import { db } from '@/lib/firebase';
 import { doc, onSnapshot, getDoc, collection, query, orderBy, Timestamp, where, limit, setDoc } from 'firebase/firestore';
 import { cn } from '@/lib/utils';
 import { Skeleton } from '@/components/ui/skeleton';
-// Removed Header import as it's handled by the root layout
+import { Header } from '@/components/layout/Header';
 
 const ACTIVE_TGR_SCHEDULE_CONFIG_PATH = 'app_settings/active_match_tgr';
 const SCHEDULE_TGR_COLLECTION = 'schedules_tgr';
@@ -48,21 +48,21 @@ const initialSideSummary = {
 // Helper functions for calculations
 function calculateMedian(scores: number[]): number {
   if (scores.length === 0) return 0;
-  if (scores.length < 3) { 
+  if (scores.length < 3) {
     return parseFloat((scores.reduce((sum, score) => sum + score, 0) / scores.length).toFixed(2));
   }
   const sortedScores = [...scores].sort((a, b) => a - b);
-  const scoresToAverage = sortedScores.slice(1, -1); 
-  if (scoresToAverage.length === 0) { 
+  const scoresToAverage = sortedScores.slice(1, -1);
+  if (scoresToAverage.length === 0) {
       return parseFloat((sortedScores.reduce((a,b) => a+b, 0) / sortedScores.length).toFixed(2));
   }
   return parseFloat((scoresToAverage.reduce((sum, score) => sum + score, 0) / scoresToAverage.length).toFixed(2));
 }
 
 function calculateStandardDeviation(scores: number[]): number {
-  if (scores.length < 2) return 0; 
+  if (scores.length < 2) return 0;
   const mean = scores.reduce((sum, score) => sum + score, 0) / scores.length;
-  const variance = scores.reduce((sum, score) => sum + Math.pow(score - mean, 2), 0) / scores.length; 
+  const variance = scores.reduce((sum, score) => sum + Math.pow(score - mean, 2), 0) / scores.length;
   return parseFloat(Math.sqrt(variance).toFixed(3));
 }
 
@@ -82,7 +82,7 @@ const TGRSideSummaryTable: React.FC<TGRSideSummaryTableProps> = ({
 }) => {
   const formatTimePerformance = (seconds: number) => {
     const minutes = Math.floor(seconds / 60);
-    const remainingSeconds = Math.round(seconds % 60); 
+    const remainingSeconds = Math.round(seconds % 60);
     return `${String(minutes).padStart(2, '0')}.${String(remainingSeconds).padStart(2, '0')}`;
   };
 
@@ -158,7 +158,7 @@ export default function MonitoringSkorTGRPage() {
   const [configMatchId, setConfigMatchId] = useState<string | null | undefined>(undefined);
   const [activeScheduleId, setActiveScheduleId] = useState<string | null>(null);
   const [scheduleDetails, setScheduleDetails] = useState<ScheduleTGR | null>(null);
-  
+
   const [tgrTimerStatus, setTgrTimerStatus] = useState<TGRTimerStatus>(initialTgrTimerStatus);
   const [allJuriScores, setAllJuriScores] = useState<Record<string, TGRJuriScore | null>>(initialAllJuriScores);
   const [dewanPenalties, setDewanPenalties] = useState<TGRDewanPenalty[]>([]);
@@ -259,7 +259,7 @@ export default function MonitoringSkorTGRPage() {
             }));
           }, (err) => console.error(`[MonitorTGR] Error fetching TGR scores for ${juriId}:`, err)));
         });
-        
+
         unsubscribers.push(onSnapshot(query(collection(matchDataDocRef, DEWAN_PENALTIES_TGR_SUBCOLLECTION), orderBy("timestamp", "asc")), (snap) => {
           if (!mounted) return;
           setDewanPenalties(snap.docs.map(d => ({ id: d.id, ...d.data() } as TGRDewanPenalty)));
@@ -294,17 +294,17 @@ export default function MonitoringSkorTGRPage() {
         .map(id => allJuriScores[id]?.[side])
         .filter(sideScore => sideScore && sideScore.isReady)
         .map(sideScore => sideScore!.calculatedScore);
-      
+
       const median = validJuriScoresForSide.length > 0 ? calculateMedian(validJuriScoresForSide) : 0;
       const stdDev = validJuriScoresForSide.length > 0 ? calculateStandardDeviation(validJuriScoresForSide) : 0;
-      
+
       const totalPenalties = dewanPenalties
         .filter(p => p.side === side)
         .reduce((sum, p) => sum + p.pointsDeducted, 0);
-      
-      const finalScore = parseFloat((median + totalPenalties).toFixed(2)); 
+
+      const finalScore = parseFloat((median + totalPenalties).toFixed(2));
       const timePerformance = side === 'biru' ? (tgrTimerStatus.performanceDurationBiru ?? 0) : (tgrTimerStatus.performanceDurationMerah ?? 0);
-      
+
       let hasPerformedForSummary = false;
       if (side === 'biru' && (tgrTimerStatus.performanceDurationBiru ?? 0) > 0 && (tgrTimerStatus.matchStatus === 'Finished' || tgrTimerStatus.currentPerformingSide === 'merah')) {
         hasPerformedForSummary = true;
@@ -324,12 +324,12 @@ export default function MonitoringSkorTGRPage() {
     if (scheduleDetails.pesilatBiruName) {
         setSummaryDataBiru(calculateSideSummary('biru'));
     } else {
-        setSummaryDataBiru({...initialSideSummary, hasPerformed: false}); 
+        setSummaryDataBiru({...initialSideSummary, hasPerformed: false});
     }
     if (scheduleDetails.pesilatMerahName) {
         setSummaryDataMerah(calculateSideSummary('merah'));
     } else {
-        setSummaryDataMerah({...initialSideSummary, hasPerformed: false}); 
+        setSummaryDataMerah({...initialSideSummary, hasPerformed: false});
     }
 
   }, [allJuriScores, dewanPenalties, tgrTimerStatus, scheduleDetails]);
@@ -383,9 +383,9 @@ export default function MonitoringSkorTGRPage() {
             </div>
         );
     }
-    
+
     let sideToConsider: 'biru' | 'merah' | null = tgrTimerStatus.currentPerformingSide;
-    
+
     if (tgrTimerStatus.matchStatus === 'Finished' && !tgrTimerStatus.currentPerformingSide) {
         if (scheduleDetails?.pesilatMerahName && juriScoreData?.merah?.isReady && (tgrTimerStatus.performanceDurationMerah ?? 0) > 0) {
             sideToConsider = 'merah';
@@ -397,14 +397,14 @@ export default function MonitoringSkorTGRPage() {
              sideToConsider = 'biru';
         }
     }
-    
+
     if (juriScoreData && sideToConsider) {
         const sideData = juriScoreData[sideToConsider];
         if (sideData) {
             if (sideData.isReady) {
                 displayValue = sideData.calculatedScore.toFixed(2);
             } else if (tgrTimerStatus.matchStatus !== 'Pending' && (tgrTimerStatus.currentPerformingSide === sideToConsider)) {
-                displayValue = '...'; 
+                displayValue = '...';
             }
         }
     }
@@ -421,7 +421,7 @@ export default function MonitoringSkorTGRPage() {
       {label}
     </div>
   );
-  
+
   const showBiruSummaryTable = summaryDataBiru.hasPerformed && !!scheduleDetails?.pesilatBiruName &&
     !(tgrTimerStatus.currentPerformingSide === 'merah' && (tgrTimerStatus.matchStatus === 'Pending' || tgrTimerStatus.matchStatus === 'Ongoing' || tgrTimerStatus.matchStatus === 'Paused'));
 
@@ -452,11 +452,11 @@ export default function MonitoringSkorTGRPage() {
       name = scheduleDetails.pesilatMerahName;
       contingent = scheduleDetails.pesilatMerahContingent || "Kontingen";
       textColorClass = "text-[var(--monitor-pesilat-merah-name-text)]";
-    } else if (scheduleDetails.pesilatMerahName) {
+    } else if (scheduleDetails.pesilatMerahName) { // Fallback if no current side but merah exists
         name = scheduleDetails.pesilatMerahName;
         contingent = scheduleDetails.pesilatMerahContingent || "Kontingen";
         textColorClass = "text-[var(--monitor-pesilat-merah-name-text)]";
-    } else if (scheduleDetails.pesilatBiruName) {
+    } else if (scheduleDetails.pesilatBiruName) { // Fallback if no current side but biru exists
         name = scheduleDetails.pesilatBiruName;
         contingent = scheduleDetails.pesilatBiruContingent || "Kontingen";
         textColorClass = "text-[var(--monitor-pesilat-biru-name-text)]";
@@ -466,16 +466,14 @@ export default function MonitoringSkorTGRPage() {
 
   const { name: participantName, contingent: participantContingent, textColorClass: participantTextColorClass } = getParticipantDetails();
 
-
   return (
-    <>
-      {/* Header is handled by RootLayout */}
       <div className={cn(
-          "flex flex-col min-h-screen font-sans overflow-hidden relative", 
-          pageTheme === 'light' ? 'tgr-monitoring-theme-light' : 'tgr-monitoring-theme-dark', 
+          "flex flex-col min-h-screen font-sans overflow-hidden relative",
+          pageTheme === 'light' ? 'tgr-monitoring-theme-light' : 'tgr-monitoring-theme-dark',
           "bg-[var(--monitor-bg)] text-[var(--monitor-text)]"
         )}
       >
+        <Header />
         <Button
           variant="outline"
           size="icon"
@@ -495,10 +493,10 @@ export default function MonitoringSkorTGRPage() {
             <div>Kategori: {scheduleDetails?.category || <Skeleton className="h-5 w-20 inline-block bg-[var(--monitor-skeleton-bg)]" />}</div>
           </div>
         </div>
-        
+
         <div className="flex-grow flex flex-col p-2 md:p-4">
           {/* Name/Kontingen and Timer Row */}
-          <div className="flex justify-between items-center px-2 md:px-4 py-3 md:py-4">
+           <div className="flex justify-between items-center px-2 md:px-4 py-3 md:py-4">
             <div className={cn("text-left", participantTextColorClass)}>
               <div className="font-bold text-xl md:text-2xl uppercase">{participantName}</div>
               <div className="text-md md:text-lg uppercase">({participantContingent})</div>
@@ -510,7 +508,7 @@ export default function MonitoringSkorTGRPage() {
               </div>
             </div>
           </div>
-          
+
           <div className="mb-4 space-y-4">
             {showBiruSummaryTable && (
               <TGRSideSummaryTable
@@ -535,7 +533,7 @@ export default function MonitoringSkorTGRPage() {
               />
             )}
           </div>
-          
+
           <div className="w-full max-w-3xl mx-auto">
             <div className="grid grid-cols-6 gap-1 md:gap-2 mb-1">
               {TGR_JURI_IDS.map((juriId, index) => (
@@ -559,7 +557,7 @@ export default function MonitoringSkorTGRPage() {
             </div>
           )}
         </div>
-        
+
         {isLoading && activeScheduleId && !matchDetailsLoaded && (
            <div className="absolute inset-0 bg-[var(--monitor-overlay-bg)] flex flex-col items-center justify-center z-50">
               <Loader2 className="h-12 w-12 animate-spin text-[var(--monitor-overlay-accent-text)] mb-4" />
@@ -576,7 +574,7 @@ export default function MonitoringSkorTGRPage() {
               </Button>
            </div>
         )}
-        
+
         {tgrTimerStatus.matchStatus === 'Finished' && tgrTimerStatus.currentPerformingSide === null && (
             <Button
                 onClick={handleNextMatchNavigation}
@@ -593,7 +591,6 @@ export default function MonitoringSkorTGRPage() {
             </Button>
         )}
       </div>
-    </>
   );
 }
 
