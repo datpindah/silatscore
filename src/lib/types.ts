@@ -191,17 +191,33 @@ export interface TGRTimerStatus {
   performanceDurationMerah?: number; // Actual recorded performance time for Merah
 }
 
+export interface GandaElementScores {
+  teknikSeranganBertahan: number; // Stores the 0.01-0.30 value
+  firmnessHarmony: number;
+  soulfulness: number;
+}
+export type GandaElementId = keyof GandaElementScores;
+
+
 export interface SideSpecificTGRScore {
-  gerakanSalahCount: number;
-  staminaKemantapanBonus: number;
-  externalDeductions: number; // Sum of dewan penalties for this side
-  calculatedScore: number;
-  isReady?: boolean; // Juri has finalized score for this side
+  // Common
+  calculatedScore: number; // The final score for this side by this Juri
+  isReady?: boolean;
+  externalDeductions: number; // From Dewan penalties (not used directly in Juri page calc)
+
+  // For Tunggal/Regu
+  gerakanSalahCount?: number; // For 0.01 deductions
+  staminaKemantapanBonus?: number; // For 0.01-0.10 bonus
+
+  // For Ganda
+  gandaElements?: GandaElementScores; // Stores the selected 0.01-0.30 for each
 }
 
+export const BASE_SCORE_TUNGGAL_REGU = 9.90;
+export const BASE_SCORE_GANDA = 9.10;
+export const GERAKAN_SALAH_DEDUCTION_TGR = 0.01; // Renamed for clarity
+
 export interface TGRJuriScore {
-  id?: string;
-  baseScore: number; // Default 9.90
   biru: SideSpecificTGRScore;
   merah: SideSpecificTGRScore;
   lastUpdated?: FirebaseTimestamp | Date | { seconds: number; nanoseconds: number } | null;
@@ -209,12 +225,12 @@ export interface TGRJuriScore {
 
 export type TGRDewanPenaltyType =
   | 'arena_out'
-  | 'weapon_touch_floor'
+  | 'weapon_touch_floor' // Deskripsi akan disesuaikan per kategori di UI
   | 'time_tolerance_violation'
-  | 'costume_violation'
+  | 'costume_violation' // Deskripsi akan disesuaikan per kategori di UI
   | 'movement_hold_violation'
-  | 'weapon_out_of_arena'  // New for Ganda
-  | 'weapon_broken_detached'; // New for Ganda
+  | 'weapon_out_of_arena'
+  | 'weapon_broken_detached';
 
 export interface TGRDewanPenalty {
   id?: string;
@@ -236,14 +252,14 @@ export interface TGRMatchResult {
   winner: 'biru' | 'merah' | 'seri';
   gelanggang: string;
   babak: string;
-  kategori: TGRCategoryType | string; // string for safety if category is unexpected
+  kategori: TGRCategoryType | string; 
   namaSudutBiru?: string;
   kontingenBiru?: string;
   namaSudutMerah?: string;
   kontingenMerah?: string;
   detailPoint: {
-    biru?: TGRMatchResultDetail; // Optional if no biru participant
-    merah?: TGRMatchResultDetail; // Optional if no merah participant
+    biru?: TGRMatchResultDetail;
+    merah?: TGRMatchResultDetail;
   };
   timestamp: FirebaseTimestamp | Date;
 }
@@ -259,6 +275,6 @@ export interface TGRMatchData {
   overallScoreBiru?: number;
   overallScoreMerah?: number;
   status: 'Pending' | 'OngoingBiru' | 'OngoingMerah' | 'PausedBiru' | 'PausedMerah' | 'FinishedBiru' | 'FinishedMerah' | 'MatchFinished';
-  matchResult?: TGRMatchResult; // Added field for match result
+  matchResult?: TGRMatchResult; 
 }
 // --- End TGR Scoring Types ---

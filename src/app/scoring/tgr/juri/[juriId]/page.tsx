@@ -6,7 +6,8 @@ import Link from 'next/link';
 import { Button } from '@/components/ui/button';
 import { Header } from '@/components/layout/Header';
 import { ArrowLeft, Loader2, Info, XIcon, AlertCircle, CheckCircle2 } from 'lucide-react';
-import type { ScheduleTGR, TGRJuriScore, TGRTimerStatus, SideSpecificTGRScore } from '@/lib/types';
+import type { ScheduleTGR, TGRJuriScore, TGRTimerStatus, SideSpecificTGRScore, GandaElementScores, GandaElementId, TGRCategoryType } from '@/lib/types';
+import { BASE_SCORE_GANDA, BASE_SCORE_TUNGGAL_REGU, GERAKAN_SALAH_DEDUCTION_TGR } from '@/lib/types';
 import { db } from '@/lib/firebase';
 import { doc, onSnapshot, getDoc, setDoc, serverTimestamp, Timestamp } from 'firebase/firestore';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -17,24 +18,38 @@ const SCHEDULE_TGR_COLLECTION = 'schedules_tgr';
 const MATCHES_TGR_COLLECTION = 'matches_tgr';
 const JURI_SCORES_TGR_SUBCOLLECTION = 'juri_scores_tgr';
 
-const BASE_SCORE_TGR = 9.90;
-const GERAKAN_SALAH_DEDUCTION = 0.01;
-const STAMINA_BONUS_OPTIONS = [0.01, 0.02, 0.03, 0.04, 0.05, 0.06, 0.07, 0.08, 0.09, 0.10];
+const STAMINA_BONUS_OPTIONS_TUNGGAL_REGU = [0.01, 0.02, 0.03, 0.04, 0.05, 0.06, 0.07, 0.08, 0.09, 0.10];
 
-const initialSideSpecificScore: SideSpecificTGRScore = {
-  gerakanSalahCount: 0,
-  staminaKemantapanBonus: 0.00,
-  externalDeductions: 0,
-  calculatedScore: BASE_SCORE_TGR,
+const gandaScoringElementsConfig = [
+  { id: 'teknikSeranganBertahan', label: 'Teknik Serangan dan Bertahan', range: '(0.01 - 0.30)' },
+  { id: 'firmnessHarmony', label: 'Firmness & Harmony', range: '(0.01 - 0.30)' },
+  { id: 'soulfulness', label: 'Soulfulness', range: '(0.01 - 0.30)' },
+] as const;
+
+const gandaElementButtonValues = Array.from({ length: 30 }, (_, i) => parseFloat(( (i + 1) * 0.01).toFixed(2)));
+
+
+const initialGandaElementScores: GandaElementScores = {
+  teknikSeranganBertahan: 0,
+  firmnessHarmony: 0,
+  soulfulness: 0,
+};
+
+const getInitialSideSpecificScore = (category?: TGRCategoryType): SideSpecificTGRScore => ({
+  gerakanSalahCount: category === 'Ganda' ? undefined : 0,
+  staminaKemantapanBonus: category === 'Ganda' ? undefined : 0,
+  gandaElements: category === 'Ganda' ? { ...initialGandaElementScores } : undefined,
+  externalDeductions: 0, // Not directly used by Juri for their primary calculation display
+  calculatedScore: category === 'Ganda' ? BASE_SCORE_GANDA : BASE_SCORE_TUNGGAL_REGU,
   isReady: false,
-};
+});
 
-const initialJuriScore: TGRJuriScore = {
-  baseScore: BASE_SCORE_TGR,
-  biru: { ...initialSideSpecificScore },
-  merah: { ...initialSideSpecificScore },
+const getInitialJuriScoreData = (category?: TGRCategoryType): TGRJuriScore => ({
+  biru: getInitialSideSpecificScore(category),
+  merah: getInitialSideSpecificScore(category),
   lastUpdated: null,
-};
+});
+
 
 const defaultInitialTgrTimerStatus: TGRTimerStatus = {
   timerSeconds: 0,
@@ -56,19 +71,62 @@ export default function JuriTGRPage({ params: paramsPromise }: { params: Promise
   const [scheduleDetails, setScheduleDetails] = useState<ScheduleTGR | null>(null);
   const [matchDetailsLoaded, setMatchDetailsLoaded] = useState(false);
 
-  const [juriScore, setJuriScore] = useState<TGRJuriScore>(initialJuriScore);
+  // Initialize juriScore based on potential scheduleDetails (category)
+  const [juriScore, setJuriScore] = useState<TGRJuriScore>(getInitialJuriScoreData(scheduleDetails?.category));
   const [tgrTimerStatus, setTgrTimerStatus] = useState<TGRTimerStatus>(defaultInitialTgrTimerStatus);
 
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  const currentCategory = scheduleDetails?.category;
   const currentSide = tgrTimerStatus.currentPerformingSide;
-  const currentSideScore = currentSide ? juriScore[currentSide] : null;
+  const currentSideScoreData = currentSide ? juriScore[currentSide] : null;
 
-  const calculateSideScore = useCallback((gsCount: number, staminaBonus: number, externalDeductions: number = 0) => {
-    return parseFloat((BASE_SCORE_TGR - (gsCount * GERAKAN_SALAH_DEDUCTION) + staminaBonus - externalDeductions).toFixed(2));
+
+  const calculateSideScoreForJuriDisplay = useCallback((
+    sideData: SideSpecificTGRScore | null | undefined,
+    category: TGRCategoryType | undefined
+  ): number => {
+    if (!sideData || !category) {
+      return category === 'Ganda' ? BASE_SCORE_GANDA : BASE_SCORE_TUNGGAL_REGU;
+    }
+
+    if (category === 'Ganda') {
+      const elements = sideData.gandaElements || initialGandaElementScores;
+      const elementSum = (elements.teknikSeranganBertahan || 0) +
+                         (elements.firmnessHarmony || 0) +
+                         (elements.soulfulness || 0);
+      return parseFloat((BASE_SCORE_GANDA + elementSum).toFixed(2));
+    } else { // Tunggal or Regu
+      return parseFloat(
+        (BASE_SCORE_TUNGGAL_REGU -
+        ((sideData.gerakanSalahCount || 0) * GERAKAN_SALAH_DEDUCTION_TGR) +
+        (sideData.staminaKemantapanBonus || 0)
+        ).toFixed(2)
+      );
+    }
   }, []);
+  
+  useEffect(() => {
+    // Recalculate scores if category changes after initial load, or juriScore parts change
+    if (currentCategory && juriScore) {
+        setJuriScore(prev => ({
+            ...prev,
+            biru: {
+                ...prev.biru,
+                calculatedScore: calculateSideScoreForJuriDisplay(prev.biru, currentCategory)
+            },
+            merah: {
+                ...prev.merah,
+                calculatedScore: calculateSideScoreForJuriDisplay(prev.merah, currentCategory)
+            }
+        }));
+    }
+  }, [juriScore.biru.gerakanSalahCount, juriScore.biru.staminaKemantapanBonus, juriScore.biru.gandaElements, 
+      juriScore.merah.gerakanSalahCount, juriScore.merah.staminaKemantapanBonus, juriScore.merah.gandaElements,
+      currentCategory, calculateSideScoreForJuriDisplay]);
+
 
   useEffect(() => {
     const unsub = onSnapshot(doc(db, ACTIVE_TGR_SCHEDULE_CONFIG_PATH), (docSnap) => {
@@ -85,7 +143,9 @@ export default function JuriTGRPage({ params: paramsPromise }: { params: Promise
   useEffect(() => {
     if (configMatchId === undefined) { setIsLoading(true); return; }
     if (configMatchId !== activeMatchId) {
-      setJuriScore(initialJuriScore);
+      // Reset based on the new category (or lack thereof if configMatchId is null)
+      const newCategory = configMatchId ? undefined : scheduleDetails?.category; // Keep current if no change, else undefined
+      setJuriScore(getInitialJuriScoreData(newCategory));
       setTgrTimerStatus(defaultInitialTgrTimerStatus);
       setActiveMatchId(configMatchId);
       setScheduleDetails(null);
@@ -95,7 +155,7 @@ export default function JuriTGRPage({ params: paramsPromise }: { params: Promise
     } else if (configMatchId === null && activeMatchId === null && isLoading) {
       setIsLoading(false);
     }
-  }, [configMatchId, activeMatchId, isLoading]);
+  }, [configMatchId, activeMatchId, isLoading, scheduleDetails?.category]);
 
   useEffect(() => {
     if (!activeMatchId) {
@@ -125,8 +185,18 @@ export default function JuriTGRPage({ params: paramsPromise }: { params: Promise
           } else {
             processedDate = new Date().toISOString().split('T')[0];
           }
-          setScheduleDetails({ ...rawData, id: scheduleDocSnap.id, date: processedDate } as ScheduleTGR);
+          const loadedScheduleDetails = { ...rawData, id: scheduleDocSnap.id, date: processedDate } as ScheduleTGR;
+          setScheduleDetails(loadedScheduleDetails);
           setMatchDetailsLoaded(true);
+          // Initialize juriScore again here if category is now known and score wasn't set yet
+          setJuriScore(prev => {
+              if (prev.biru.calculatedScore === (loadedScheduleDetails.category === 'Ganda' ? BASE_SCORE_GANDA : BASE_SCORE_TUNGGAL_REGU)) {
+                  // Potentially re-init if it seems like default state, or rely on Firestore listener to populate
+              }
+              return getInitialJuriScoreData(loadedScheduleDetails.category); // Reset with new category
+          });
+
+
         } else {
           setError(`Detail Jadwal TGR (ID: ${activeMatchId}) tidak ditemukan.`);
           setScheduleDetails(null); setMatchDetailsLoaded(false);
@@ -141,8 +211,10 @@ export default function JuriTGRPage({ params: paramsPromise }: { params: Promise
   }, [activeMatchId]);
 
   useEffect(() => {
-    if (!activeMatchId || !juriId) {
-      setJuriScore(initialJuriScore);
+    if (!activeMatchId || !juriId || !currentCategory) {
+      if (currentCategory) { // Only reset if category is known but other deps are missing
+        setJuriScore(getInitialJuriScoreData(currentCategory));
+      }
       return;
     }
     let mounted = true;
@@ -151,26 +223,29 @@ export default function JuriTGRPage({ params: paramsPromise }: { params: Promise
       if (!mounted) return;
       if (docSnap.exists()) {
         const data = docSnap.data() as Partial<TGRJuriScore>;
-        const biruScore = data.biru ? { ...initialSideSpecificScore, ...data.biru } : { ...initialSideSpecificScore };
-        const merahScore = data.merah ? { ...initialSideSpecificScore, ...data.merah } : { ...initialSideSpecificScore };
-
-        biruScore.calculatedScore = calculateSideScore(biruScore.gerakanSalahCount, biruScore.staminaKemantapanBonus, biruScore.externalDeductions);
-        merahScore.calculatedScore = calculateSideScore(merahScore.gerakanSalahCount, merahScore.staminaKemantapanBonus, merahScore.externalDeductions);
-        
+        const getSideData = (sideData: Partial<SideSpecificTGRScore> | undefined): SideSpecificTGRScore => {
+            const initial = getInitialSideSpecificScore(currentCategory);
+            const merged = { ...initial, ...sideData };
+            if (currentCategory === 'Ganda') {
+                merged.gandaElements = { ...initialGandaElementScores, ...sideData?.gandaElements };
+            }
+            merged.calculatedScore = calculateSideScoreForJuriDisplay(merged, currentCategory);
+            return merged;
+        };
         setJuriScore({
-          baseScore: data.baseScore ?? BASE_SCORE_TGR,
-          biru: biruScore,
-          merah: merahScore,
+          biru: getSideData(data.biru),
+          merah: getSideData(data.merah),
           lastUpdated: data.lastUpdated,
         });
       } else {
-        setJuriScore(initialJuriScore);
+        setJuriScore(getInitialJuriScoreData(currentCategory));
       }
     }, (err) => {
       if (mounted) setError(`Gagal memuat skor juri: ${err.message}`);
     });
     return () => { mounted = false; unsubJuriScore(); };
-  }, [activeMatchId, juriId, calculateSideScore]);
+  }, [activeMatchId, juriId, currentCategory, calculateSideScoreForJuriDisplay]);
+
 
   useEffect(() => {
     if (!activeMatchId) {
@@ -204,14 +279,22 @@ export default function JuriTGRPage({ params: paramsPromise }: { params: Promise
   }, [isLoading, matchDetailsLoaded, activeMatchId]);
 
   const saveJuriScore = useCallback(async (updatedScoreData: TGRJuriScore) => {
-    if (!activeMatchId || isSaving || !currentSide) {
-      console.warn("Save aborted: No activeMatchId, isSaving, or no currentSide.");
+    if (!activeMatchId || isSaving || !currentSide || !currentCategory) {
+      console.warn("Save aborted: No activeMatchId, isSaving, no currentSide, or no category.");
       return;
     }
     setIsSaving(true);
     try {
       const scoreToSave: TGRJuriScore = {
         ...updatedScoreData,
+        biru: {
+            ...updatedScoreData.biru,
+            calculatedScore: calculateSideScoreForJuriDisplay(updatedScoreData.biru, currentCategory),
+        },
+        merah: {
+            ...updatedScoreData.merah,
+            calculatedScore: calculateSideScoreForJuriDisplay(updatedScoreData.merah, currentCategory),
+        },
         lastUpdated: serverTimestamp() as Timestamp,
       };
       const juriScoreDocRef = doc(db, MATCHES_TGR_COLLECTION, activeMatchId, JURI_SCORES_TGR_SUBCOLLECTION, juriId);
@@ -222,35 +305,35 @@ export default function JuriTGRPage({ params: paramsPromise }: { params: Promise
     } finally {
       setIsSaving(false);
     }
-  }, [activeMatchId, juriId, currentSide, isSaving]);
+  }, [activeMatchId, juriId, currentSide, isSaving, currentCategory, calculateSideScoreForJuriDisplay]);
 
-  // For Gerakan Salah & Stamina Bonus buttons
+
   const scoreActionButtonsDisabled =
     isLoading ||
     isSaving ||
     !activeMatchId ||
     !matchDetailsLoaded ||
-    !currentSide || // No side is active from Dewan
-    (tgrTimerStatus.matchStatus !== 'Ongoing' && tgrTimerStatus.matchStatus !== 'Paused') || // Timer not running or paused for the current side by Dewan
-    (tgrTimerStatus.matchStatus === 'Finished' && tgrTimerStatus.currentPerformingSide === currentSide); // Dewan has finished this side's performance
+    !currentSide || 
+    (currentSideScoreData?.isReady && !(currentCategory === 'Ganda' && (tgrTimerStatus.matchStatus === 'Ongoing' || tgrTimerStatus.matchStatus === 'Paused'))) || // If ready, Ganda can still edit if timer is active
+    (tgrTimerStatus.matchStatus !== 'Ongoing' && tgrTimerStatus.matchStatus !== 'Paused') || 
+    (tgrTimerStatus.matchStatus === 'Finished' && tgrTimerStatus.currentPerformingSide === currentSide); 
 
-  // For the "SIAP" button
   const juriSiapButtonDisabled =
     isLoading ||
     isSaving ||
     !activeMatchId ||
     !matchDetailsLoaded ||
-    !currentSide || // No side is active from Dewan
-    (currentSideScore?.isReady ?? false) || // This Juri already marked this side as ready
-    (tgrTimerStatus.matchStatus === 'Finished' && tgrTimerStatus.currentPerformingSide === currentSide); // Dewan has finished this side's performance
+    !currentSide || 
+    (currentSideScoreData?.isReady ?? false) || 
+    (tgrTimerStatus.matchStatus === 'Finished' && tgrTimerStatus.currentPerformingSide === currentSide);
 
 
   const handleGerakanSalah = () => {
-    if (scoreActionButtonsDisabled || !currentSide || !currentSideScore) return;
+    if (scoreActionButtonsDisabled || !currentSide || !currentSideScoreData || currentCategory === 'Ganda') return;
     setJuriScore(prev => {
-      const updatedSideScore = { ...currentSideScore };
+      const updatedSideScore = { ...currentSideScoreData };
       updatedSideScore.gerakanSalahCount = (updatedSideScore.gerakanSalahCount || 0) + 1;
-      updatedSideScore.calculatedScore = calculateSideScore(updatedSideScore.gerakanSalahCount, updatedSideScore.staminaKemantapanBonus, updatedSideScore.externalDeductions);
+      // Recalculation of calculatedScore will be handled by the useEffect hook
       const newFullScore = { ...prev, [currentSide]: updatedSideScore };
       saveJuriScore(newFullScore);
       return newFullScore;
@@ -258,21 +341,35 @@ export default function JuriTGRPage({ params: paramsPromise }: { params: Promise
   };
 
   const handleStaminaBonusChange = (bonusValue: number) => {
-    if (scoreActionButtonsDisabled || !currentSide || !currentSideScore) return;
+    if (scoreActionButtonsDisabled || !currentSide || !currentSideScoreData || currentCategory === 'Ganda') return;
     setJuriScore(prev => {
-      const updatedSideScore = { ...currentSideScore };
+      const updatedSideScore = { ...currentSideScoreData };
       updatedSideScore.staminaKemantapanBonus = bonusValue;
-      updatedSideScore.calculatedScore = calculateSideScore(updatedSideScore.gerakanSalahCount, updatedSideScore.staminaKemantapanBonus, updatedSideScore.externalDeductions);
       const newFullScore = { ...prev, [currentSide]: updatedSideScore };
       saveJuriScore(newFullScore);
       return newFullScore;
     });
   };
 
-  const handleJuriSiap = () => {
-    if (juriSiapButtonDisabled || !currentSide || !currentSideScore) return;
+  const handleGandaElementScoreChange = (elementId: GandaElementId, scoreValue: number) => {
+    if (scoreActionButtonsDisabled || !currentSide || !currentSideScoreData || currentCategory !== 'Ganda') return;
     setJuriScore(prev => {
-      const updatedSideScore = { ...currentSideScore, isReady: true };
+        const updatedGandaElements = {
+            ...(currentSideScoreData.gandaElements || initialGandaElementScores),
+            [elementId]: scoreValue,
+        };
+        const updatedSideScore = { ...currentSideScoreData, gandaElements: updatedGandaElements };
+        const newFullScore = { ...prev, [currentSide]: updatedSideScore };
+        saveJuriScore(newFullScore);
+        return newFullScore;
+    });
+  };
+
+
+  const handleJuriSiap = () => {
+    if (juriSiapButtonDisabled || !currentSide || !currentSideScoreData) return;
+    setJuriScore(prev => {
+      const updatedSideScore = { ...currentSideScoreData, isReady: true };
       const newFullScore = { ...prev, [currentSide]: updatedSideScore };
       saveJuriScore(newFullScore);
       return newFullScore;
@@ -282,39 +379,14 @@ export default function JuriTGRPage({ params: paramsPromise }: { params: Promise
   const formatDisplayDate = (dateString: string | undefined) => {
     if (!dateString) return <Skeleton className="h-4 w-28 inline-block" />;
     try {
-      const date = new Date(dateString + 'T00:00:00');
+      const date = new Date(dateString + 'T00:00:00'); // Ensure it's treated as local date
       return new Intl.DateTimeFormat('id-ID', { day: 'numeric', month: 'long', year: 'numeric' }).format(date);
     } catch (e) { return dateString; }
   };
 
-  const isJuriSideReady = currentSide && currentSideScore ? currentSideScore.isReady : false;
+  const isJuriSideReady = currentSide && currentSideScoreData ? currentSideScoreData.isReady : false;
 
-
-  const inputDisabledReason = () => {
-    if (configMatchId === undefined && isLoading) return "Memuat konfigurasi global...";
-    if (isLoading && activeMatchId) return "Sinkronisasi data pertandingan...";
-    if (!activeMatchId && !isLoading && configMatchId === null) return "Tidak ada pertandingan TGR aktif.";
-    if (activeMatchId && !matchDetailsLoaded && !isLoading) return "Menunggu detail pertandingan...";
-    if (isSaving) return "Menyimpan skor...";
-    if (error) return `Error: ${error}`;
-    if (!currentSide) return "Menunggu arahan sisi dari Timer Kontrol.";
-
-    if (juriSiapButtonDisabled && scoreActionButtonsDisabled) { // Both disabled
-        if (currentSideScore?.isReady) return `Juri SIAP. Penampilan sisi ${currentSide === 'biru' ? 'Biru' : 'Merah'} telah selesai.`;
-        if (tgrTimerStatus.matchStatus === 'Finished' && tgrTimerStatus.currentPerformingSide === currentSide) return `Penampilan sisi ${currentSide === 'biru' ? 'Biru' : 'Merah'} telah Selesai. Input ditutup.`;
-    }
-    
-    if (scoreActionButtonsDisabled) { // Only score buttons disabled
-        if (tgrTimerStatus.matchStatus === 'Pending') return `Sisi ${currentSide === 'biru' ? 'Biru' : 'Merah'} menunggu Timer Kontrol memulai. Tombol SIAP aktif.`;
-        if (tgrTimerStatus.matchStatus === 'Finished' && tgrTimerStatus.currentPerformingSide === currentSide) return `Penampilan sisi ${currentSide === 'biru' ? 'Biru' : 'Merah'} telah Selesai. Input skor ditutup.`;
-        if (tgrTimerStatus.matchStatus !== 'Ongoing' && tgrTimerStatus.matchStatus !== 'Paused') return `Status Timer Kontrol (${tgrTimerStatus.matchStatus}) tidak mengizinkan input skor. Tombol SIAP mungkin aktif.`;
-    }
-    return "";
-  };
-  
   const getStatusText = () => {
-    const reasonForScoreButtons = inputDisabledReason();
-
     if (configMatchId === undefined && isLoading) return "Memuat konfigurasi global...";
     if (isLoading && activeMatchId) return `Sinkronisasi data pertandingan...`;
     if (!activeMatchId && !isLoading && configMatchId === null) return "Tidak ada pertandingan TGR aktif.";
@@ -323,178 +395,179 @@ export default function JuriTGRPage({ params: paramsPromise }: { params: Promise
     if (error) return `Error: ${error}`;
     if (!currentSide) return "Menunggu arahan sisi dari Timer Kontrol.";
 
-    if (currentSideScore?.isReady) {
-        if (tgrTimerStatus.matchStatus === 'Finished' && tgrTimerStatus.currentPerformingSide === currentSide) {
-            return `Juri SIAP. Penampilan sisi ${currentSide === 'biru' ? 'Biru' : 'Merah'} telah selesai.`;
-        }
-        return `Juri SIAP. ${ (tgrTimerStatus.matchStatus === 'Ongoing' || tgrTimerStatus.matchStatus === 'Paused') ? 'Skor masih dapat diubah.' : (tgrTimerStatus.matchStatus === 'Pending' ? 'Menunggu Timer Kontrol.' : '')}`;
+    if (currentSideScoreData?.isReady) {
+      if (tgrTimerStatus.matchStatus === 'Finished' && tgrTimerStatus.currentPerformingSide === currentSide) {
+        return `Juri SIAP. Penampilan sisi ${currentSide === 'biru' ? 'Biru' : 'Merah'} telah selesai.`;
+      }
+      return `Juri SIAP. ${ (currentCategory === 'Ganda' && (tgrTimerStatus.matchStatus === 'Ongoing' || tgrTimerStatus.matchStatus === 'Paused')) ? 'Skor elemen Ganda masih dapat diubah.' : (tgrTimerStatus.matchStatus === 'Pending' ? 'Menunggu Timer Kontrol.' : '')}`;
     }
-
     if (tgrTimerStatus.matchStatus === 'Pending' && tgrTimerStatus.currentPerformingSide === currentSide) {
-        return `Sisi ${currentSide === 'biru' ? 'Biru' : 'Merah'} menunggu Timer Kontrol. Tekan SIAP jika penilaian awal selesai.`;
+      return `Sisi ${currentSide === 'biru' ? 'Biru' : 'Merah'} menunggu Timer Kontrol. Tekan SIAP jika penilaian awal selesai.`;
     }
     if (tgrTimerStatus.matchStatus === 'Ongoing' || tgrTimerStatus.matchStatus === 'Paused') {
-        return `Input Nilai Terbuka untuk sisi ${currentSide === 'biru' ? 'Biru' : 'Merah'}. Tekan SIAP jika penilaian selesai.`;
+      return `Input Nilai Terbuka untuk sisi ${currentSide === 'biru' ? 'Biru' : 'Merah'}. Tekan SIAP jika penilaian selesai.`;
     }
-     if (tgrTimerStatus.matchStatus === 'Finished' && tgrTimerStatus.currentPerformingSide === currentSide) {
-        return `Penampilan sisi ${currentSide === 'biru' ? 'Biru' : 'Merah'} telah selesai. Input ditutup.`;
+    if (tgrTimerStatus.matchStatus === 'Finished' && tgrTimerStatus.currentPerformingSide === currentSide) {
+      return `Penampilan sisi ${currentSide === 'biru' ? 'Biru' : 'Merah'} telah selesai. Input ditutup.`;
     }
-    return reasonForScoreButtons || "Status tidak diketahui.";
+    return "Status tidak diketahui.";
   };
+  
+  const displaySideName = tgrTimerStatus.currentPerformingSide ? (tgrTimerStatus.currentPerformingSide === 'biru' ? 'Sudut Biru' : 'Sudut Merah') : 'Belum Ada Sisi Aktif';
+  const sideColorClass = currentSide === 'merah' ? 'text-red-600 dark:text-red-400' : currentSide === 'biru' ? 'text-blue-600 dark:text-blue-400' : 'text-primary';
 
-  const getCategorySpecificName = () => {
-    if (!scheduleDetails) return (
-        <>
-            <div className="text-xl md:text-2xl font-semibold">
-                Kontingen: <Skeleton className="h-7 w-32 inline-block" />
-            </div>
-            <div className="text-lg md:text-xl">
-                <Skeleton className="h-6 w-48 inline-block" />
-            </div>
-        </>
-    );
-
-    let name = "";
-    let contingent = "";
-    let activeSideForDisplay = tgrTimerStatus.currentPerformingSide;
-    
-    if (activeSideForDisplay === 'biru' && scheduleDetails.pesilatBiruName) {
-        name = scheduleDetails.pesilatBiruName;
-        contingent = scheduleDetails.pesilatBiruContingent || scheduleDetails.pesilatMerahContingent || "N/A";
-    } else if (activeSideForDisplay === 'merah' && scheduleDetails.pesilatMerahName) {
-        name = scheduleDetails.pesilatMerahName;
-        contingent = scheduleDetails.pesilatMerahContingent || "N/A";
-    } else { // Fallback if no side performing or side doesn't match schedule (e.g. initial load or one-sided match)
-        if (scheduleDetails.pesilatMerahName && !scheduleDetails.pesilatBiruName) {
-            name = scheduleDetails.pesilatMerahName;
-            contingent = scheduleDetails.pesilatMerahContingent || "N/A";
-            if(!activeSideForDisplay) activeSideForDisplay = 'merah'; // Color based on the single participant
-        } else if (scheduleDetails.pesilatBiruName && !scheduleDetails.pesilatMerahName) {
-            name = scheduleDetails.pesilatBiruName;
-            contingent = scheduleDetails.pesilatBiruContingent || scheduleDetails.pesilatMerahContingent || "N/A";
-             if(!activeSideForDisplay) activeSideForDisplay = 'biru';
-        } else if (scheduleDetails.pesilatMerahName) { // Default to merah if both exist and no side is active
-             name = scheduleDetails.pesilatMerahName;
-             contingent = scheduleDetails.pesilatMerahContingent || "N/A";
-        } else if (scheduleDetails.pesilatBiruName) {
-             name = scheduleDetails.pesilatBiruName;
-             contingent = scheduleDetails.pesilatBiruContingent || scheduleDetails.pesilatMerahContingent || "N/A";
-        }
+  const getParticipantNameAndContingent = () => {
+    if (!scheduleDetails) return { name: "N/A", contingent: "N/A" };
+    if (currentSide === 'biru' && scheduleDetails.pesilatBiruName) {
+        return { name: scheduleDetails.pesilatBiruName, contingent: scheduleDetails.pesilatBiruContingent || scheduleDetails.pesilatMerahContingent || "N/A" };
     }
-    
-    const colorClass = activeSideForDisplay === 'merah' ? 'text-red-600 dark:text-red-400'
-                     : activeSideForDisplay === 'biru' ? 'text-blue-600 dark:text-blue-400'
-                     : 'text-gray-700 dark:text-gray-300';
-
-    return (
-      <>
-        <div className={cn("text-xl md:text-2xl font-semibold", colorClass)}>
-          Kontingen: {contingent || "N/A"}
-        </div>
-        <div className={cn("text-lg md:text-xl", colorClass)}>
-          {name || "Nama Pesilat/Tim"}
-        </div>
-      </>
-    );
+    if (currentSide === 'merah' && scheduleDetails.pesilatMerahName) {
+        return { name: scheduleDetails.pesilatMerahName, contingent: scheduleDetails.pesilatMerahContingent || "N/A" };
+    }
+     // Fallback if side not active but schedule has one participant
+    if (scheduleDetails.pesilatMerahName && !scheduleDetails.pesilatBiruName) {
+        return { name: scheduleDetails.pesilatMerahName, contingent: scheduleDetails.pesilatMerahContingent || "N/A" };
+    }
+    if (scheduleDetails.pesilatBiruName && !scheduleDetails.pesilatMerahName) {
+        return { name: scheduleDetails.pesilatBiruName, contingent: scheduleDetails.pesilatBiruContingent || scheduleDetails.pesilatMerahContingent || "N/A" };
+    }
+    return { name: "Peserta/Tim", contingent: "Kontingen" };
   };
+  const { name: participantName, contingent: participantContingent } = getParticipantNameAndContingent();
 
-  const displaySide = tgrTimerStatus.currentPerformingSide ? (tgrTimerStatus.currentPerformingSide === 'biru' ? 'Sudut Biru' : 'Sudut Merah') : 'Belum Ada Sisi Aktif';
 
   return (
     <div className="flex flex-col min-h-screen bg-gray-100 dark:bg-gray-900 text-gray-800 dark:text-gray-900 font-sans">
       <Header />
       <main className="flex-1 container mx-auto px-2 py-4 md:p-6">
         <div className="mb-4 md:mb-6 text-center">
-          <h1 className={cn(
-              "text-2xl md:text-3xl font-bold",
-              tgrTimerStatus.currentPerformingSide === 'merah' ? 'text-red-600 dark:text-red-400' :
-              tgrTimerStatus.currentPerformingSide === 'biru' ? 'text-blue-600 dark:text-blue-400' :
-              'text-primary'
-          )}>
-            {juriDisplayName} - {displaySide}
+          <h1 className={cn("text-2xl md:text-3xl font-bold", sideColorClass)}>
+            {juriDisplayName} - {displaySideName}
           </h1>
-          {getCategorySpecificName()}
+           <div className={cn("text-xl md:text-2xl font-semibold", sideColorClass)}>
+            Kontingen: {participantContingent}
+          </div>
+          <div className={cn("text-lg md:text-xl", sideColorClass)}>
+            {participantName}
+          </div>
           <div className="text-xs md:text-sm text-gray-500 dark:text-gray-600">
             {scheduleDetails?.place || <Skeleton className="h-4 w-20 inline-block" />}
             , {formatDisplayDate(scheduleDetails?.date)} | Partai No: {scheduleDetails?.lotNumber || <Skeleton className="h-4 w-8 inline-block" />}
-             | Kategori: {scheduleDetails?.category || <Skeleton className="h-4 w-16 inline-block" />} | Babak: {scheduleDetails?.round || <Skeleton className="h-4 w-16 inline-block" />}
+             | Kategori: {currentCategory || <Skeleton className="h-4 w-16 inline-block" />} | Babak: {scheduleDetails?.round || <Skeleton className="h-4 w-16 inline-block" />}
           </div>
         </div>
 
-        <div className="flex flex-col md:flex-row items-stretch gap-2 md:gap-4 mb-4 md:mb-6">
-          <Button
-            variant="default"
-            className="w-full md:w-auto h-40 md:h-64 text-5xl md:text-7xl bg-blue-600 hover:bg-blue-700 text-white shadow-lg rounded-lg flex items-center justify-center p-2 md:flex-[2_2_0%]"
-            onClick={handleGerakanSalah}
-            disabled={scoreActionButtonsDisabled}
-            aria-label="Kesalahan Gerakan (-0.01)"
-          >
-            <XIcon className="w-36 h-36 md:w-60 md:h-60" strokeWidth={3} />
-          </Button>
-
-          <div className="w-full md:w-auto flex flex-col items-center justify-center text-center p-3 md:p-4 rounded-lg bg-gray-200 dark:bg-gray-800/50 md:h-auto md:flex-[1_1_0%] my-auto">
-            <h3 className="text-sm md:text-base font-semibold text-gray-700 dark:text-gray-300">Detail Gerakan</h3>
-            <p className="text-xs md:text-sm text-gray-600 dark:text-gray-400 mt-1">Urutan Gerakan</p>
-            <p className="text-xs md:text-sm text-gray-600 dark:text-gray-400">Gerakan yang terlewat</p>
+        {currentCategory === 'Ganda' && currentSide && currentSideScoreData ? (
+          <div className="space-y-4 mb-6">
+            {gandaScoringElementsConfig.map(element => (
+              <Card key={element.id} className="shadow-md">
+                <CardHeader className="pb-2 pt-3 px-4 bg-gray-50 dark:bg-gray-800 rounded-t-lg">
+                  <div className="flex justify-between items-center">
+                    <div>
+                      <CardTitle className="text-md font-semibold">{element.label}</CardTitle>
+                      <CardDescription className="text-xs">{element.range}</CardDescription>
+                    </div>
+                    <div className="text-lg font-bold text-primary">
+                      SKOR: {(currentSideScoreData.gandaElements?.[element.id] || 0).toFixed(2)}
+                    </div>
+                  </div>
+                </CardHeader>
+                <CardContent className="p-3">
+                  <div className="grid grid-cols-5 sm:grid-cols-10 gap-1">
+                    {gandaElementButtonValues.map(val => (
+                      <Button
+                        key={`${element.id}-${val}`}
+                        variant={currentSideScoreData.gandaElements?.[element.id] === val ? "default" : "outline"}
+                        className={cn(
+                            "text-xs h-7 sm:h-8",
+                            currentSideScoreData.gandaElements?.[element.id] === val ? "bg-primary text-primary-foreground" : "bg-gray-200 dark:bg-gray-700 hover:bg-gray-300 dark:hover:bg-gray-600"
+                        )}
+                        onClick={() => handleGandaElementScoreChange(element.id as GandaElementId, val)}
+                        disabled={scoreActionButtonsDisabled}
+                      >
+                        {val.toFixed(2)}
+                      </Button>
+                    ))}
+                  </div>
+                </CardContent>
+              </Card>
+            ))}
           </div>
-
-          <Button
+        ) : currentCategory && (currentCategory === 'Tunggal' || currentCategory === 'Regu') ? (
+          // UI for Tunggal and Regu
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-2 md:gap-4 mb-4 md:mb-6">
+            <Button
+              className="w-full h-40 md:h-64 text-5xl md:text-7xl bg-blue-600 hover:bg-blue-700 text-white shadow-lg rounded-lg flex items-center justify-center p-2"
+              onClick={handleGerakanSalah}
+              disabled={scoreActionButtonsDisabled}
+              aria-label="Kesalahan Gerakan (-0.01)"
+            >
+              <XIcon className="w-36 h-36 md:w-60 md:h-60" strokeWidth={3} />
+            </Button>
+            <div className="w-full flex flex-col items-center justify-center p-3 md:p-4 rounded-lg bg-gray-200 dark:bg-gray-800/50 md:h-auto">
+              <h3 className="text-sm md:text-base font-semibold text-gray-700 dark:text-gray-300">STAMINA & FLOW OF MOVEMENT</h3>
+              <p className="text-xs md:text-sm text-gray-600 dark:text-gray-400 mt-1 mb-2">Range Skor Bonus: 0.01 - 0.10</p>
+              <div className="grid grid-cols-5 gap-1 md:gap-2 w-full max-w-xs">
+                {STAMINA_BONUS_OPTIONS_TUNGGAL_REGU.map(bonus => (
+                  <Button
+                    key={bonus}
+                    variant={currentSideScoreData?.staminaKemantapanBonus === bonus ? "default" : "outline"}
+                    className={cn(
+                      "text-xs h-7 sm:h-8",
+                      currentSideScoreData?.staminaKemantapanBonus === bonus ? "bg-gray-600 dark:bg-gray-400 text-white dark:text-black" : "bg-gray-300 dark:bg-gray-700 text-gray-700 dark:text-gray-300 border-gray-400 dark:border-gray-600 hover:bg-gray-400 dark:hover:bg-gray-600"
+                    )}
+                    onClick={() => handleStaminaBonusChange(bonus)}
+                    disabled={scoreActionButtonsDisabled}
+                  >
+                    {bonus.toFixed(2)}
+                  </Button>
+                ))}
+              </div>
+            </div>
+          </div>
+        ) : null}
+        
+        <div className="mb-4 md:mb-6">
+            <div className="flex items-center justify-between bg-gray-200 dark:bg-gray-800 p-3 md:p-4 rounded-md shadow">
+                <p className="text-md md:text-lg font-semibold text-gray-700 dark:text-gray-300">TOTAL SKOR ({displaySideName})</p>
+                <div className="bg-gray-300 dark:bg-gray-700 h-8 w-24 md:h-10 md:w-32 rounded-sm flex items-center justify-center text-md md:text-lg font-bold text-gray-800 dark:text-gray-200">
+                  {isLoading || !currentSideScoreData ? <Skeleton className="h-6 w-16 bg-gray-400 dark:bg-gray-600"/> : currentSideScoreData.calculatedScore.toFixed(2)}
+                </div>
+            </div>
+            {currentCategory && (currentCategory === 'Tunggal' || currentCategory === 'Regu') && (
+              <div className="text-xs text-center mt-1 text-gray-500 dark:text-gray-600">
+                  Pengurangan: {currentSideScoreData?.gerakanSalahCount || 0} x {GERAKAN_SALAH_DEDUCTION_TGR.toFixed(2)} = {((currentSideScoreData?.gerakanSalahCount || 0) * GERAKAN_SALAH_DEDUCTION_TGR).toFixed(2)}.
+                  Bonus Stamina: {(currentSideScoreData?.staminaKemantapanBonus ?? 0).toFixed(2)}.
+              </div>
+            )}
+             {currentCategory === 'Ganda' && (
+                <div className="text-xs text-center mt-1 text-gray-500 dark:text-gray-600">
+                    Teknik: {(currentSideScoreData?.gandaElements?.teknikSeranganBertahan || 0).toFixed(2)},
+                    Firmness: {(currentSideScoreData?.gandaElements?.firmnessHarmony || 0).toFixed(2)},
+                    Soulfulness: {(currentSideScoreData?.gandaElements?.soulfulness || 0).toFixed(2)}.
+                    Base: {BASE_SCORE_GANDA.toFixed(2)}.
+                </div>
+            )}
+        </div>
+        
+        <Button
             id="tombol-siap-juri-tgr"
             className={cn(
-              "w-full md:w-auto h-40 md:h-64 text-lg md:text-2xl font-semibold rounded-lg shadow-lg flex flex-col items-center justify-center p-2 sm:p-4 md:flex-[2_2_0%]",
-              isJuriSideReady ? "bg-green-600 hover:bg-green-700 text-white" : "bg-yellow-500 hover:bg-yellow-600 text-black",
-              juriSiapButtonDisabled && !isJuriSideReady ? "opacity-50 cursor-not-allowed" : "",
-              isJuriSideReady ? "opacity-75 cursor-default" : ""
+                "w-full h-20 md:h-24 text-lg md:text-2xl font-semibold rounded-lg shadow-lg flex items-center justify-center p-2 sm:p-4 mb-4",
+                isJuriSideReady ? "bg-green-600 hover:bg-green-700 text-white" : "bg-yellow-500 hover:bg-yellow-600 text-black",
+                juriSiapButtonDisabled && !isJuriSideReady ? "opacity-50 cursor-not-allowed" : "",
+                isJuriSideReady ? "opacity-75 cursor-default" : ""
             )}
             onClick={handleJuriSiap}
             disabled={juriSiapButtonDisabled}
-          >
-            {isJuriSideReady ? <CheckCircle2 className="w-8 h-8 md:w-12 md:h-12 mb-1 md:mb-2" /> : <Info className="w-8 h-8 md:w-12 md:h-12 mb-1 md:mb-2" />}
-            <span className="block text-center">{isJuriSideReady ? "MENILAI" : "SIAP"}</span>
-          </Button>
-        </div>
-
-        <div className="mb-4 md:mb-6 space-y-2">
-            <div className="flex items-center justify-between bg-gray-200 dark:bg-gray-800 p-3 md:p-4 rounded-md shadow">
-                <p className="text-sm md:text-base font-semibold text-gray-700 dark:text-gray-300">TOTAL AKURASI SKOR</p>
-                <div className="bg-gray-300 dark:bg-gray-700 h-6 w-16 md:h-8 md:w-20 rounded-sm"></div>
-            </div>
-
-            <div className="text-center my-1">
-              <p className="text-xs font-medium text-gray-600 dark:text-gray-500">FLOW OF MOVEMENT / STAMINA (RANGE SKOR : 0.01 - 0.10)</p>
-            </div>
-            <div className="grid grid-cols-5 sm:grid-cols-10 gap-1 md:gap-2 px-1">
-              {STAMINA_BONUS_OPTIONS.map(bonus => (
-                <Button
-                  key={bonus}
-                  variant={currentSideScore?.staminaKemantapanBonus === bonus ? "default" : "outline"}
-                  className={cn(
-                    "text-xs md:text-sm h-8 md:h-9 rounded-md",
-                    currentSideScore?.staminaKemantapanBonus === bonus ? "bg-gray-600 dark:bg-gray-400 text-white dark:text-black" : "bg-gray-300 dark:bg-gray-700 text-gray-700 dark:text-gray-300 border-gray-400 dark:border-gray-600 hover:bg-gray-400 dark:hover:bg-gray-600"
-                  )}
-                  onClick={() => handleStaminaBonusChange(bonus)}
-                  disabled={scoreActionButtonsDisabled}
-                >
-                  {bonus.toFixed(2)}
-                </Button>
-              ))}
-            </div>
-             <div className="flex items-center justify-between bg-gray-200 dark:bg-gray-800 p-3 md:p-4 rounded-md shadow mt-2">
-                <p className="text-sm md:text-base font-semibold text-gray-700 dark:text-gray-300">TOTAL SKOR ({displaySide})</p>
-                <div className="bg-gray-300 dark:bg-gray-700 h-6 w-24 md:h-8 md:w-32 rounded-sm flex items-center justify-center text-sm md:text-base font-bold text-gray-800 dark:text-gray-200">
-                  {isLoading || !currentSideScore ? <Skeleton className="h-5 w-16 bg-gray-400 dark:bg-gray-600"/> : currentSideScore.calculatedScore.toFixed(2)}
-                </div>
-            </div>
-            <div className="text-xs text-center mt-1 text-gray-500 dark:text-gray-600">
-                Pengurangan: {currentSideScore?.gerakanSalahCount || 0} x {GERAKAN_SALAH_DEDUCTION.toFixed(2)} = {((currentSideScore?.gerakanSalahCount || 0) * GERAKAN_SALAH_DEDUCTION).toFixed(2)}.
-                Bonus Stamina: {(currentSideScore?.staminaKemantapanBonus ?? 0).toFixed(2)}.
-                Penalti Dewan: {(currentSideScore?.externalDeductions ?? 0).toFixed(2)}.
-            </div>
-        </div>
+        >
+            {isJuriSideReady ? <CheckCircle2 className="w-8 h-8 md:w-10 md:h-10 mr-2 md:mr-3" /> : <Info className="w-8 h-8 md:w-10 md:h-10 mr-2 md:mr-3" />}
+            <span className="block text-center">{isJuriSideReady ? "JURI TELAH SIAP" : "KIRIM SKOR (SIAP)"}</span>
+        </Button>
 
         <div className="flex flex-col items-center gap-3 mt-6">
           <div className="w-full max-w-md">
-             {(scoreActionButtonsDisabled || juriSiapButtonDisabled) && ( // Show if any button set is disabled
+             {(scoreActionButtonsDisabled || juriSiapButtonDisabled) && (
                 <div className={cn("text-xs text-center p-2 rounded-md mb-2 shadow", error ? "bg-red-100 text-red-700 border border-red-300 dark:bg-red-900/30 dark:text-red-300 dark:border-red-700" : "bg-yellow-100 text-yellow-800 border border-yellow-300 dark:bg-yellow-900/30 dark:text-yellow-300 dark:border-yellow-700")}>
                     {error ? <AlertCircle className="inline mr-1 h-4 w-4"/> : <Info className="inline mr-1 h-4 w-4"/>}
                     {getStatusText()}
@@ -509,4 +582,3 @@ export default function JuriTGRPage({ params: paramsPromise }: { params: Promise
     </div>
   );
 }
-
