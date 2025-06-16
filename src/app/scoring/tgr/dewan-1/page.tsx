@@ -30,13 +30,21 @@ interface PenaltyConfig {
   points: number;
 }
 
-const PENALTY_TYPES: PenaltyConfig[] = [
+const PENALTY_TYPES_DEFAULT: PenaltyConfig[] = [
   { id: 'arena_out', description: "Penampilan Keluar Gelanggang 10mx10m", points: -0.50 },
   { id: 'weapon_touch_floor', description: "Menjatuhkan Senjata Menyentuh Lantai", points: -0.50 },
   { id: 'time_tolerance_violation', description: "Penampilan melebihi atau kurang dari toleransi waktu 5 Detik S/d 10 Detik", points: -0.50 },
   { id: 'costume_violation', description: "Pakaian tidak sesuai aturan (kain samping jatuh, kain samping tidak 1 (satu) motif, baju atasan dan bawahan tidak 1 (satu) warna)", points: -0.50 },
   { id: 'movement_hold_violation', description: "Menahan gerakan lebih dari 5 (lima) detik.", points: -0.50 },
 ];
+
+const REGU_PENALTY_TYPES: PenaltyConfig[] = [
+  { id: 'time_tolerance_violation', description: "Penampilan melebihi atau kekurangan dari toleransi waktu >5 detik s/d 10 detik.", points: -0.50 },
+  { id: 'arena_out', description: "Penampilan keluar gelanggang 10 m x 10 m.", points: -0.50 },
+  { id: 'costume_violation', description: "Pakaian tidak sesuai aturan.", points: -0.50 },
+  { id: 'movement_hold_violation', description: "Manahan gerakan lebih dari 5 (lima) detik", points: -0.50 },
+];
+
 
 const initialTgrTimerStatus: TGRTimerStatus = {
   timerSeconds: 0,
@@ -192,9 +200,9 @@ export default function DewanTGRPenaltyPage() {
     try {
       const penaltyData: Omit<TGRDewanPenalty, 'id' | 'timestamp'> & { timestamp: any } = {
         type: penalty.id,
-        description: penalty.description,
+        description: penalty.description, // Use description from the selected list
         pointsDeducted: penalty.points,
-        side: currentPerformingSide, // Assign penalty to the current performing side
+        side: currentPerformingSide, 
         timestamp: serverTimestamp(),
       };
 
@@ -283,7 +291,7 @@ export default function DewanTGRPenaltyPage() {
       const q = query(
         collection(db, MATCHES_TGR_COLLECTION, activeMatchId, DEWAN_PENALTIES_TGR_SUBCOLLECTION),
         where("type", "==", penaltyType),
-        where("side", "==", currentPerformingSide), // Only delete for the current side
+        where("side", "==", currentPerformingSide), 
         orderBy("timestamp", "desc"),
         limit(1)
       );
@@ -364,6 +372,8 @@ export default function DewanTGRPenaltyPage() {
     return `Sudut Merah: ${scheduleDetails.pesilatMerahName || 'N/A'} (${scheduleDetails.pesilatMerahContingent || 'N/A'})`;
   };
 
+  const currentPenaltyListToDisplay = scheduleDetails?.category === 'Regu' ? REGU_PENALTY_TYPES : PENALTY_TYPES_DEFAULT;
+
   if (isLoading && configMatchId === undefined) {
     return (
       <div className="flex flex-col min-h-screen">
@@ -443,13 +453,13 @@ export default function DewanTGRPenaltyPage() {
 
             <div className="space-y-1 border border-gray-300 dark:border-gray-700 rounded-md shadow-sm">
               <div className="grid grid-cols-[1fr_auto_auto_auto] items-center p-2 bg-gray-100 dark:bg-gray-800 font-semibold border-b border-gray-300 dark:border-gray-700">
-                <div className="text-sm">Pelanggaran</div>
+                <div className="text-sm">Pelanggaran ({scheduleDetails?.category === 'Regu' ? 'Regu' : 'Tunggal/Ganda'})</div>
                 <div className="text-sm text-center w-24">Hapus</div>
                 <div className="text-sm text-center w-28">Skor</div>
                 <div className="text-sm text-center w-20">Subtotal ({tgrTimerStatus.currentPerformingSide === 'biru' ? 'Biru' : 'Merah'})</div>
               </div>
 
-              {PENALTY_TYPES.map((penalty) => (
+              {currentPenaltyListToDisplay.map((penalty) => (
                 <div key={penalty.id} className="grid grid-cols-[1fr_auto_auto_auto] items-center p-2 even:bg-gray-50 dark:even:bg-gray-800/50 hover:bg-gray-100 dark:hover:bg-gray-700/50 transition-colors duration-150">
                   <p className="text-sm text-foreground pr-2">{penalty.description}</p>
                   <Button
