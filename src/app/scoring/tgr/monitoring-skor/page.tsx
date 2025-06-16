@@ -5,7 +5,7 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
 import { ArrowLeft, Loader2, Sun, Moon, ChevronsRight, AlertTriangle } from 'lucide-react';
-import type { ScheduleTGR, TGRTimerStatus, TGRJuriScore, SideSpecificTGRScore } from '@/lib/types';
+import type { ScheduleTGR, TGRTimerStatus, TGRJuriScore, SideSpecificTGRScore, TGRDewanPenalty } from '@/lib/types';
 import { db } from '@/lib/firebase';
 import { doc, onSnapshot, getDoc, collection, query, orderBy, Timestamp, where, limit, setDoc } from 'firebase/firestore';
 import { cn } from '@/lib/utils';
@@ -16,11 +16,13 @@ const ACTIVE_TGR_SCHEDULE_CONFIG_PATH = 'app_settings/active_match_tgr';
 const SCHEDULE_TGR_COLLECTION = 'schedules_tgr';
 const MATCHES_TGR_COLLECTION = 'matches_tgr';
 const JURI_SCORES_TGR_SUBCOLLECTION = 'juri_scores_tgr';
+const DEWAN_PENALTIES_TGR_SUBCOLLECTION = 'dewan_penalties_tgr';
+
 
 const TGR_JURI_IDS = ['juri-1', 'juri-2', 'juri-3', 'juri-4', 'juri-5', 'juri-6'] as const;
 
 const initialTgrTimerStatus: TGRTimerStatus = {
-  timerSeconds: 0, // Stopwatch starts at 0
+  timerSeconds: 0,
   isTimerRunning: false,
   matchStatus: 'Pending',
   currentPerformingSide: null,
@@ -33,6 +35,124 @@ const initialAllJuriScores: Record<string, TGRJuriScore | null> = TGR_JURI_IDS.r
   return acc;
 }, {} as Record<string, TGRJuriScore | null>);
 
+const initialSideSummary = {
+  median: 0,
+  penalty: 0,
+  timePerformance: 0,
+  total: 0,
+  stdDev: 0,
+  hasPerformed: false,
+};
+
+
+// Helper functions for calculations (can be moved to a utils file if shared)
+function calculateMedian(scores: number[]): number {
+  if (scores.length === 0) return 0;
+  if (scores.length < 3) { 
+    return parseFloat((scores.reduce((sum, score) => sum + score, 0) / scores.length).toFixed(2));
+  }
+  const sortedScores = [...scores].sort((a, b) => a - b);
+  const scoresToAverage = sortedScores.slice(1, -1); 
+  if (scoresToAverage.length === 0) { 
+      return parseFloat((sortedScores.reduce((a,b) => a+b, 0) / sortedScores.length).toFixed(2));
+  }
+  return parseFloat((scoresToAverage.reduce((sum, score) => sum + score, 0) / scoresToAverage.length).toFixed(2));
+}
+
+function calculateStandardDeviation(scores: number[]): number {
+  if (scores.length < 2) return 0; // Standard deviation is not meaningful for less than 2 scores
+  const mean = scores.reduce((sum, score) => sum + score, 0) / scores.length;
+  const variance = scores.reduce((sum, score) => sum + Math.pow(score - mean, 2), 0) / scores.length; // Population variance
+  return parseFloat(Math.sqrt(variance).toFixed(8)); // Keep more precision as per image
+}
+
+
+interface TGRSideSummaryTableProps {
+  sideLabel: string;
+  median: number;
+  penalty: number;
+  timePerformanceSeconds: number;
+  total: number;
+  stdDev: number;
+  isLoadingData: boolean;
+}
+
+const TGRSideSummaryTable: React.FC<TGRSideSummaryTableProps> = ({
+  sideLabel, median, penalty, timePerformanceSeconds, total, stdDev, isLoadingData
+}) => {
+  const formatTimePerformance = (seconds: number) => {
+    const minutes = Math.floor(seconds / 60);
+    const remainingSeconds = Math.round(seconds % 60); // Round to nearest second for display
+    return `${String(minutes).padStart(2, '0')}.${String(remainingSeconds).padStart(2, '0')}`;
+  };
+
+  if (isLoadingData) {
+    return (
+      <div className="w-full max-w-xl mx-auto mb-4 p-2 border border-[var(--monitor-border)] rounded-md bg-[var(--monitor-dialog-bg)] shadow-lg">
+        <h3 className="text-center text-md font-semibold mb-2 text-[var(--monitor-text)]"><Skeleton className="h-6 w-32 mx-auto bg-[var(--monitor-skeleton-bg)]" /></h3>
+        <div className="overflow-x-auto">
+          <table className="w-full text-xs md:text-sm border-collapse">
+            <thead>
+              <tr>
+                {['Median', 'Penalty', 'Time Performance', 'Total'].map(header => (
+                  <th key={header} className="p-1.5 border border-gray-400 dark:border-gray-600 bg-green-600 text-white font-semibold"><Skeleton className="h-5 w-16 mx-auto bg-green-400"/></th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                {[1,2,3,4].map(idx => (
+                    <td key={idx} className="p-1.5 border border-gray-400 dark:border-gray-600 text-center"><Skeleton className="h-5 w-12 mx-auto bg-[var(--monitor-skeleton-bg)]"/></td>
+                ))}
+              </tr>
+              <tr>
+                <th colSpan={4} className="p-1.5 border border-gray-400 dark:border-gray-600 bg-green-600 text-white font-semibold">Standard Deviation</th>
+              </tr>
+              <tr>
+                <td colSpan={4} className="p-1.5 border border-gray-400 dark:border-gray-600 text-center"><Skeleton className="h-5 w-20 mx-auto bg-[var(--monitor-skeleton-bg)]"/></td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    );
+  }
+
+
+  return (
+    <div className="w-full max-w-xl mx-auto mb-4 p-2 border border-[var(--monitor-border)] rounded-md bg-[var(--monitor-dialog-bg)] shadow-lg">
+      <h3 className="text-center text-md font-semibold mb-2 text-[var(--monitor-text)]">{sideLabel}</h3>
+      <div className="overflow-x-auto">
+        <table className="w-full text-xs md:text-sm border-collapse text-[var(--monitor-text)]">
+          <thead>
+            <tr>
+              <th className="p-1.5 border border-gray-400 dark:border-gray-600 bg-green-600 text-white font-semibold">Median</th>
+              <th className="p-1.5 border border-gray-400 dark:border-gray-600 bg-green-600 text-white font-semibold">Penalty</th>
+              <th className="p-1.5 border border-gray-400 dark:border-gray-600 bg-green-600 text-white font-semibold">Time Performance</th>
+              <th className="p-1.5 border border-gray-400 dark:border-gray-600 bg-green-600 text-white font-semibold">Total</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td className="p-1.5 border border-gray-400 dark:border-gray-600 text-center">{median.toFixed(3)}</td>
+              <td className="p-1.5 border border-gray-400 dark:border-gray-600 text-center">{Math.abs(penalty).toFixed(2)}</td>
+              <td className="p-1.5 border border-gray-400 dark:border-gray-600 text-center">{formatTimePerformance(timePerformanceSeconds)}</td>
+              <td className="p-1.5 border border-gray-400 dark:border-gray-600 text-center">{total.toFixed(3)}</td>
+            </tr>
+            <tr>
+              <th colSpan={4} className="p-1.5 border border-gray-400 dark:border-gray-600 bg-green-600 text-white font-semibold">Standard Deviation</th>
+            </tr>
+            <tr>
+              <td colSpan={4} className="p-1.5 border border-gray-400 dark:border-gray-600 text-center">{stdDev.toFixed(8)}</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+};
+
+
 export default function MonitoringSkorTGRPage() {
   const [pageTheme, setPageTheme] = useState<'light' | 'dark'>('light');
   const [configMatchId, setConfigMatchId] = useState<string | null | undefined>(undefined);
@@ -41,19 +161,27 @@ export default function MonitoringSkorTGRPage() {
   
   const [tgrTimerStatus, setTgrTimerStatus] = useState<TGRTimerStatus>(initialTgrTimerStatus);
   const [allJuriScores, setAllJuriScores] = useState<Record<string, TGRJuriScore | null>>(initialAllJuriScores);
+  const [dewanPenalties, setDewanPenalties] = useState<TGRDewanPenalty[]>([]);
 
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [matchDetailsLoaded, setMatchDetailsLoaded] = useState(false);
   const [isNavigatingNextMatch, setIsNavigatingNextMatch] = useState(false);
 
+  const [summaryDataBiru, setSummaryDataBiru] = useState(initialSideSummary);
+  const [summaryDataMerah, setSummaryDataMerah] = useState(initialSideSummary);
+
+
   const resetPageData = useCallback(() => {
     setScheduleDetails(null);
     setTgrTimerStatus(initialTgrTimerStatus);
     setAllJuriScores(initialAllJuriScores);
+    setDewanPenalties([]);
     setMatchDetailsLoaded(false);
     setError(null);
     setIsNavigatingNextMatch(false);
+    setSummaryDataBiru(initialSideSummary);
+    setSummaryDataMerah(initialSideSummary);
   }, []);
 
   useEffect(() => {
@@ -131,6 +259,12 @@ export default function MonitoringSkorTGRPage() {
             }));
           }, (err) => console.error(`[MonitorTGR] Error fetching TGR scores for ${juriId}:`, err)));
         });
+        
+        unsubscribers.push(onSnapshot(query(collection(matchDataDocRef, DEWAN_PENALTIES_TGR_SUBCOLLECTION), orderBy("timestamp", "asc")), (snap) => {
+          if (!mounted) return;
+          setDewanPenalties(snap.docs.map(d => ({ id: d.id, ...d.data() } as TGRDewanPenalty)));
+        }, (err) => console.error("[MonitorTGR] Error fetching dewan penalties:", err)));
+
 
       } catch (err) {
         if (mounted) { console.error("[MonitorTGR] Error in loadData:", err); setError("Gagal memuat data pertandingan TGR."); }
@@ -141,11 +275,55 @@ export default function MonitoringSkorTGRPage() {
     return () => { mounted = false; unsubscribers.forEach(unsub => unsub()); };
   }, [activeScheduleId]);
 
-  useEffect(() => {
+ useEffect(() => {
     if (isLoading && (matchDetailsLoaded || activeScheduleId === null)) {
       setIsLoading(false);
     }
-  }, [isLoading, matchDetailsLoaded, activeScheduleId]);
+ }, [isLoading, matchDetailsLoaded, activeScheduleId]);
+
+  // Calculate summaries
+  useEffect(() => {
+    if (!scheduleDetails) return;
+
+    const calculateSideSummary = (side: 'biru' | 'merah') => {
+      const validJuriScoresForSide = TGR_JURI_IDS
+        .map(id => allJuriScores[id]?.[side])
+        .filter(sideScore => sideScore && sideScore.isReady)
+        .map(sideScore => sideScore!.calculatedScore);
+      
+      const median = validJuriScoresForSide.length > 0 ? calculateMedian(validJuriScoresForSide) : 0;
+      const stdDev = validJuriScoresForSide.length > 0 ? calculateStandardDeviation(validJuriScoresForSide) : 0;
+      
+      const totalPenalties = dewanPenalties
+        .filter(p => p.side === side)
+        .reduce((sum, p) => sum + p.pointsDeducted, 0);
+      
+      const finalScore = parseFloat((median + totalPenalties).toFixed(2));
+      const timePerformance = side === 'biru' ? tgrTimerStatus.performanceDurationBiru : tgrTimerStatus.performanceDurationMerah;
+      
+      const hasPerformed = (side === 'biru' && tgrTimerStatus.performanceDurationBiru > 0) || 
+                           (side === 'merah' && tgrTimerStatus.performanceDurationMerah > 0) ||
+                           (tgrTimerStatus.matchStatus === 'Finished' && tgrTimerStatus.currentPerformingSide === null && 
+                             ((side === 'biru' && scheduleDetails.pesilatBiruName) || (side === 'merah' && scheduleDetails.pesilatMerahName)) && validJuriScoresForSide.length > 0
+                           );
+
+
+      return { median, penalty: totalPenalties, timePerformance, total: finalScore, stdDev, hasPerformed };
+    };
+
+    if (scheduleDetails.pesilatBiruName) {
+        setSummaryDataBiru(calculateSideSummary('biru'));
+    } else {
+        setSummaryDataBiru(initialSideSummary); // Ensure reset if no biru pesilat
+    }
+    if (scheduleDetails.pesilatMerahName) {
+        setSummaryDataMerah(calculateSideSummary('merah'));
+    } else {
+        setSummaryDataMerah(initialSideSummary); // Ensure reset if no merah pesilat
+    }
+
+  }, [allJuriScores, dewanPenalties, tgrTimerStatus, scheduleDetails]);
+
 
   const formatTime = (seconds: number): string => {
     const minutes = Math.floor(seconds / 60);
@@ -197,21 +375,17 @@ export default function MonitoringSkorTGRPage() {
     }
     
     let sideToConsider: 'biru' | 'merah' | null = tgrTimerStatus.currentPerformingSide;
-
-    // If the overall match is finished and no side is actively performing,
-    // decide which side's score to show.
-    // This logic assumes if a side performed, their 'isReady' would be true.
+    
     if (tgrTimerStatus.matchStatus === 'Finished' && !tgrTimerStatus.currentPerformingSide) {
-        if (scheduleDetails?.pesilatMerahName && juriScoreData?.merah?.isReady) {
+        // If overall match finished, try to show Merah's score if they performed, else Biru's
+        if (scheduleDetails?.pesilatMerahName && juriScoreData?.merah?.isReady && tgrTimerStatus.performanceDurationMerah > 0) {
+            sideToConsider = 'merah';
+        } else if (scheduleDetails?.pesilatBiruName && juriScoreData?.biru?.isReady && tgrTimerStatus.performanceDurationBiru > 0) {
+            sideToConsider = 'biru';
+        } else if (scheduleDetails?.pesilatMerahName && juriScoreData?.merah?.isReady) { // Fallback if duration not set but ready
             sideToConsider = 'merah';
         } else if (scheduleDetails?.pesilatBiruName && juriScoreData?.biru?.isReady) {
             sideToConsider = 'biru';
-        }
-        // If both performed, you might want a different display strategy here,
-        // or default to the last one (e.g., Merah if it exists and was ready).
-        // For now, this prioritizes Merah if both exist and are ready in a 'Finished' overall state.
-         if (scheduleDetails?.pesilatMerahName && juriScoreData?.merah?.isReady && scheduleDetails?.pesilatBiruName && juriScoreData?.biru?.isReady) {
-            sideToConsider = 'merah'; // Or some other logic for dual display.
         }
     }
     
@@ -233,7 +407,6 @@ export default function MonitoringSkorTGRPage() {
     );
 };
 
-
   const JuriLabelCell = ({ label }: { label: string }) => (
     <div className="w-full py-2 border border-[var(--monitor-border)] flex items-center justify-center text-sm md:text-base font-medium bg-[var(--monitor-header-section-bg)] text-[var(--monitor-text)] rounded-sm">
       {label}
@@ -247,14 +420,12 @@ export default function MonitoringSkorTGRPage() {
     if (side === 'biru' && scheduleDetails.pesilatBiruName) return scheduleDetails.pesilatBiruName;
     if (side === 'merah' && scheduleDetails.pesilatMerahName) return scheduleDetails.pesilatMerahName;
     
-    // Fallback if no current side but match is finished (e.g., show Merah if they performed)
     if (tgrTimerStatus.matchStatus === 'Finished' && !side) {
-        if (scheduleDetails.pesilatMerahName && tgrTimerStatus.performanceDurationMerah && tgrTimerStatus.performanceDurationMerah > 0) return scheduleDetails.pesilatMerahName;
-        if (scheduleDetails.pesilatBiruName && tgrTimerStatus.performanceDurationBiru && tgrTimerStatus.performanceDurationBiru > 0) return scheduleDetails.pesilatBiruName;
+        if (summaryDataMerah.hasPerformed) return scheduleDetails.pesilatMerahName || "Peserta Merah";
+        if (summaryDataBiru.hasPerformed) return scheduleDetails.pesilatBiruName || "Peserta Biru";
     }
 
-    // Default/initial state
-    if (scheduleDetails.pesilatBiruName) return scheduleDetails.pesilatBiruName; // Default to Biru if exists
+    if (scheduleDetails.pesilatBiruName) return scheduleDetails.pesilatBiruName;
     if (scheduleDetails.pesilatMerahName) return scheduleDetails.pesilatMerahName;
     return "Nama Peserta";
   };
@@ -267,8 +438,8 @@ export default function MonitoringSkorTGRPage() {
     if (side === 'merah' && scheduleDetails.pesilatMerahContingent) return scheduleDetails.pesilatMerahContingent;
 
     if (tgrTimerStatus.matchStatus === 'Finished' && !side) {
-        if (scheduleDetails.pesilatMerahName && tgrTimerStatus.performanceDurationMerah && tgrTimerStatus.performanceDurationMerah > 0) return scheduleDetails.pesilatMerahContingent || "Kontingen";
-        if (scheduleDetails.pesilatBiruName && tgrTimerStatus.performanceDurationBiru && tgrTimerStatus.performanceDurationBiru > 0) return scheduleDetails.pesilatBiruContingent || "Kontingen";
+        if (summaryDataMerah.hasPerformed) return scheduleDetails.pesilatMerahContingent || "Kontingen";
+        if (summaryDataBiru.hasPerformed) return scheduleDetails.pesilatBiruContingent || "Kontingen";
     }
 
     if (scheduleDetails.pesilatBiruName) return scheduleDetails.pesilatBiruContingent || "Kontingen";
@@ -280,12 +451,21 @@ export default function MonitoringSkorTGRPage() {
     if (tgrTimerStatus.currentPerformingSide) {
         return tgrTimerStatus.currentPerformingSide === 'biru' ? 'SUDUT BIRU' : 'SUDUT MERAH';
     }
-    if (scheduleDetails?.pesilatMerahName && !scheduleDetails.pesilatBiruName) return 'PESERTA';
-    if (scheduleDetails?.pesilatBiruName && !scheduleDetails.pesilatMerahName) return 'PESERTA';
-    if (tgrTimerStatus.matchStatus === 'Finished' && tgrTimerStatus.currentPerformingSide === null) return "PARTAI SELESAI";
+     // Handle display when overall match is finished and we need to show a general label or last performing side
+    if (tgrTimerStatus.matchStatus === 'Finished' && !tgrTimerStatus.currentPerformingSide) {
+        if (summaryDataMerah.hasPerformed && summaryDataBiru.hasPerformed) return "PARTAI SELESAI";
+        if (summaryDataMerah.hasPerformed) return "SUDUT MERAH SELESAI";
+        if (summaryDataBiru.hasPerformed) return "SUDUT BIRU SELESAI";
+        return "PARTAI SELESAI"; // Default for finished match
+    }
+    // Fallback for initial or indeterminate states
+    if (scheduleDetails?.pesilatBiruName && !scheduleDetails.pesilatMerahName) return 'PESERTA (BIRU)';
+    if (scheduleDetails?.pesilatMerahName && !scheduleDetails.pesilatBiruName) return 'PESERTA (MERAH)';
     return 'N/A';
   }
 
+  const showBiruSummary = (summaryDataBiru.hasPerformed || (tgrTimerStatus.matchStatus === 'Finished' && scheduleDetails?.pesilatBiruName));
+  const showMerahSummary = (summaryDataMerah.hasPerformed || (tgrTimerStatus.matchStatus === 'Finished' && scheduleDetails?.pesilatMerahName));
 
   return (
     <>
@@ -331,6 +511,32 @@ export default function MonitoringSkorTGRPage() {
             </div>
           </div>
 
+          {/* Summary Tables Section */}
+          <div className="mb-4 space-y-4">
+            {showBiruSummary && scheduleDetails?.pesilatBiruName && (
+              <TGRSideSummaryTable
+                sideLabel={`Ringkasan Sudut Biru: ${scheduleDetails.pesilatBiruName}`}
+                median={summaryDataBiru.median}
+                penalty={summaryDataBiru.penalty}
+                timePerformanceSeconds={tgrTimerStatus.performanceDurationBiru}
+                total={summaryDataBiru.total}
+                stdDev={summaryDataBiru.stdDev}
+                isLoadingData={isLoading && !matchDetailsLoaded}
+              />
+            )}
+            {showMerahSummary && scheduleDetails?.pesilatMerahName && (
+               <TGRSideSummaryTable
+                sideLabel={`Ringkasan Sudut Merah: ${scheduleDetails.pesilatMerahName}`}
+                median={summaryDataMerah.median}
+                penalty={summaryDataMerah.penalty}
+                timePerformanceSeconds={tgrTimerStatus.performanceDurationMerah}
+                total={summaryDataMerah.total}
+                stdDev={summaryDataMerah.stdDev}
+                isLoadingData={isLoading && !matchDetailsLoaded}
+              />
+            )}
+          </div>
+          
           <div className="w-full max-w-3xl mx-auto">
             <div className="grid grid-cols-6 gap-1 md:gap-2 mb-1">
               {TGR_JURI_IDS.map((juriId, index) => (
@@ -391,3 +597,4 @@ export default function MonitoringSkorTGRPage() {
     </>
   );
 }
+
