@@ -72,7 +72,8 @@ export default function JuriTGRPage({ params: paramsPromise }: { params: Promise
   const [scheduleDetails, setScheduleDetails] = useState<ScheduleTGR | null>(null);
   const [matchDetailsLoaded, setMatchDetailsLoaded] = useState(false);
 
-  const [juriScore, setJuriScore] = useState<TGRJuriScore>(getInitialJuriScoreData(scheduleDetails?.category));
+  // Initialize juriScore with a version that considers a potentially undefined category at first
+  const [juriScore, setJuriScore] = useState<TGRJuriScore>(getInitialJuriScoreData(undefined));
   const [tgrTimerStatus, setTgrTimerStatus] = useState<TGRTimerStatus>(defaultInitialTgrTimerStatus);
 
   const [isLoading, setIsLoading] = useState(true);
@@ -97,10 +98,8 @@ export default function JuriTGRPage({ params: paramsPromise }: { params: Promise
       const elementSum = (elements.teknikSeranganBertahan || 0) +
                          (elements.firmnessHarmony || 0) +
                          (elements.soulfulness || 0);
-      // External deductions (from Dewan) are not subtracted here for Juri's display, but on Ketua/Monitor page.
       return parseFloat((BASE_SCORE_GANDA + elementSum).toFixed(2));
-    } else { // Tunggal or Regu
-      // External deductions (from Dewan) are not subtracted here for Juri's display.
+    } else { 
       return parseFloat(
         (BASE_SCORE_TUNGGAL_REGU -
         ((sideData.gerakanSalahCount || 0) * GERAKAN_SALAH_DEDUCTION_TGR) +
@@ -111,22 +110,25 @@ export default function JuriTGRPage({ params: paramsPromise }: { params: Promise
   }, []);
   
   useEffect(() => {
-    if (currentCategory && juriScore) {
-        setJuriScore(prev => ({
-            ...prev,
-            biru: {
-                ...prev.biru,
-                calculatedScore: calculateSideScoreForJuriDisplay(prev.biru, currentCategory)
-            },
-            merah: {
-                ...prev.merah,
-                calculatedScore: calculateSideScoreForJuriDisplay(prev.merah, currentCategory)
-            }
-        }));
+    if (currentCategory && juriScore && (juriScore.biru || juriScore.merah)) {
+        const newBiruScore = juriScore.biru ? calculateSideScoreForJuriDisplay(juriScore.biru, currentCategory) : (currentCategory === 'Ganda' ? BASE_SCORE_GANDA : BASE_SCORE_TUNGGAL_REGU);
+        const newMerahScore = juriScore.merah ? calculateSideScoreForJuriDisplay(juriScore.merah, currentCategory) : (currentCategory === 'Ganda' ? BASE_SCORE_GANDA : BASE_SCORE_TUNGGAL_REGU);
+
+        let changed = false;
+        if (juriScore.biru && juriScore.biru.calculatedScore !== newBiruScore) changed = true;
+        if (juriScore.merah && juriScore.merah.calculatedScore !== newMerahScore) changed = true;
+        
+        if (changed) {
+            setJuriScore(prev => ({
+                ...prev,
+                biru: prev.biru ? { ...prev.biru, calculatedScore: newBiruScore } : getInitialSideSpecificScore(currentCategory),
+                merah: prev.merah ? { ...prev.merah, calculatedScore: newMerahScore } : getInitialSideSpecificScore(currentCategory),
+            }));
+        }
     }
-  }, [juriScore.biru.gerakanSalahCount, juriScore.biru.staminaKemantapanBonus, juriScore.biru.gandaElements, 
-      juriScore.merah.gerakanSalahCount, juriScore.merah.staminaKemantapanBonus, juriScore.merah.gandaElements,
-      currentCategory, calculateSideScoreForJuriDisplay]);
+  }, [juriScore.biru?.gerakanSalahCount, juriScore.biru?.staminaKemantapanBonus, juriScore.biru?.gandaElements, 
+      juriScore.merah?.gerakanSalahCount, juriScore.merah?.staminaKemantapanBonus, juriScore.merah?.gandaElements,
+      currentCategory, calculateSideScoreForJuriDisplay, juriScore.biru, juriScore.merah]);
 
 
   useEffect(() => {
@@ -141,29 +143,21 @@ export default function JuriTGRPage({ params: paramsPromise }: { params: Promise
     return () => unsub();
   }, [juriDisplayName]);
 
-  // Effect to manage overall loading state
   useEffect(() => {
-    if (configMatchId === undefined) {
-      setIsLoading(true); 
-    } else if (activeMatchId === null) {
-      setIsLoading(false); 
-      setError(null); 
-    } else {
-      setIsLoading(!matchDetailsLoaded);
-    }
+    setIsLoading(configMatchId === undefined || (!!activeMatchId && !matchDetailsLoaded));
   }, [configMatchId, activeMatchId, matchDetailsLoaded]);
 
-  // Effect to sync activeMatchId with configMatchId and reset states
+
   useEffect(() => {
-    if (configMatchId === undefined) {
-      return; 
-    }
+    if (configMatchId === undefined) return; 
 
     if (configMatchId !== activeMatchId) {
       setActiveMatchId(configMatchId);
       
+      // Reset states *before* attempting to load new category dependent data
       setScheduleDetails(null);
       setMatchDetailsLoaded(false);
+      // Intentionally set category to undefined here so getInitialJuriScoreData uses its base defaults
       setJuriScore(getInitialJuriScoreData(undefined)); 
       setTgrTimerStatus(defaultInitialTgrTimerStatus);
       setError(null);
@@ -201,6 +195,8 @@ export default function JuriTGRPage({ params: paramsPromise }: { params: Promise
           const loadedScheduleDetails = { ...rawData, id: scheduleDocSnap.id, date: processedDate } as ScheduleTGR;
           setScheduleDetails(loadedScheduleDetails);
           setMatchDetailsLoaded(true); 
+          // Initialize juriScore here, now that category is known
+          setJuriScore(getInitialJuriScoreData(loadedScheduleDetails.category));
         } else {
           setError(`Detail Jadwal TGR (ID: ${activeMatchId}) tidak ditemukan.`);
           setScheduleDetails(null); setMatchDetailsLoaded(false);
@@ -215,22 +211,11 @@ export default function JuriTGRPage({ params: paramsPromise }: { params: Promise
   }, [activeMatchId]); 
 
   useEffect(() => {
-    if (!activeMatchId || !juriId) {
-      setJuriScore(getInitialJuriScoreData(undefined));
-      return;
+    if (!activeMatchId || !juriId || !currentCategory) { // Ensure currentCategory is available
+        setJuriScore(getInitialJuriScoreData(currentCategory)); // Use currentCategory if available
+        return;
     }
     
-    // If scheduleDetails is not yet loaded, we might not know the category.
-    // Initialize with a generic base or wait for currentCategory to be defined.
-    // This effect will re-run when currentCategory (derived from scheduleDetails) updates.
-    if (!currentCategory && scheduleDetails) { 
-        // Category might become available if scheduleDetails was just loaded
-        setJuriScore(getInitialJuriScoreData(scheduleDetails.category));
-    } else if (!scheduleDetails) {
-        setJuriScore(getInitialJuriScoreData(undefined));
-    }
-
-
     let mounted = true;
     const juriScoreDocRef = doc(db, MATCHES_TGR_COLLECTION, activeMatchId, JURI_SCORES_TGR_SUBCOLLECTION, juriId);
     const unsubJuriScore = onSnapshot(juriScoreDocRef, (docSnap) => {
@@ -243,6 +228,7 @@ export default function JuriTGRPage({ params: paramsPromise }: { params: Promise
             if (currentCategory === 'Ganda') {
                 merged.gandaElements = { ...initialGandaElementScores, ...sideData?.gandaElements };
             }
+            // Calculate score based on merged data
             merged.calculatedScore = calculateSideScoreForJuriDisplay(merged, currentCategory);
             return merged;
         };
@@ -258,7 +244,7 @@ export default function JuriTGRPage({ params: paramsPromise }: { params: Promise
       if (mounted) setError(`Gagal memuat skor juri: ${err.message}`);
     });
     return () => { mounted = false; unsubJuriScore(); };
-  }, [activeMatchId, juriId, currentCategory, calculateSideScoreForJuriDisplay, scheduleDetails]);
+  }, [activeMatchId, juriId, currentCategory, calculateSideScoreForJuriDisplay]);
 
 
   useEffect(() => {
@@ -299,31 +285,25 @@ export default function JuriTGRPage({ params: paramsPromise }: { params: Promise
         category: TGRCategoryType
       ): SideSpecificTGRScore => {
         const initial = getInitialSideSpecificScore(category);
-        const currentData = { ...initial, ...sideData }; // Merge current state over defaults
+        const currentData = { ...initial, ...sideData }; 
 
-        // Ensure no 'undefined' values are passed for these specific fields.
-        // Firestore accepts 'null' for fields that are not set or intentionally empty.
-        if (currentData.gerakanSalahCount === undefined) {
-          (currentData as any).gerakanSalahCount = null;
-        }
-        if (currentData.staminaKemantapanBonus === undefined) {
-          (currentData as any).staminaKemantapanBonus = null;
-        }
-        
-        if (currentData.gandaElements === undefined) {
-          (currentData as any).gandaElements = null;
-        } else if (category === 'Ganda' && currentData.gandaElements) {
-            // For Ganda, ensure all sub-elements of gandaElements are numbers, not undefined
-            const elements = currentData.gandaElements;
-            elements.teknikSeranganBertahan = elements.teknikSeranganBertahan ?? 0;
-            elements.firmnessHarmony = elements.firmnessHarmony ?? 0;
-            elements.soulfulness = elements.soulfulness ?? 0;
+        if (category === 'Ganda') {
+          currentData.gerakanSalahCount = null;
+          currentData.staminaKemantapanBonus = null;
+          currentData.gandaElements = {
+            teknikSeranganBertahan: currentData.gandaElements?.teknikSeranganBertahan ?? 0,
+            firmnessHarmony: currentData.gandaElements?.firmnessHarmony ?? 0,
+            soulfulness: currentData.gandaElements?.soulfulness ?? 0,
+          };
+        } else { // Tunggal or Regu
+          currentData.gerakanSalahCount = currentData.gerakanSalahCount ?? 0;
+          currentData.staminaKemantapanBonus = currentData.staminaKemantapanBonus ?? 0;
+          currentData.gandaElements = null;
         }
 
         currentData.externalDeductions = currentData.externalDeductions ?? 0;
         currentData.isReady = currentData.isReady ?? false;
         
-        // Recalculate score based on this now-sanitized data before saving
         currentData.calculatedScore = calculateSideScoreForJuriDisplay(currentData, category);
         return currentData;
       };
@@ -368,7 +348,7 @@ export default function JuriTGRPage({ params: paramsPromise }: { params: Promise
   const handleGerakanSalah = () => {
     if (scoreActionButtonsDisabled || !currentSide || !currentSideScoreData || currentCategory === 'Ganda') return;
     setJuriScore(prev => {
-      const updatedSideScore = { ...currentSideScoreData };
+      const updatedSideScore = { ...(prev[currentSide] || getInitialSideSpecificScore(currentCategory)) };
       updatedSideScore.gerakanSalahCount = (updatedSideScore.gerakanSalahCount || 0) + 1;
       const newFullScore = { ...prev, [currentSide]: updatedSideScore };
       saveJuriScore(newFullScore);
@@ -379,7 +359,7 @@ export default function JuriTGRPage({ params: paramsPromise }: { params: Promise
   const handleStaminaBonusChange = (bonusValue: number) => {
     if (scoreActionButtonsDisabled || !currentSide || !currentSideScoreData || currentCategory === 'Ganda') return;
     setJuriScore(prev => {
-      const updatedSideScore = { ...currentSideScoreData };
+      const updatedSideScore = { ...(prev[currentSide] || getInitialSideSpecificScore(currentCategory)) };
       updatedSideScore.staminaKemantapanBonus = bonusValue;
       const newFullScore = { ...prev, [currentSide]: updatedSideScore };
       saveJuriScore(newFullScore);
@@ -390,12 +370,23 @@ export default function JuriTGRPage({ params: paramsPromise }: { params: Promise
   const handleGandaElementScoreChange = (elementId: GandaElementId, scoreValue: number) => {
     if (scoreActionButtonsDisabled || !currentSide || !currentSideScoreData || currentCategory !== 'Ganda') return;
     setJuriScore(prev => {
-        const updatedGandaElements = {
-            ...(currentSideScoreData.gandaElements || initialGandaElementScores),
+        const baseSideData = prev[currentSide!] || getInitialSideSpecificScore(currentCategory);
+        const currentGandaElements = baseSideData.gandaElements || initialGandaElementScores;
+        
+        const updatedGandaElements: GandaElementScores = {
+            ...currentGandaElements,
             [elementId]: scoreValue,
         };
-        const updatedSideScore = { ...currentSideScoreData, gandaElements: updatedGandaElements };
-        const newFullScore = { ...prev, [currentSide]: updatedSideScore };
+
+        const updatedSideScore: SideSpecificTGRScore = {
+            ...baseSideData,
+            gandaElements: updatedGandaElements,
+        };
+
+        const newFullScore: TGRJuriScore = {
+            ...prev,
+            [currentSide!]: updatedSideScore,
+        };
         saveJuriScore(newFullScore);
         return newFullScore;
     });
@@ -405,7 +396,7 @@ export default function JuriTGRPage({ params: paramsPromise }: { params: Promise
   const handleJuriSiap = () => {
     if (juriSiapButtonDisabled || !currentSide || !currentSideScoreData) return;
     setJuriScore(prev => {
-      const updatedSideScore = { ...currentSideScoreData, isReady: true };
+      const updatedSideScore = { ...(prev[currentSide] || getInitialSideSpecificScore(currentCategory)), isReady: true };
       const newFullScore = { ...prev, [currentSide]: updatedSideScore };
       saveJuriScore(newFullScore);
       return newFullScore;
@@ -454,19 +445,25 @@ export default function JuriTGRPage({ params: paramsPromise }: { params: Promise
 
   const getParticipantNameAndContingent = () => {
     if (!scheduleDetails) return { name: "N/A", contingent: "N/A" };
-    if (currentSide === 'biru' && scheduleDetails.pesilatBiruName) {
-        return { name: scheduleDetails.pesilatBiruName, contingent: scheduleDetails.pesilatBiruContingent || scheduleDetails.pesilatMerahContingent || "N/A" };
+    let nameToDisplay = "N/A";
+    let contingentToDisplay = "N/A";
+
+    if (currentSide === 'biru') {
+        nameToDisplay = scheduleDetails.pesilatBiruName || "Peserta Biru";
+        contingentToDisplay = scheduleDetails.pesilatBiruContingent || scheduleDetails.pesilatMerahContingent || "Kontingen Biru";
+    } else if (currentSide === 'merah') {
+        nameToDisplay = scheduleDetails.pesilatMerahName || "Peserta Merah";
+        contingentToDisplay = scheduleDetails.pesilatMerahContingent || "Kontingen Merah";
+    } else { // No current side, or side doesn't match participant data for some reason
+        if (scheduleDetails.pesilatMerahName && !scheduleDetails.pesilatBiruName) {
+            nameToDisplay = scheduleDetails.pesilatMerahName;
+            contingentToDisplay = scheduleDetails.pesilatMerahContingent || "Kontingen";
+        } else if (scheduleDetails.pesilatBiruName && !scheduleDetails.pesilatMerahName) {
+            nameToDisplay = scheduleDetails.pesilatBiruName;
+            contingentToDisplay = scheduleDetails.pesilatBiruContingent || scheduleDetails.pesilatMerahContingent || "Kontingen";
+        }
     }
-    if (currentSide === 'merah' && scheduleDetails.pesilatMerahName) {
-        return { name: scheduleDetails.pesilatMerahName, contingent: scheduleDetails.pesilatMerahContingent || "N/A" };
-    }
-    if (scheduleDetails.pesilatMerahName && !scheduleDetails.pesilatBiruName) {
-        return { name: scheduleDetails.pesilatMerahName, contingent: scheduleDetails.pesilatMerahContingent || "N/A" };
-    }
-    if (scheduleDetails.pesilatBiruName && !scheduleDetails.pesilatMerahName) {
-        return { name: scheduleDetails.pesilatBiruName, contingent: scheduleDetails.pesilatBiruContingent || scheduleDetails.pesilatMerahContingent || "N/A" };
-    }
-    return { name: "Peserta/Tim", contingent: "Kontingen" };
+    return { name: nameToDisplay, contingent: contingentToDisplay };
   };
   const { name: participantName, contingent: participantContingent } = getParticipantNameAndContingent();
 
@@ -503,7 +500,7 @@ export default function JuriTGRPage({ params: paramsPromise }: { params: Promise
                       <CardDescription className="text-xs">{element.range}</CardDescription>
                     </div>
                     <div className="text-lg font-bold text-primary">
-                      SKOR: {(currentSideScoreData.gandaElements?.[element.id] || 0).toFixed(2)}
+                      SKOR: {(currentSideScoreData.gandaElements?.[element.id as GandaElementId] || 0).toFixed(2)}
                     </div>
                   </div>
                 </CardHeader>
@@ -512,10 +509,10 @@ export default function JuriTGRPage({ params: paramsPromise }: { params: Promise
                     {gandaElementButtonValues.map(val => (
                       <Button
                         key={`${element.id}-${val}`}
-                        variant={currentSideScoreData.gandaElements?.[element.id] === val ? "default" : "outline"}
+                        variant={currentSideScoreData.gandaElements?.[element.id as GandaElementId] === val ? "default" : "outline"}
                         className={cn(
                             "text-xs h-7 sm:h-8",
-                            currentSideScoreData.gandaElements?.[element.id] === val ? "bg-primary text-primary-foreground" : "bg-gray-200 dark:bg-gray-700 hover:bg-gray-300 dark:hover:bg-gray-600"
+                            currentSideScoreData.gandaElements?.[element.id as GandaElementId] === val ? "bg-primary text-primary-foreground" : "bg-gray-200 dark:bg-gray-700 hover:bg-gray-300 dark:hover:bg-gray-600"
                         )}
                         onClick={() => handleGandaElementScoreChange(element.id as GandaElementId, val)}
                         disabled={scoreActionButtonsDisabled}
