@@ -10,7 +10,7 @@ import { db } from '@/lib/firebase';
 import { doc, onSnapshot, getDoc, collection, query, orderBy, Timestamp, where, limit, setDoc } from 'firebase/firestore';
 import { cn } from '@/lib/utils';
 import { Skeleton } from '@/components/ui/skeleton';
-import { Header } from '@/components/layout/Header';
+import { Header } from '@/components/layout/Header'; // Import Header
 
 const ACTIVE_TGR_SCHEDULE_CONFIG_PATH = 'app_settings/active_match_tgr';
 const SCHEDULE_TGR_COLLECTION = 'schedules_tgr';
@@ -427,6 +427,7 @@ export default function MonitoringSkorTGRPage() {
 
   const showMerahSummaryTable = summaryDataMerah.hasPerformed && !!scheduleDetails?.pesilatMerahName;
 
+
   const getParticipantDetails = () => {
     if (!scheduleDetails) {
       return { name: isLoading ? <Skeleton className="h-7 w-40 bg-[var(--monitor-skeleton-bg)]" /> : "N/A", contingent: isLoading ? <Skeleton className="h-5 w-32 bg-[var(--monitor-skeleton-bg)] mt-1" /> : "N/A", textColorClass: "text-[var(--monitor-text)]" };
@@ -437,12 +438,11 @@ export default function MonitoringSkorTGRPage() {
     let textColorClass = "text-[var(--monitor-text)]";
     let sideToDisplayDetails: 'biru' | 'merah' | null = tgrTimerStatus.currentPerformingSide;
 
-    // If match is fully finished, try to show Merah first if they performed, then Biru
     if (tgrTimerStatus.matchStatus === 'Finished' && tgrTimerStatus.currentPerformingSide === null) {
         if (summaryDataMerah.hasPerformed && scheduleDetails.pesilatMerahName) sideToDisplayDetails = 'merah';
         else if (summaryDataBiru.hasPerformed && scheduleDetails.pesilatBiruName) sideToDisplayDetails = 'biru';
-        else if (scheduleDetails.pesilatMerahName) sideToDisplayDetails = 'merah'; // Fallback if no performance recorded but scheduled
-        else if (scheduleDetails.pesilatBiruName) sideToDisplayDetails = 'biru'; // Fallback
+        else if (scheduleDetails.pesilatMerahName) sideToDisplayDetails = 'merah';
+        else if (scheduleDetails.pesilatBiruName) sideToDisplayDetails = 'biru';
     }
 
 
@@ -471,7 +471,8 @@ export default function MonitoringSkorTGRPage() {
   return (
     <>
       <Header />
-      <div className={cn(
+      <div
+        className={cn(
           "flex flex-col min-h-screen font-sans overflow-hidden relative",
           pageTheme === 'light' ? 'tgr-monitoring-theme-light' : 'tgr-monitoring-theme-dark',
           "bg-[var(--monitor-bg)] text-[var(--monitor-text)]"
