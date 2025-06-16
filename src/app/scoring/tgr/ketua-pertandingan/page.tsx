@@ -6,12 +6,13 @@ import Link from 'next/link';
 import { Header } from '@/components/layout/Header';
 import { Button } from '@/components/ui/button';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { ArrowLeft, Loader2, Info } from 'lucide-react';
-import type { ScheduleTGR, TGRTimerStatus, TGRJuriScore, TGRDewanPenalty, TGRDewanPenaltyType, SideSpecificTGRScore } from '@/lib/types';
+import { ArrowLeft, Loader2, Info, Trophy } from 'lucide-react';
+import type { ScheduleTGR, TGRTimerStatus, TGRJuriScore, TGRDewanPenalty, TGRDewanPenaltyType, SideSpecificTGRScore, TGRMatchResult, TGRMatchResultDetail } from '@/lib/types';
 import { db } from '@/lib/firebase';
-import { doc, onSnapshot, getDoc, collection, query, orderBy, Timestamp } from 'firebase/firestore';
+import { doc, onSnapshot, getDoc, collection, query, orderBy, Timestamp, setDoc, updateDoc } from 'firebase/firestore';
 import { Skeleton } from '@/components/ui/skeleton';
 import { cn } from '@/lib/utils';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
 
 const ACTIVE_TGR_SCHEDULE_CONFIG_PATH = 'app_settings/active_match_tgr';
 const SCHEDULE_TGR_COLLECTION = 'schedules_tgr';
@@ -105,6 +106,9 @@ export default function KetuaPertandinganTGRPage() {
   const [finalScores, setFinalScores] = useState<{biru: number; merah: number}>(initialSideScores);
   const [standardDeviations, setStandardDeviations] = useState<{biru: number; merah: number}>(initialSideScores);
 
+  const [isWinnerModalOpen, setIsWinnerModalOpen] = useState(false);
+  const [winnerData, setWinnerData] = useState<TGRMatchResult | null>(null);
+
   const derivedIsLoading = configMatchId === undefined || (!!activeMatchId && !matchDetailsLoaded);
 
   const resetPageData = useCallback(() => {
@@ -118,6 +122,8 @@ export default function KetuaPertandinganTGRPage() {
     setTotalDewanPenaltyPointsMap(initialSideScores);
     setFinalScores(initialSideScores);
     setStandardDeviations(initialSideScores);
+    setIsWinnerModalOpen(false);
+    setWinnerData(null);
   }, []);
 
   useEffect(() => {
@@ -186,8 +192,17 @@ export default function KetuaPertandinganTGRPage() {
             const data = docSnap.data();
             const fsTimerStatus = data?.timerStatus as TGRTimerStatus | undefined;
             setTgrTimerStatus(fsTimerStatus ? { ...initialGlobalTgrTimerStatus, ...fsTimerStatus } : initialGlobalTgrTimerStatus);
+            if (data?.matchResult) { // If match result exists from previous determination
+              setWinnerData(data.matchResult as TGRMatchResult);
+              setIsWinnerModalOpen(true);
+            } else {
+              setWinnerData(null);
+              // setIsWinnerModalOpen(false); // Don't close if already open for a new determination
+            }
           } else {
             setTgrTimerStatus(initialGlobalTgrTimerStatus);
+            setWinnerData(null);
+            // setIsWinnerModalOpen(false);
           }
         }));
 
@@ -278,6 +293,83 @@ export default function KetuaPertandinganTGRPage() {
   
   const waktuTampilBiru = formatWaktuPenampilan(tgrTimerStatus.performanceDurationBiru);
   const waktuTampilMerah = formatWaktuPenampilan(tgrTimerStatus.performanceDurationMerah);
+
+  const handleTentukanPemenang = async () => {
+    if (!scheduleDetails || !activeMatchId) return;
+    if (tgrTimerStatus.matchStatus !== 'Finished' || tgrTimerStatus.currentPerformingSide !== null) {
+        alert("Pertandingan belum selesai sepenuhnya. Pastikan kedua sisi (jika ada) telah selesai dan status match adalah 'Finished'.");
+        return;
+    }
+
+    let winner: 'biru' | 'merah' | 'seri';
+    
+    const hasBiru = !!scheduleDetails.pesilatBiruName;
+    const hasMerah = !!scheduleDetails.pesilatMerahName;
+
+    if (hasBiru && !hasMerah) {
+        winner = 'biru';
+    } else if (!hasBiru && hasMerah) {
+        winner = 'merah';
+    } else if (!hasBiru && !hasMerah) {
+        alert("Tidak ada peserta yang terdaftar untuk pertandingan ini.");
+        return;
+    } else { // Both Biru and Merah exist
+        if (finalScores.biru > finalScores.merah) {
+            winner = 'biru';
+        } else if (finalScores.merah > finalScores.biru) {
+            winner = 'merah';
+        } else { // Skor akhir sama, cek standar deviasi
+            if (standardDeviations.biru > standardDeviations.merah) {
+                winner = 'biru';
+            } else if (standardDeviations.merah > standardDeviations.biru) {
+                winner = 'merah';
+            } else {
+                winner = 'seri'; // Jika standar deviasi juga sama
+            }
+        }
+    }
+    
+    const resultData: TGRMatchResult = {
+        winner,
+        gelanggang: scheduleDetails.place || 'N/A',
+        babak: scheduleDetails.round || 'N/A',
+        kategori: scheduleDetails.category || 'N/A',
+        namaSudutBiru: scheduleDetails.pesilatBiruName || undefined,
+        kontingenBiru: scheduleDetails.pesilatBiruContingent || (hasBiru && scheduleDetails.pesilatMerahContingent) || undefined,
+        namaSudutMerah: scheduleDetails.pesilatMerahName || undefined,
+        kontingenMerah: scheduleDetails.pesilatMerahContingent || undefined,
+        detailPoint: {},
+        timestamp: Timestamp.now(),
+    };
+
+    if (hasBiru) {
+        resultData.detailPoint.biru = {
+            standarDeviasi: standardDeviations.biru,
+            waktuPenampilan: tgrTimerStatus.performanceDurationBiru || 0,
+            pelanggaran: totalDewanPenaltyPointsMap.biru,
+            poinKemenangan: finalScores.biru,
+        };
+    }
+    if (hasMerah) {
+        resultData.detailPoint.merah = {
+            standarDeviasi: standardDeviations.merah,
+            waktuPenampilan: tgrTimerStatus.performanceDurationMerah || 0,
+            pelanggaran: totalDewanPenaltyPointsMap.merah,
+            poinKemenangan: finalScores.merah,
+        };
+    }
+    
+    setWinnerData(resultData);
+    setIsWinnerModalOpen(true);
+
+    try {
+        const matchDocRef = doc(db, MATCHES_TGR_COLLECTION, activeMatchId);
+        await updateDoc(matchDocRef, { matchResult: resultData });
+    } catch (e) {
+        console.error("Gagal menyimpan hasil pertandingan ke Firestore:", e);
+        setError("Gagal menyimpan hasil pertandingan.");
+    }
+  };
 
 
   if (derivedIsLoading) {
@@ -446,6 +538,12 @@ export default function KetuaPertandinganTGRPage() {
     );
   };
 
+  const isDetermineWinnerDisabled = derivedIsLoading || 
+                                   tgrTimerStatus.matchStatus !== 'Finished' || 
+                                   tgrTimerStatus.currentPerformingSide !== null ||
+                                   !scheduleDetails ||
+                                   (!scheduleDetails.pesilatBiruName && !scheduleDetails.pesilatMerahName); // No participants
+
 
   return (
     <div className="flex flex-col min-h-screen bg-gray-100 dark:bg-gray-900">
@@ -454,11 +552,100 @@ export default function KetuaPertandinganTGRPage() {
         {renderSideScoresTable('biru')}
         {renderSideScoresTable('merah')}
         
-        <div className="mt-8 text-center">
+        <div className="mt-8 text-center flex flex-col items-center gap-4">
+           <Button 
+            onClick={handleTentukanPemenang} 
+            disabled={isDetermineWinnerDisabled}
+            className="bg-green-600 hover:bg-green-700 text-white py-3 px-6 text-lg"
+          >
+            <Trophy className="mr-2 h-5 w-5"/>
+            Tentukan Pemenang
+          </Button>
           <Button variant="outline" asChild>
             <Link href="/scoring/tgr/login"><ArrowLeft className="mr-2 h-4 w-4" /> Kembali ke Login TGR</Link>
           </Button>
         </div>
+
+        {winnerData && (
+            <Dialog open={isWinnerModalOpen} onOpenChange={setIsWinnerModalOpen}>
+                <DialogContent className="max-w-2xl bg-gradient-to-br from-gray-100 to-gray-200 dark:from-gray-800 dark:to-gray-900 p-0">
+                    <div className="bg-blue-600 text-white p-4 rounded-t-lg">
+                        <div className="flex justify-around text-center text-sm sm:text-base font-semibold">
+                            <span>GLG: {winnerData.gelanggang}</span>
+                            <span>BABAK: {winnerData.babak}</span>
+                            <span>KATEGORI: {winnerData.kategori}</span>
+                        </div>
+                    </div>
+
+                    <div className="p-6 space-y-6">
+                        <div className="flex justify-between items-start text-center">
+                            <div className="w-2/5">
+                                <div className="text-lg sm:text-xl font-bold text-blue-700 dark:text-blue-400">{winnerData.namaSudutBiru || "SUDUT BIRU"}</div>
+                                <div className="text-xs sm:text-sm text-blue-600 dark:text-blue-500">{winnerData.kontingenBiru || "-"}</div>
+                            </div>
+                            <div className="w-1/5 flex flex-col items-center pt-2">
+                                <p className="text-sm font-medium text-gray-600 dark:text-gray-400">Pemenang</p>
+                                <p className={cn(
+                                    "text-2xl sm:text-3xl font-bold",
+                                    winnerData.winner === 'biru' ? "text-blue-700 dark:text-blue-400" :
+                                    winnerData.winner === 'merah' ? "text-red-700 dark:text-red-400" :
+                                    "text-gray-700 dark:text-gray-300"
+                                )}>
+                                    {winnerData.winner === 'biru' ? (winnerData.namaSudutBiru || "BIRU") : 
+                                     winnerData.winner === 'merah' ? (winnerData.namaSudutMerah || "MERAH") : "SERI"}
+                                </p>
+                            </div>
+                            <div className="w-2/5">
+                                <div className="text-lg sm:text-xl font-bold text-red-700 dark:text-red-400">{winnerData.namaSudutMerah || "SUDUT MERAH"}</div>
+                                <div className="text-xs sm:text-sm text-red-600 dark:text-red-500">{winnerData.kontingenMerah || "-"}</div>
+                            </div>
+                        </div>
+
+                        <div className="overflow-x-auto border border-gray-300 dark:border-gray-600 rounded-md">
+                            <Table className="min-w-full text-sm">
+                                <TableHeader>
+                                    <TableRow className="bg-gray-200 dark:bg-gray-700">
+                                        <TableHead className="w-[35%] p-2 text-gray-700 dark:text-gray-300">Detail Point</TableHead>
+                                        <TableHead className="w-[32.5%] text-center p-2 bg-blue-500 text-white">Biru</TableHead>
+                                        <TableHead className="w-[32.5%] text-center p-2 bg-red-500 text-white">Merah</TableHead>
+                                    </TableRow>
+                                </TableHeader>
+                                <TableBody className="bg-white dark:bg-gray-800">
+                                    {[
+                                        { label: "Standar Deviasi", keyBiru: "standarDeviasi", keyMerah: "standarDeviasi", precision: 3 },
+                                        { label: "Waktu Penampilan (detik)", keyBiru: "waktuPenampilan", keyMerah: "waktuPenampilan", precision: 0 },
+                                        { label: "Pelanggaran", keyBiru: "pelanggaran", keyMerah: "pelanggaran", precision: 2 },
+                                    ].map(item => (
+                                        <TableRow key={item.label}>
+                                            <TableCell className="font-medium p-2 text-gray-600 dark:text-gray-400">{item.label}</TableCell>
+                                            <TableCell className="text-center p-2 text-gray-800 dark:text-gray-200">
+                                                {winnerData.detailPoint.biru ? winnerData.detailPoint.biru[item.keyBiru as keyof TGRMatchResultDetail].toFixed(item.precision) : '-'}
+                                            </TableCell>
+                                            <TableCell className="text-center p-2 text-gray-800 dark:text-gray-200">
+                                                 {winnerData.detailPoint.merah ? winnerData.detailPoint.merah[item.keyMerah as keyof TGRMatchResultDetail].toFixed(item.precision) : '-'}
+                                            </TableCell>
+                                        </TableRow>
+                                    ))}
+                                    <TableRow className="bg-gray-100 dark:bg-gray-700">
+                                        <TableCell className="font-bold text-base p-2 text-gray-700 dark:text-gray-300">Poin Kemenangan</TableCell>
+                                        <TableCell className="text-center font-bold text-base p-2 text-blue-700 dark:text-blue-400">
+                                            {winnerData.detailPoint.biru ? winnerData.detailPoint.biru.poinKemenangan.toFixed(2) : '-'}
+                                        </TableCell>
+                                        <TableCell className="text-center font-bold text-base p-2 text-red-700 dark:text-red-400">
+                                            {winnerData.detailPoint.merah ? winnerData.detailPoint.merah.poinKemenangan.toFixed(2) : '-'}
+                                        </TableCell>
+                                    </TableRow>
+                                </TableBody>
+                            </Table>
+                        </div>
+                    </div>
+                    <DialogFooter className="p-4 bg-gray-100 dark:bg-gray-800 rounded-b-lg">
+                        <Button onClick={() => setIsWinnerModalOpen(false)} variant="outline">Tutup</Button>
+                    </DialogFooter>
+                </DialogContent>
+            </Dialog>
+        )}
+
       </main>
     </div>
   );

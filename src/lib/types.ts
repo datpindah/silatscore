@@ -187,7 +187,6 @@ export interface TGRTimerStatus {
   isTimerRunning: boolean;
   matchStatus: 'Pending' | 'Ongoing' | 'Paused' | 'Finished';
   currentPerformingSide: 'biru' | 'merah' | null;
-  // performanceDuration is no longer needed for stopwatch logic itself
   performanceDurationBiru?: number; // Actual recorded performance time for Biru
   performanceDurationMerah?: number; // Actual recorded performance time for Merah
 }
@@ -224,10 +223,33 @@ export interface TGRDewanPenalty {
   timestamp: FirebaseTimestamp | Date | { seconds: number; nanoseconds: number };
 }
 
-export interface TGRMatchData { 
+export interface TGRMatchResultDetail {
+  standarDeviasi: number;
+  waktuPenampilan: number; // in seconds
+  pelanggaran: number; // total dewan penalty points
+  poinKemenangan: number; // final score for this side
+}
+
+export interface TGRMatchResult {
+  winner: 'biru' | 'merah' | 'seri';
+  gelanggang: string;
+  babak: string;
+  kategori: TGRCategoryType | string; // string for safety if category is unexpected
+  namaSudutBiru?: string;
+  kontingenBiru?: string;
+  namaSudutMerah?: string;
+  kontingenMerah?: string;
+  detailPoint: {
+    biru?: TGRMatchResultDetail; // Optional if no biru participant
+    merah?: TGRMatchResultDetail; // Optional if no merah participant
+  };
+  timestamp: FirebaseTimestamp | Date;
+}
+
+export interface TGRMatchData {
   id: string;
   scheduleDetails: ScheduleTGR;
-  timerStatus: TGRTimerStatus; 
+  timerStatus: TGRTimerStatus;
   finalMedianScoreBiru?: number;
   finalMedianScoreMerah?: number;
   totalDewanPenaltyPointsBiru?: number;
@@ -235,6 +257,7 @@ export interface TGRMatchData {
   overallScoreBiru?: number;
   overallScoreMerah?: number;
   status: 'Pending' | 'OngoingBiru' | 'OngoingMerah' | 'PausedBiru' | 'PausedMerah' | 'FinishedBiru' | 'FinishedMerah' | 'MatchFinished';
+  matchResult?: TGRMatchResult; // Added field for match result
 }
 // --- End TGR Scoring Types ---
 

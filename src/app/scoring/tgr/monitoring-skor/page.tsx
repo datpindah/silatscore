@@ -4,13 +4,15 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
-import { Header } from '@/components/layout/Header'; // Added Header import
+import { Header } from '@/components/layout/Header'; 
 import { ArrowLeft, Loader2, Sun, Moon, ChevronsRight, AlertTriangle } from 'lucide-react';
-import type { ScheduleTGR, TGRTimerStatus, TGRJuriScore, SideSpecificTGRScore, TGRDewanPenalty } from '@/lib/types';
+import type { ScheduleTGR, TGRTimerStatus, TGRJuriScore, SideSpecificTGRScore, TGRDewanPenalty, TGRMatchResult, TGRMatchResultDetail } from '@/lib/types';
 import { db } from '@/lib/firebase';
 import { doc, onSnapshot, getDoc, collection, query, orderBy, Timestamp, where, limit, setDoc } from 'firebase/firestore';
 import { cn } from '@/lib/utils';
 import { Skeleton } from '@/components/ui/skeleton';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
+
 
 const ACTIVE_TGR_SCHEDULE_CONFIG_PATH = 'app_settings/active_match_tgr';
 const SCHEDULE_TGR_COLLECTION = 'schedules_tgr';
@@ -170,6 +172,9 @@ export default function MonitoringSkorTGRPage() {
 
   const [summaryDataBiru, setSummaryDataBiru] = useState(initialSideSummary);
   const [summaryDataMerah, setSummaryDataMerah] = useState(initialSideSummary);
+  
+  const [winnerData, setWinnerData] = useState<TGRMatchResult | null>(null);
+  const [isWinnerOverlayOpen, setIsWinnerOverlayOpen] = useState(false);
 
 
   const resetPageData = useCallback(() => {
@@ -182,6 +187,8 @@ export default function MonitoringSkorTGRPage() {
     setIsNavigatingNextMatch(false);
     setSummaryDataBiru(initialSideSummary);
     setSummaryDataMerah(initialSideSummary);
+    setWinnerData(null);
+    setIsWinnerOverlayOpen(false);
   }, []);
 
   useEffect(() => {
@@ -245,10 +252,21 @@ export default function MonitoringSkorTGRPage() {
             const data = docSnap.data();
             if (data?.timerStatus) setTgrTimerStatus(data.timerStatus as TGRTimerStatus);
             else setTgrTimerStatus(initialTgrTimerStatus);
+            
+            if (data?.matchResult) {
+              setWinnerData(data.matchResult as TGRMatchResult);
+              setIsWinnerOverlayOpen(true);
+            } else {
+              setWinnerData(null);
+              setIsWinnerOverlayOpen(false);
+            }
+
           } else {
             setTgrTimerStatus(initialTgrTimerStatus);
+            setWinnerData(null);
+            setIsWinnerOverlayOpen(false);
           }
-        }, (err) => console.error("[MonitorTGR] Error fetching TGR match document (timer):", err)));
+        }, (err) => console.error("[MonitorTGR] Error fetching TGR match document (timer/result):", err)));
 
         TGR_JURI_IDS.forEach(juriId => {
           unsubscribers.push(onSnapshot(doc(matchDataDocRef, JURI_SCORES_TGR_SUBCOLLECTION, juriId), (juriScoreDoc) => {
@@ -257,7 +275,7 @@ export default function MonitoringSkorTGRPage() {
               ...prev,
               [juriId]: juriScoreDoc.exists() ? juriScoreDoc.data() as TGRJuriScore : null
             }));
-          }, (err) => console.error(`[MonitorTGR] Error fetching TGR scores for ${juriId}:`, err)));
+          },(err) => console.error(`[MonitorTGR] Error fetching TGR scores for ${juriId}:`, err)));
         });
 
         unsubscribers.push(onSnapshot(query(collection(matchDataDocRef, DEWAN_PENALTIES_TGR_SUBCOLLECTION), orderBy("timestamp", "asc")), (snap) => {
@@ -267,7 +285,7 @@ export default function MonitoringSkorTGRPage() {
 
 
       } catch (err) {
-        if (mounted) { console.error("[MonitorTGR] Error in loadData:", err); setError("Gagal memuat data pertandingan TGR."); }
+          if (mounted) { console.error("[MonitorTGR] Error in loadData:", err); setError("Gagal memuat data pertandingan TGR."); }
       }
     };
 
@@ -438,12 +456,18 @@ export default function MonitoringSkorTGRPage() {
     let textColorClass = "text-[var(--monitor-text)]";
     let sideToDisplayDetails: 'biru' | 'merah' | null = tgrTimerStatus.currentPerformingSide;
 
-    // If match finished and no specific side is active, try to show details for the last performed or any relevant side
     if (tgrTimerStatus.matchStatus === 'Finished' && tgrTimerStatus.currentPerformingSide === null) {
-        if (summaryDataMerah.hasPerformed && scheduleDetails.pesilatMerahName) sideToDisplayDetails = 'merah';
-        else if (summaryDataBiru.hasPerformed && scheduleDetails.pesilatBiruName) sideToDisplayDetails = 'biru';
-        else if (scheduleDetails.pesilatMerahName) sideToDisplayDetails = 'merah'; // Fallback to Merah if scheduled
-        else if (scheduleDetails.pesilatBiruName) sideToDisplayDetails = 'biru';   // Fallback to Biru if scheduled
+        if (winnerData && winnerData.winner !== 'seri') {
+            sideToDisplayDetails = winnerData.winner;
+        } else if (summaryDataMerah.hasPerformed && scheduleDetails.pesilatMerahName) {
+            sideToDisplayDetails = 'merah';
+        } else if (summaryDataBiru.hasPerformed && scheduleDetails.pesilatBiruName) {
+            sideToDisplayDetails = 'biru';
+        } else if (scheduleDetails.pesilatMerahName) {
+            sideToDisplayDetails = 'merah';
+        } else if (scheduleDetails.pesilatBiruName) {
+            sideToDisplayDetails = 'biru';
+        }
     }
 
 
@@ -455,11 +479,11 @@ export default function MonitoringSkorTGRPage() {
       name = scheduleDetails.pesilatMerahName;
       contingent = scheduleDetails.pesilatMerahContingent || "Kontingen";
       textColorClass = "text-[var(--monitor-pesilat-merah-name-text)]";
-    } else if (scheduleDetails.pesilatMerahName) { // Fallback if no specific side is active, but Merah is defined
+    } else if (scheduleDetails.pesilatMerahName) { 
         name = scheduleDetails.pesilatMerahName;
         contingent = scheduleDetails.pesilatMerahContingent || "Kontingen";
         textColorClass = "text-[var(--monitor-pesilat-merah-name-text)]";
-    } else if (scheduleDetails.pesilatBiruName) { // Fallback if no specific side is active, but Biru is defined
+    } else if (scheduleDetails.pesilatBiruName) { 
         name = scheduleDetails.pesilatBiruName;
         contingent = scheduleDetails.pesilatBiruContingent || scheduleDetails.pesilatMerahContingent || "Kontingen";
         textColorClass = "text-[var(--monitor-pesilat-biru-name-text)]";
@@ -472,7 +496,7 @@ export default function MonitoringSkorTGRPage() {
   if (isLoading && configMatchId === undefined) {
     return (
       <>
-        <Header />
+      <Header />
         <div className={cn("flex flex-col min-h-screen items-center justify-center", pageTheme === 'light' ? 'tgr-monitoring-theme-light' : 'tgr-monitoring-theme-dark', "bg-[var(--monitor-bg)] text-[var(--monitor-text)]")}>
             <Loader2 className="h-16 w-16 animate-spin text-[var(--monitor-overlay-accent-text)] mb-4" />
             <p className="text-xl">Memuat Konfigurasi Monitor...</p>
@@ -596,6 +620,91 @@ export default function MonitoringSkorTGRPage() {
               </Button>
           </div>
         )}
+
+        {winnerData && isWinnerOverlayOpen && (
+           <Dialog open={isWinnerOverlayOpen} onOpenChange={setIsWinnerOverlayOpen}>
+                <DialogContent className={cn(
+                    "max-w-2xl p-0 overflow-hidden",
+                    pageTheme === 'light' ? 'tgr-monitoring-theme-light' : 'tgr-monitoring-theme-dark',
+                    "bg-[var(--monitor-dialog-bg)] text-[var(--monitor-dialog-text)] border-[var(--monitor-dialog-border)]"
+                )}>
+                    <div className="bg-blue-600 text-white p-4">
+                        <div className="flex justify-around text-center text-sm sm:text-base font-semibold">
+                            <span>GLG: {winnerData.gelanggang}</span>
+                            <span>BABAK: {winnerData.babak}</span>
+                            <span>KATEGORI: {winnerData.kategori}</span>
+                        </div>
+                    </div>
+
+                    <div className="p-6 space-y-6">
+                        <div className="flex justify-between items-start text-center">
+                             <div className="w-2/5">
+                                <div className="text-lg sm:text-xl font-bold text-blue-700 dark:text-blue-400">{winnerData.namaSudutBiru || (scheduleDetails?.pesilatBiruName ? "SUDUT BIRU" : "")}</div>
+                                <div className="text-xs sm:text-sm text-blue-600 dark:text-blue-500">{winnerData.kontingenBiru || (scheduleDetails?.pesilatBiruName ? (scheduleDetails.pesilatBiruContingent || scheduleDetails.pesilatMerahContingent || "-") : "")}</div>
+                            </div>
+                            <div className="w-1/5 flex flex-col items-center pt-2">
+                                <p className="text-sm font-medium text-gray-600 dark:text-gray-400">Pemenang</p>
+                                <p className={cn(
+                                    "text-2xl sm:text-3xl font-bold",
+                                    winnerData.winner === 'biru' ? "text-blue-700 dark:text-blue-400" :
+                                    winnerData.winner === 'merah' ? "text-red-700 dark:text-red-400" :
+                                    "text-gray-700 dark:text-gray-300"
+                                )}>
+                                    {winnerData.winner === 'biru' ? (winnerData.namaSudutBiru || "BIRU") : 
+                                     winnerData.winner === 'merah' ? (winnerData.namaSudutMerah || "MERAH") : "SERI"}
+                                </p>
+                            </div>
+                             <div className="w-2/5">
+                                <div className="text-lg sm:text-xl font-bold text-red-700 dark:text-red-400">{winnerData.namaSudutMerah || (scheduleDetails?.pesilatMerahName ? "SUDUT MERAH" : "")}</div>
+                                <div className="text-xs sm:text-sm text-red-600 dark:text-red-500">{winnerData.kontingenMerah || (scheduleDetails?.pesilatMerahName ? (scheduleDetails.pesilatMerahContingent || "-") : "")}</div>
+                            </div>
+                        </div>
+
+                        <div className="overflow-x-auto border border-gray-300 dark:border-gray-600 rounded-md">
+                           <Table className="min-w-full text-sm">
+                                <TableHeader>
+                                    <TableRow className="bg-gray-200 dark:bg-gray-700">
+                                        <TableHead className="w-[35%] p-2 text-gray-700 dark:text-gray-300">Detail Point</TableHead>
+                                        <TableHead className="w-[32.5%] text-center p-2 bg-blue-500 text-white">Biru</TableHead>
+                                        <TableHead className="w-[32.5%] text-center p-2 bg-red-500 text-white">Merah</TableHead>
+                                    </TableRow>
+                                </TableHeader>
+                                <TableBody className="bg-white dark:bg-gray-800 text-[var(--monitor-text)]">
+                                    {[
+                                        { label: "Standar Deviasi", key: "standarDeviasi", precision: 3 },
+                                        { label: "Waktu Penampilan (detik)", key: "waktuPenampilan", precision: 0 },
+                                        { label: "Pelanggaran", key: "pelanggaran", precision: 2 },
+                                    ].map(item => (
+                                        <TableRow key={item.label}>
+                                            <TableCell className="font-medium p-2">{item.label}</TableCell>
+                                            <TableCell className="text-center p-2">
+                                                {winnerData.detailPoint.biru ? winnerData.detailPoint.biru[item.key as keyof TGRMatchResultDetail].toFixed(item.precision) : '-'}
+                                            </TableCell>
+                                            <TableCell className="text-center p-2">
+                                                 {winnerData.detailPoint.merah ? winnerData.detailPoint.merah[item.key as keyof TGRMatchResultDetail].toFixed(item.precision) : '-'}
+                                            </TableCell>
+                                        </TableRow>
+                                    ))}
+                                    <TableRow className="bg-gray-100 dark:bg-gray-700">
+                                        <TableCell className="font-bold text-base p-2">Poin Kemenangan</TableCell>
+                                        <TableCell className="text-center font-bold text-base p-2 text-blue-700 dark:text-blue-400">
+                                            {winnerData.detailPoint.biru ? winnerData.detailPoint.biru.poinKemenangan.toFixed(2) : '-'}
+                                        </TableCell>
+                                        <TableCell className="text-center font-bold text-base p-2 text-red-700 dark:text-red-400">
+                                            {winnerData.detailPoint.merah ? winnerData.detailPoint.merah.poinKemenangan.toFixed(2) : '-'}
+                                        </TableCell>
+                                    </TableRow>
+                                </TableBody>
+                            </Table>
+                        </div>
+                    </div>
+                    <DialogFooter className="p-4 bg-gray-100 dark:bg-gray-800 rounded-b-lg border-t border-gray-300 dark:border-gray-600">
+                        <Button onClick={() => setIsWinnerOverlayOpen(false)} variant="outline" className="bg-[var(--monitor-overlay-button-bg)] text-[var(--monitor-overlay-button-text)] border-[var(--monitor-overlay-button-border)]">Tutup</Button>
+                    </DialogFooter>
+                </DialogContent>
+            </Dialog>
+        )}
+
 
         {tgrTimerStatus.matchStatus === 'Finished' && tgrTimerStatus.currentPerformingSide === null && (
             <Button
