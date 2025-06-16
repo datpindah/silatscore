@@ -342,27 +342,56 @@ export default function JuriTGRPage({ params: paramsPromise }: { params: Promise
     return reasonForScoreButtons || "Status tidak diketahui.";
   };
 
-
   const getCategorySpecificName = () => {
-    if (!scheduleDetails) return <Skeleton className="h-6 w-48 inline-block" />;
+    if (!scheduleDetails) return (
+        <>
+            <div className="text-xl md:text-2xl font-semibold">
+                Kontingen: <Skeleton className="h-7 w-32 inline-block" />
+            </div>
+            <div className="text-lg md:text-xl">
+                <Skeleton className="h-6 w-48 inline-block" />
+            </div>
+        </>
+    );
+
     let name = "";
     let contingent = "";
-
-    const sideToDisplay = tgrTimerStatus.currentPerformingSide || (scheduleDetails.pesilatBiruName ? 'biru' : 'merah');
-
-    if (sideToDisplay === 'biru' && scheduleDetails.pesilatBiruName) {
+    let activeSideForDisplay = tgrTimerStatus.currentPerformingSide;
+    
+    if (activeSideForDisplay === 'biru' && scheduleDetails.pesilatBiruName) {
         name = scheduleDetails.pesilatBiruName;
-        contingent = scheduleDetails.pesilatBiruContingent || scheduleDetails.pesilatMerahContingent || "";
-    } else if (scheduleDetails.pesilatMerahName) {
+        contingent = scheduleDetails.pesilatBiruContingent || scheduleDetails.pesilatMerahContingent || "N/A";
+    } else if (activeSideForDisplay === 'merah' && scheduleDetails.pesilatMerahName) {
         name = scheduleDetails.pesilatMerahName;
-        contingent = scheduleDetails.pesilatMerahContingent || "";
+        contingent = scheduleDetails.pesilatMerahContingent || "N/A";
+    } else { // Fallback if no side performing or side doesn't match schedule (e.g. initial load or one-sided match)
+        if (scheduleDetails.pesilatMerahName && !scheduleDetails.pesilatBiruName) {
+            name = scheduleDetails.pesilatMerahName;
+            contingent = scheduleDetails.pesilatMerahContingent || "N/A";
+            if(!activeSideForDisplay) activeSideForDisplay = 'merah'; // Color based on the single participant
+        } else if (scheduleDetails.pesilatBiruName && !scheduleDetails.pesilatMerahName) {
+            name = scheduleDetails.pesilatBiruName;
+            contingent = scheduleDetails.pesilatBiruContingent || scheduleDetails.pesilatMerahContingent || "N/A";
+             if(!activeSideForDisplay) activeSideForDisplay = 'biru';
+        } else if (scheduleDetails.pesilatMerahName) { // Default to merah if both exist and no side is active
+             name = scheduleDetails.pesilatMerahName;
+             contingent = scheduleDetails.pesilatMerahContingent || "N/A";
+        } else if (scheduleDetails.pesilatBiruName) {
+             name = scheduleDetails.pesilatBiruName;
+             contingent = scheduleDetails.pesilatBiruContingent || scheduleDetails.pesilatMerahContingent || "N/A";
+        }
     }
+    
+    const colorClass = activeSideForDisplay === 'merah' ? 'text-red-600 dark:text-red-400'
+                     : activeSideForDisplay === 'biru' ? 'text-blue-600 dark:text-blue-400'
+                     : 'text-gray-700 dark:text-gray-300';
+
     return (
       <>
-        <div className="text-xl md:text-2xl font-semibold text-blue-600 dark:text-blue-400">
-          Kontingen: {contingent || <Skeleton className="h-7 w-32 inline-block" />}
+        <div className={cn("text-xl md:text-2xl font-semibold", colorClass)}>
+          Kontingen: {contingent || "N/A"}
         </div>
-        <div className="text-lg md:text-xl text-gray-700 dark:text-gray-300">
+        <div className={cn("text-lg md:text-xl", colorClass)}>
           {name || "Nama Pesilat/Tim"}
         </div>
       </>
@@ -376,7 +405,12 @@ export default function JuriTGRPage({ params: paramsPromise }: { params: Promise
       <Header />
       <main className="flex-1 container mx-auto px-2 py-4 md:p-6">
         <div className="mb-4 md:mb-6 text-center">
-          <h1 className="text-2xl md:text-3xl font-bold text-primary">
+          <h1 className={cn(
+              "text-2xl md:text-3xl font-bold",
+              tgrTimerStatus.currentPerformingSide === 'merah' ? 'text-red-600 dark:text-red-400' :
+              tgrTimerStatus.currentPerformingSide === 'biru' ? 'text-blue-600 dark:text-blue-400' :
+              'text-primary'
+          )}>
             {juriDisplayName} - {displaySide}
           </h1>
           {getCategorySpecificName()}
