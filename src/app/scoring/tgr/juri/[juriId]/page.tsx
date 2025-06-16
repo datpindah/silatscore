@@ -97,8 +97,10 @@ export default function JuriTGRPage({ params: paramsPromise }: { params: Promise
       const elementSum = (elements.teknikSeranganBertahan || 0) +
                          (elements.firmnessHarmony || 0) +
                          (elements.soulfulness || 0);
+      // External deductions (from Dewan) are not subtracted here for Juri's display, but on Ketua/Monitor page.
       return parseFloat((BASE_SCORE_GANDA + elementSum).toFixed(2));
     } else { // Tunggal or Regu
+      // External deductions (from Dewan) are not subtracted here for Juri's display.
       return parseFloat(
         (BASE_SCORE_TUNGGAL_REGU -
         ((sideData.gerakanSalahCount || 0) * GERAKAN_SALAH_DEDUCTION_TGR) +
@@ -142,12 +144,11 @@ export default function JuriTGRPage({ params: paramsPromise }: { params: Promise
   // Effect to manage overall loading state
   useEffect(() => {
     if (configMatchId === undefined) {
-      setIsLoading(true); // Global config not yet known
+      setIsLoading(true); 
     } else if (activeMatchId === null) {
-      setIsLoading(false); // No active match, so not loading
+      setIsLoading(false); 
       setError(null); 
     } else {
-      // activeMatchId is set, loading state depends on whether scheduleDetails are loaded.
       setIsLoading(!matchDetailsLoaded);
     }
   }, [configMatchId, activeMatchId, matchDetailsLoaded]);
@@ -155,16 +156,15 @@ export default function JuriTGRPage({ params: paramsPromise }: { params: Promise
   // Effect to sync activeMatchId with configMatchId and reset states
   useEffect(() => {
     if (configMatchId === undefined) {
-      return; // Wait for configMatchId to be defined
+      return; 
     }
 
     if (configMatchId !== activeMatchId) {
       setActiveMatchId(configMatchId);
       
-      // Reset states for the new match (or no match if configMatchId is null)
       setScheduleDetails(null);
       setMatchDetailsLoaded(false);
-      setJuriScore(getInitialJuriScoreData(undefined)); // Reset with undefined category
+      setJuriScore(getInitialJuriScoreData(undefined)); 
       setTgrTimerStatus(defaultInitialTgrTimerStatus);
       setError(null);
       setIsSaving(false);
@@ -174,14 +174,11 @@ export default function JuriTGRPage({ params: paramsPromise }: { params: Promise
 
   useEffect(() => {
     if (!activeMatchId) {
-      // No active match, ensure dependent states are cleared if not already
       setScheduleDetails(null);
       setMatchDetailsLoaded(false);
-      // isLoading is managed by the dedicated effect
       return;
     }
     let mounted = true;
-    // If activeMatchId is set but details aren't loaded, isLoading should be true (handled by dedicated effect)
 
     const loadSchedule = async () => {
       if (!mounted) return;
@@ -204,7 +201,6 @@ export default function JuriTGRPage({ params: paramsPromise }: { params: Promise
           const loadedScheduleDetails = { ...rawData, id: scheduleDocSnap.id, date: processedDate } as ScheduleTGR;
           setScheduleDetails(loadedScheduleDetails);
           setMatchDetailsLoaded(true); 
-          // JuriScore re-initialization based on new category is handled by the juriScore effect
         } else {
           setError(`Detail Jadwal TGR (ID: ${activeMatchId}) tidak ditemukan.`);
           setScheduleDetails(null); setMatchDetailsLoaded(false);
@@ -216,35 +212,22 @@ export default function JuriTGRPage({ params: paramsPromise }: { params: Promise
     };
     loadSchedule();
     return () => { mounted = false; };
-  }, [activeMatchId]); // Only re-run when activeMatchId changes
+  }, [activeMatchId]); 
 
   useEffect(() => {
-    // This effect now correctly depends on currentCategory (derived from scheduleDetails)
-    // to initialize or reset juriScore when the category changes or becomes known.
     if (!activeMatchId || !juriId) {
-      // If no active match or juriId, reset to a very basic default.
-      // This might happen if configMatchId becomes null.
       setJuriScore(getInitialJuriScoreData(undefined));
       return;
     }
     
-    if (!currentCategory && scheduleDetails) {
-        // This case should be rare if scheduleDetails implies a category,
-        // but as a fallback, reset if category is somehow still unknown despite having scheduleDetails.
+    // If scheduleDetails is not yet loaded, we might not know the category.
+    // Initialize with a generic base or wait for currentCategory to be defined.
+    // This effect will re-run when currentCategory (derived from scheduleDetails) updates.
+    if (!currentCategory && scheduleDetails) { 
+        // Category might become available if scheduleDetails was just loaded
+        setJuriScore(getInitialJuriScoreData(scheduleDetails.category));
+    } else if (!scheduleDetails) {
         setJuriScore(getInitialJuriScoreData(undefined));
-        return;
-    }
-    if (!scheduleDetails && currentCategory) {
-        // This means scheduleDetails was reset (e.g. activeMatchId changed),
-        // but currentCategory (from previous render's scheduleDetails) might still be lingering.
-        // Reset juriScore to an undefined category state.
-        setJuriScore(getInitialJuriScoreData(undefined));
-        return;
-    }
-    if (!scheduleDetails && !currentCategory) {
-        // Both are null/undefined, ensure juriScore is at its most basic default.
-        setJuriScore(getInitialJuriScoreData(undefined));
-        return;
     }
 
 
@@ -255,7 +238,7 @@ export default function JuriTGRPage({ params: paramsPromise }: { params: Promise
       if (docSnap.exists()) {
         const data = docSnap.data() as Partial<TGRJuriScore>;
         const getSideData = (sideData: Partial<SideSpecificTGRScore> | undefined): SideSpecificTGRScore => {
-            const initial = getInitialSideSpecificScore(currentCategory); // Use currentCategory here
+            const initial = getInitialSideSpecificScore(currentCategory); 
             const merged = { ...initial, ...sideData };
             if (currentCategory === 'Ganda') {
                 merged.gandaElements = { ...initialGandaElementScores, ...sideData?.gandaElements };
@@ -269,7 +252,6 @@ export default function JuriTGRPage({ params: paramsPromise }: { params: Promise
           lastUpdated: data.lastUpdated,
         });
       } else {
-        // Document doesn't exist, initialize with category if available
         setJuriScore(getInitialJuriScoreData(currentCategory));
       }
     }, (err) => {
@@ -305,27 +287,55 @@ export default function JuriTGRPage({ params: paramsPromise }: { params: Promise
   }, [activeMatchId]);
 
 
-  const saveJuriScore = useCallback(async (updatedScoreData: TGRJuriScore) => {
+  const saveJuriScore = useCallback(async (scoreDataFromState: TGRJuriScore) => {
     if (!activeMatchId || isSaving || !currentSide || !currentCategory) {
       console.warn("Save aborted: No activeMatchId, isSaving, no currentSide, or no category.");
       return;
     }
     setIsSaving(true);
     try {
-      const scoreToSave: TGRJuriScore = {
-        ...updatedScoreData,
-        biru: {
-            ...updatedScoreData.biru,
-            calculatedScore: calculateSideScoreForJuriDisplay(updatedScoreData.biru, currentCategory),
-        },
-        merah: {
-            ...updatedScoreData.merah,
-            calculatedScore: calculateSideScoreForJuriDisplay(updatedScoreData.merah, currentCategory),
-        },
+      const prepareSideDataForFirestore = (
+        sideData: SideSpecificTGRScore | undefined, 
+        category: TGRCategoryType
+      ): SideSpecificTGRScore => {
+        const initial = getInitialSideSpecificScore(category);
+        const currentData = { ...initial, ...sideData }; // Merge current state over defaults
+
+        // Ensure no 'undefined' values are passed for these specific fields.
+        // Firestore accepts 'null' for fields that are not set or intentionally empty.
+        if (currentData.gerakanSalahCount === undefined) {
+          (currentData as any).gerakanSalahCount = null;
+        }
+        if (currentData.staminaKemantapanBonus === undefined) {
+          (currentData as any).staminaKemantapanBonus = null;
+        }
+        
+        if (currentData.gandaElements === undefined) {
+          (currentData as any).gandaElements = null;
+        } else if (category === 'Ganda' && currentData.gandaElements) {
+            // For Ganda, ensure all sub-elements of gandaElements are numbers, not undefined
+            const elements = currentData.gandaElements;
+            elements.teknikSeranganBertahan = elements.teknikSeranganBertahan ?? 0;
+            elements.firmnessHarmony = elements.firmnessHarmony ?? 0;
+            elements.soulfulness = elements.soulfulness ?? 0;
+        }
+
+        currentData.externalDeductions = currentData.externalDeductions ?? 0;
+        currentData.isReady = currentData.isReady ?? false;
+        
+        // Recalculate score based on this now-sanitized data before saving
+        currentData.calculatedScore = calculateSideScoreForJuriDisplay(currentData, category);
+        return currentData;
+      };
+
+      const scoreToSaveForFirestore: TGRJuriScore = {
+        biru: prepareSideDataForFirestore(scoreDataFromState.biru, currentCategory),
+        merah: prepareSideDataForFirestore(scoreDataFromState.merah, currentCategory),
         lastUpdated: serverTimestamp() as Timestamp,
       };
+
       const juriScoreDocRef = doc(db, MATCHES_TGR_COLLECTION, activeMatchId, JURI_SCORES_TGR_SUBCOLLECTION, juriId);
-      await setDoc(juriScoreDocRef, scoreToSave, { merge: true });
+      await setDoc(juriScoreDocRef, scoreToSaveForFirestore, { merge: true });
     } catch (err) {
       setError(`Gagal menyimpan skor: ${err instanceof Error ? err.message : String(err)}`);
       console.error("Error saving Juri TGR score:", err);
@@ -607,4 +617,3 @@ export default function JuriTGRPage({ params: paramsPromise }: { params: Promise
   );
 }
 
-    
