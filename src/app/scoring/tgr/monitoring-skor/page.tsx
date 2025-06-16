@@ -63,7 +63,7 @@ function calculateStandardDeviation(scores: number[]): number {
   if (scores.length < 2) return 0; 
   const mean = scores.reduce((sum, score) => sum + score, 0) / scores.length;
   const variance = scores.reduce((sum, score) => sum + Math.pow(score - mean, 2), 0) / scores.length; 
-  return parseFloat(Math.sqrt(variance).toFixed(8)); 
+  return parseFloat(Math.sqrt(variance).toFixed(3)); 
 }
 
 
@@ -143,7 +143,7 @@ const TGRSideSummaryTable: React.FC<TGRSideSummaryTableProps> = ({
               <th colSpan={4} className="p-1.5 border border-gray-400 dark:border-gray-600 bg-green-600 text-white font-semibold">Standard Deviation</th>
             </tr>
             <tr>
-              <td colSpan={4} className="p-1.5 border border-gray-400 dark:border-gray-600 text-center">{stdDev.toFixed(8)}</td>
+              <td colSpan={4} className="p-1.5 border border-gray-400 dark:border-gray-600 text-center">{stdDev.toFixed(3)}</td>
             </tr>
           </tbody>
         </table>
@@ -453,6 +453,7 @@ export default function MonitoringSkorTGRPage() {
         if (summaryDataBiru.hasPerformed && scheduleDetails.pesilatBiruContingent) return scheduleDetails.pesilatBiruContingent;
     }
     
+    // Fallback for single performer or initial state
     if (scheduleDetails.pesilatBiruName) return scheduleDetails.pesilatBiruContingent || scheduleDetails.pesilatMerahContingent || "Kontingen";
     if (scheduleDetails.pesilatMerahName) return scheduleDetails.pesilatMerahContingent || "Kontingen";
     return "Kontingen";
@@ -462,19 +463,20 @@ export default function MonitoringSkorTGRPage() {
     if (tgrTimerStatus.currentPerformingSide) {
         return tgrTimerStatus.currentPerformingSide === 'biru' ? 'SUDUT BIRU' : 'SUDUT MERAH';
     }
+    // If match is finished and no side is performing (both performed if applicable)
     if (tgrTimerStatus.matchStatus === 'Finished' && tgrTimerStatus.currentPerformingSide === null) {
         if (summaryDataMerah.hasPerformed && summaryDataBiru.hasPerformed && scheduleDetails?.pesilatBiruName && scheduleDetails?.pesilatMerahName) return "PARTAI SELESAI";
         if (summaryDataMerah.hasPerformed && scheduleDetails?.pesilatMerahName) return "SUDUT MERAH SELESAI";
         if (summaryDataBiru.hasPerformed && scheduleDetails?.pesilatBiruName) return "SUDUT BIRU SELESAI";
-        return "PARTAI SELESAI";
+        return "PARTAI SELESAI"; // Generic finished state
     }
+    // Default before any side is active or if only one participant
     if (scheduleDetails?.pesilatBiruName && !scheduleDetails.pesilatMerahName) return 'PESERTA (BIRU)';
     if (scheduleDetails?.pesilatMerahName && !scheduleDetails.pesilatBiruName) return 'PESERTA (MERAH)';
     if (scheduleDetails?.pesilatBiruName && scheduleDetails?.pesilatMerahName) return 'MENUNGGU SISI';
     return 'N/A';
   }
 
-  // Determine if the Biru summary table should be shown
   const conditionToHideBiruSummary = 
     !!scheduleDetails?.pesilatMerahName && // Merah exists
     tgrTimerStatus.currentPerformingSide === 'merah' && // Merah is currently the active side
@@ -485,11 +487,9 @@ export default function MonitoringSkorTGRPage() {
     !!scheduleDetails?.pesilatBiruName &&
     !conditionToHideBiruSummary;
 
-  // Determine if the Merah summary table should be shown
   const showMerahSummaryTable = 
     summaryDataMerah.hasPerformed && 
     !!scheduleDetails?.pesilatMerahName;
-
 
   return (
     <>
