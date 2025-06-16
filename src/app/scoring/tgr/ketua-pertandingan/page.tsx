@@ -28,12 +28,20 @@ interface PenaltyConfigItem {
   points: number;
 }
 
-const PENALTY_CONFIG_DEFAULT: PenaltyConfigItem[] = [
+const PENALTY_CONFIG_TUNGGAL: PenaltyConfigItem[] = [
   { id: 'arena_out', description: "Penampilan Keluar Gelanggang 10mx10m", points: -0.50 },
   { id: 'weapon_touch_floor', description: "Menjatuhkan Senjata Menyentuh Lantai", points: -0.50 },
   { id: 'time_tolerance_violation', description: "Penampilan melebihi atau kurang dari toleransi waktu 5 Detik S/d 10 Detik", points: -0.50 },
   { id: 'costume_violation', description: "Pakaian tidak sesuai aturan (kain samping jatuh, kain samping tidak 1 (satu) motif, baju atasan dan bawahan tidak 1 (satu) warna)", points: -0.50 },
   { id: 'movement_hold_violation', description: "Menahan gerakan lebih dari 5 (lima) detik.", points: -0.50 },
+];
+
+const PENALTY_CONFIG_GANDA: PenaltyConfigItem[] = [
+  { id: 'arena_out', description: "Penampilan keluar gelanggang 10 m x 10 m.", points: -0.50 },
+  { id: 'weapon_touch_floor', description: "Senjata jatuh tidak memenuhi sinopsis.", points: -0.50 },
+  { id: 'weapon_out_of_arena', description: "Senjata jatuh keluar gelanggang saat masih harus menggunakan dalam penampilannya.", points: -0.50 },
+  { id: 'weapon_broken_detached', description: "Senjata terlepas dari gagangnya atau patah.", points: -0.50 },
+  { id: 'costume_violation', description: "Mengenakan pakaian yang tidak sesuai dengan ketentuan.", points: -0.50 },
 ];
 
 const PENALTY_CONFIG_REGU: PenaltyConfigItem[] = [
@@ -452,7 +460,14 @@ export default function KetuaPertandinganTGRPage() {
     const waktuTampil = side === 'biru' ? waktuTampilBiru : waktuTampilMerah;
     const recordedPerformanceDuration = side === 'biru' ? tgrTimerStatus.performanceDurationBiru : tgrTimerStatus.performanceDurationMerah;
 
-    const penaltyListToDisplay = scheduleDetails.category === 'Regu' ? PENALTY_CONFIG_REGU : PENALTY_CONFIG_DEFAULT;
+    let penaltyListToDisplay: PenaltyConfigItem[];
+    if (scheduleDetails?.category === 'Regu') {
+      penaltyListToDisplay = PENALTY_CONFIG_REGU;
+    } else if (scheduleDetails?.category === 'Ganda') {
+      penaltyListToDisplay = PENALTY_CONFIG_GANDA;
+    } else {
+      penaltyListToDisplay = PENALTY_CONFIG_TUNGGAL;
+    }
 
     return (
       <div className="mb-8">
@@ -586,14 +601,12 @@ export default function KetuaPertandinganTGRPage() {
         {winnerData && (
             <Dialog open={isWinnerModalOpen} onOpenChange={setIsWinnerModalOpen}>
                 <DialogContent className="max-w-2xl bg-gradient-to-br from-gray-100 to-gray-200 dark:from-gray-800 dark:to-gray-900 p-0">
-                    <DialogHeader className="sr-only">
-                      <DialogTitle>Hasil Akhir Pertandingan TGR</DialogTitle>
-                      <DialogDescription>
-                        Rincian skor dan pemenang pertandingan TGR: Gelanggang {winnerData.gelanggang}, Babak {winnerData.babak}, Kategori {winnerData.kategori}.
-                        {winnerData.namaSudutBiru && ` Sudut Biru: ${winnerData.namaSudutBiru} (${winnerData.kontingenBiru}).`}
-                        {winnerData.namaSudutMerah && ` Sudut Merah: ${winnerData.namaSudutMerah} (${winnerData.kontingenMerah}).`}
-                        Pemenang: {winnerData.winner === 'biru' ? winnerData.namaSudutBiru || 'Biru' : winnerData.winner === 'merah' ? winnerData.namaSudutMerah || 'Merah' : 'Seri'}.
-                      </DialogDescription>
+                   <DialogHeader className="sr-only">
+                        <DialogTitle>Hasil Pertandingan TGR</DialogTitle>
+                        <DialogDescription>
+                            Detail hasil akhir pertandingan TGR: {winnerData.kategori}, Babak {winnerData.babak}, Gelanggang {winnerData.gelanggang}. 
+                            Pemenang: {winnerData.winner === 'biru' ? (winnerData.namaSudutBiru || 'BIRU') : winnerData.winner === 'merah' ? (winnerData.namaSudutMerah || 'MERAH') : 'SERI'}.
+                        </DialogDescription>
                     </DialogHeader>
                     <div className="bg-blue-600 text-white p-4 rounded-t-lg">
                         <div className="flex justify-around text-center text-sm sm:text-base font-semibold">
@@ -676,6 +689,3 @@ export default function KetuaPertandinganTGRPage() {
     </div>
   );
 }
-
-
-    

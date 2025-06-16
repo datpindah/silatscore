@@ -212,7 +212,9 @@ export type TGRDewanPenaltyType =
   | 'weapon_touch_floor'
   | 'time_tolerance_violation'
   | 'costume_violation'
-  | 'movement_hold_violation';
+  | 'movement_hold_violation'
+  | 'weapon_out_of_arena'  // New for Ganda
+  | 'weapon_broken_detached'; // New for Ganda
 
 export interface TGRDewanPenalty {
   id?: string;
@@ -260,4 +262,3 @@ export interface TGRMatchData {
   matchResult?: TGRMatchResult; // Added field for match result
 }
 // --- End TGR Scoring Types ---
-

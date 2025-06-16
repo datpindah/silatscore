@@ -24,13 +24,13 @@ const TGR_JURI_IDS = ['juri-1', 'juri-2', 'juri-3', 'juri-4', 'juri-5', 'juri-6'
 const BASE_SCORE_TGR = 9.90;
 const GERAKAN_SALAH_DEDUCTION = 0.01;
 
-interface PenaltyConfig {
+interface PenaltyConfigItem {
   id: TGRDewanPenaltyType;
   description: string;
   points: number;
 }
 
-const PENALTY_TYPES_DEFAULT: PenaltyConfig[] = [
+const PENALTY_CONFIG_TUNGGAL: PenaltyConfigItem[] = [
   { id: 'arena_out', description: "Penampilan Keluar Gelanggang 10mx10m", points: -0.50 },
   { id: 'weapon_touch_floor', description: "Menjatuhkan Senjata Menyentuh Lantai", points: -0.50 },
   { id: 'time_tolerance_violation', description: "Penampilan melebihi atau kurang dari toleransi waktu 5 Detik S/d 10 Detik", points: -0.50 },
@@ -38,7 +38,15 @@ const PENALTY_TYPES_DEFAULT: PenaltyConfig[] = [
   { id: 'movement_hold_violation', description: "Menahan gerakan lebih dari 5 (lima) detik.", points: -0.50 },
 ];
 
-const REGU_PENALTY_TYPES: PenaltyConfig[] = [
+const PENALTY_CONFIG_GANDA: PenaltyConfigItem[] = [
+  { id: 'arena_out', description: "Penampilan keluar gelanggang 10 m x 10 m.", points: -0.50 },
+  { id: 'weapon_touch_floor', description: "Senjata jatuh tidak memenuhi sinopsis.", points: -0.50 },
+  { id: 'weapon_out_of_arena', description: "Senjata jatuh keluar gelanggang saat masih harus menggunakan dalam penampilannya.", points: -0.50 },
+  { id: 'weapon_broken_detached', description: "Senjata terlepas dari gagangnya atau patah.", points: -0.50 },
+  { id: 'costume_violation', description: "Mengenakan pakaian yang tidak sesuai dengan ketentuan.", points: -0.50 },
+];
+
+const PENALTY_CONFIG_REGU: PenaltyConfigItem[] = [
   { id: 'time_tolerance_violation', description: "Penampilan melebihi atau kekurangan dari toleransi waktu >5 detik s/d 10 detik.", points: -0.50 },
   { id: 'arena_out', description: "Penampilan keluar gelanggang 10 m x 10 m.", points: -0.50 },
   { id: 'costume_violation', description: "Pakaian tidak sesuai aturan.", points: -0.50 },
@@ -175,7 +183,7 @@ export default function DewanTGRPenaltyPage() {
   }, [isLoading, matchDetailsLoaded]);
 
 
-  const handleAddPenalty = async (penalty: PenaltyConfig) => {
+  const handleAddPenalty = async (penalty: PenaltyConfigItem) => {
     const currentUser = auth.currentUser;
     if (!currentUser) {
       setError("User tidak terautentikasi. Silakan login ulang dan coba lagi.");
@@ -200,7 +208,7 @@ export default function DewanTGRPenaltyPage() {
     try {
       const penaltyData: Omit<TGRDewanPenalty, 'id' | 'timestamp'> & { timestamp: any } = {
         type: penalty.id,
-        description: penalty.description, // Use description from the selected list
+        description: penalty.description,
         pointsDeducted: penalty.points,
         side: currentPerformingSide, 
         timestamp: serverTimestamp(),
@@ -372,7 +380,15 @@ export default function DewanTGRPenaltyPage() {
     return `Sudut Merah: ${scheduleDetails.pesilatMerahName || 'N/A'} (${scheduleDetails.pesilatMerahContingent || 'N/A'})`;
   };
 
-  const currentPenaltyListToDisplay = scheduleDetails?.category === 'Regu' ? REGU_PENALTY_TYPES : PENALTY_TYPES_DEFAULT;
+  let currentPenaltyListToDisplay: PenaltyConfigItem[];
+  if (scheduleDetails?.category === 'Regu') {
+    currentPenaltyListToDisplay = PENALTY_CONFIG_REGU;
+  } else if (scheduleDetails?.category === 'Ganda') {
+    currentPenaltyListToDisplay = PENALTY_CONFIG_GANDA;
+  } else { // Default to Tunggal if category is Tunggal or not specified/matched
+    currentPenaltyListToDisplay = PENALTY_CONFIG_TUNGGAL;
+  }
+
 
   if (isLoading && configMatchId === undefined) {
     return (
@@ -453,7 +469,7 @@ export default function DewanTGRPenaltyPage() {
 
             <div className="space-y-1 border border-gray-300 dark:border-gray-700 rounded-md shadow-sm">
               <div className="grid grid-cols-[1fr_auto_auto_auto] items-center p-2 bg-gray-100 dark:bg-gray-800 font-semibold border-b border-gray-300 dark:border-gray-700">
-                <div className="text-sm">Pelanggaran ({scheduleDetails?.category === 'Regu' ? 'Regu' : 'Tunggal/Ganda'})</div>
+                <div className="text-sm">Pelanggaran ({scheduleDetails?.category || 'N/A'})</div>
                 <div className="text-sm text-center w-24">Hapus</div>
                 <div className="text-sm text-center w-28">Skor</div>
                 <div className="text-sm text-center w-20">Subtotal ({tgrTimerStatus.currentPerformingSide === 'biru' ? 'Biru' : 'Merah'})</div>
@@ -502,4 +518,3 @@ export default function DewanTGRPenaltyPage() {
     </div>
   );
 }
-        
