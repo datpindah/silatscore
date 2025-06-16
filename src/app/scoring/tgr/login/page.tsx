@@ -136,8 +136,16 @@ function TGRLoginPageContent() {
     }
     
     setIsSubmitting(true);
-    await signIn(email, password);
-    setIsSubmitting(false);
+    try {
+      await signIn(email, password);
+    } catch (submitError) {
+      // This catch block is a safeguard for unexpected errors from signIn,
+      // though signIn from AuthContext is designed to handle its own errors.
+      console.error("Error during TGR login handleSubmit calling signIn:", submitError);
+      setPageError("Terjadi kesalahan tak terduga saat mencoba login.");
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   const isLoadingOverall = authLoading || isSubmitting || scheduleLoading;
@@ -244,3 +252,4 @@ export default function TGRLoginPage() {
     </Suspense>
   )
 }
+
