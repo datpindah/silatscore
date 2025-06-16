@@ -22,21 +22,27 @@ const DEWAN_PENALTIES_TGR_SUBCOLLECTION = 'dewan_penalties_tgr';
 
 const TGR_JURI_IDS = ['juri-1', 'juri-2', 'juri-3', 'juri-4', 'juri-5', 'juri-6'] as const;
 
-const PENALTY_DESCRIPTIONS_MAP: Record<TGRDewanPenaltyType, string> = {
-  'arena_out': "Keluar Gelanggang",
-  'weapon_touch_floor': "Senjata Jatuh",
-  'time_tolerance_violation': "Toleransi Waktu",
-  'costume_violation': "Pakaian",
-  'movement_hold_violation': "Gerakan Tertahan"
-};
+interface PenaltyConfigItem {
+  id: TGRDewanPenaltyType;
+  description: string;
+  points: number;
+}
 
-const PENALTY_DISPLAY_ORDER: TGRDewanPenaltyType[] = [
-  'arena_out',
-  'weapon_touch_floor',
-  'time_tolerance_violation',
-  'costume_violation',
-  'movement_hold_violation',
+const PENALTY_CONFIG_DEFAULT: PenaltyConfigItem[] = [
+  { id: 'arena_out', description: "Penampilan Keluar Gelanggang 10mx10m", points: -0.50 },
+  { id: 'weapon_touch_floor', description: "Menjatuhkan Senjata Menyentuh Lantai", points: -0.50 },
+  { id: 'time_tolerance_violation', description: "Penampilan melebihi atau kurang dari toleransi waktu 5 Detik S/d 10 Detik", points: -0.50 },
+  { id: 'costume_violation', description: "Pakaian tidak sesuai aturan (kain samping jatuh, kain samping tidak 1 (satu) motif, baju atasan dan bawahan tidak 1 (satu) warna)", points: -0.50 },
+  { id: 'movement_hold_violation', description: "Menahan gerakan lebih dari 5 (lima) detik.", points: -0.50 },
 ];
+
+const PENALTY_CONFIG_REGU: PenaltyConfigItem[] = [
+  { id: 'time_tolerance_violation', description: "Penampilan melebihi atau kekurangan dari toleransi waktu >5 detik s/d 10 detik.", points: -0.50 },
+  { id: 'arena_out', description: "Penampilan keluar gelanggang 10 m x 10 m.", points: -0.50 },
+  { id: 'costume_violation', description: "Pakaian tidak sesuai aturan.", points: -0.50 },
+  { id: 'movement_hold_violation', description: "Manahan gerakan lebih dari 5 (lima) detik", points: -0.50 },
+];
+
 
 const initialGlobalTgrTimerStatus: TGRTimerStatus = {
   timerSeconds: 0,
@@ -446,6 +452,8 @@ export default function KetuaPertandinganTGRPage() {
     const waktuTampil = side === 'biru' ? waktuTampilBiru : waktuTampilMerah;
     const recordedPerformanceDuration = side === 'biru' ? tgrTimerStatus.performanceDurationBiru : tgrTimerStatus.performanceDurationMerah;
 
+    const penaltyListToDisplay = scheduleDetails.category === 'Regu' ? PENALTY_CONFIG_REGU : PENALTY_CONFIG_DEFAULT;
+
     return (
       <div className="mb-8">
         <div className={cn("text-white p-3 md:p-4 text-center rounded-t-lg shadow-md", side === 'biru' ? 'bg-blue-600' : 'bg-red-600')}>
@@ -522,13 +530,13 @@ export default function KetuaPertandinganTGRPage() {
             <div className="border-l border-gray-300 dark:border-gray-600 pl-3">
               <h3 className="text-md font-semibold mb-1 text-center text-gray-700 dark:text-gray-200">Pelanggaran Dewan</h3>
               <div className="space-y-1 text-xs">
-                {PENALTY_DISPLAY_ORDER.map(penaltyType => {
+                {penaltyListToDisplay.map(penaltyConfig => {
                   const sidePenaltyValue = dewanPenalties
-                    .filter(p => p.type === penaltyType && p.side === side)
+                    .filter(p => p.type === penaltyConfig.id && p.side === side)
                     .reduce((sum, p) => sum + p.pointsDeducted, 0);
                   return (
-                    <div key={`${penaltyType}-${side}`} className="flex justify-between items-center p-1.5 bg-gray-50 dark:bg-gray-700/40 rounded">
-                      <span className="text-gray-600 dark:text-gray-300">{PENALTY_DESCRIPTIONS_MAP[penaltyType]}</span>
+                    <div key={`${penaltyConfig.id}-${side}`} className="flex justify-between items-center p-1.5 bg-gray-50 dark:bg-gray-700/40 rounded">
+                      <span className="text-gray-600 dark:text-gray-300">{penaltyConfig.description}</span>
                       <span className={cn("font-semibold px-1.5 py-0.5 rounded text-white", sidePenaltyValue < 0 ? "bg-red-500" : "bg-gray-400 dark:bg-gray-600")}>
                         {derivedIsLoading ? <Skeleton className="h-4 w-10 inline-block"/> : sidePenaltyValue.toFixed(2)}
                       </span>
@@ -630,17 +638,17 @@ export default function KetuaPertandinganTGRPage() {
                                 </TableHeader>
                                 <TableBody className="bg-white dark:bg-gray-800 text-gray-800 dark:text-gray-200">
                                     {[
-                                        { label: "Standar Deviasi", keyBiru: "standarDeviasi", keyMerah: "standarDeviasi", precision: 3 },
-                                        { label: "Waktu Penampilan (detik)", keyBiru: "waktuPenampilan", keyMerah: "waktuPenampilan", precision: 0 },
-                                        { label: "Pelanggaran", keyBiru: "pelanggaran", keyMerah: "pelanggaran", precision: 2 },
+                                        { label: "Standar Deviasi", key: "standarDeviasi", precision: 3 },
+                                        { label: "Waktu Penampilan (detik)", key: "waktuPenampilan", precision: 0 },
+                                        { label: "Pelanggaran", key: "pelanggaran", precision: 2 },
                                     ].map(item => (
                                         <TableRow key={item.label}>
                                             <TableCell className="font-medium p-2 text-gray-600 dark:text-gray-400">{item.label}</TableCell>
                                             <TableCell className="text-center p-2">
-                                                {winnerData.detailPoint.biru ? winnerData.detailPoint.biru[item.keyBiru as keyof TGRMatchResultDetail].toFixed(item.precision) : '-'}
+                                                {winnerData.detailPoint.biru ? winnerData.detailPoint.biru[item.key as keyof TGRMatchResultDetail].toFixed(item.precision) : '-'}
                                             </TableCell>
                                             <TableCell className="text-center p-2">
-                                                 {winnerData.detailPoint.merah ? winnerData.detailPoint.merah[item.keyMerah as keyof TGRMatchResultDetail].toFixed(item.precision) : '-'}
+                                                 {winnerData.detailPoint.merah ? winnerData.detailPoint.merah[item.key as keyof TGRMatchResultDetail].toFixed(item.precision) : '-'}
                                             </TableCell>
                                         </TableRow>
                                     ))}
@@ -668,3 +676,6 @@ export default function KetuaPertandinganTGRPage() {
     </div>
   );
 }
+
+
+    
