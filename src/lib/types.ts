@@ -183,11 +183,11 @@ export interface JuriMatchData {
 
 // --- TGR Scoring Types ---
 export interface TGRTimerStatus {
-  timerSeconds: number; // Elapsed time for stopwatch, or remaining for countdown
+  timerSeconds: number; // Elapsed time for stopwatch
   isTimerRunning: boolean;
   matchStatus: 'Pending' | 'Ongoing' | 'Paused' | 'Finished';
   currentPerformingSide: 'biru' | 'merah' | null;
-  performanceDuration?: number; // Target/max duration if still needed, for stopwatch less critical
+  // performanceDuration is no longer needed for stopwatch logic itself
   performanceDurationBiru?: number; // Actual recorded performance time for Biru
   performanceDurationMerah?: number; // Actual recorded performance time for Merah
 }
@@ -224,17 +224,17 @@ export interface TGRDewanPenalty {
   timestamp: FirebaseTimestamp | Date | { seconds: number; nanoseconds: number };
 }
 
-export interface TGRMatchData { // This type might be less used if we manage status directly in TGRTimerStatus
+export interface TGRMatchData { 
   id: string;
   scheduleDetails: ScheduleTGR;
-  timerStatus: TGRTimerStatus; // Centralized timer and status
+  timerStatus: TGRTimerStatus; 
   finalMedianScoreBiru?: number;
   finalMedianScoreMerah?: number;
   totalDewanPenaltyPointsBiru?: number;
   totalDewanPenaltyPointsMerah?: number;
   overallScoreBiru?: number;
   overallScoreMerah?: number;
-  // status field below could be derived from TGRTimerStatus.matchStatus and TGRTimerStatus.currentPerformingSide
   status: 'Pending' | 'OngoingBiru' | 'OngoingMerah' | 'PausedBiru' | 'PausedMerah' | 'FinishedBiru' | 'FinishedMerah' | 'MatchFinished';
 }
 // --- End TGR Scoring Types ---
+
