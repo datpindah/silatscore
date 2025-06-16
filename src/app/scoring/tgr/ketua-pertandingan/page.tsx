@@ -38,7 +38,7 @@ const PENALTY_DISPLAY_ORDER: TGRDewanPenaltyType[] = [
 ];
 
 const initialGlobalTgrTimerStatus: TGRTimerStatus = {
-  timerSeconds: 0, // Stopwatch starts at 0
+  timerSeconds: 0,
   isTimerRunning: false,
   matchStatus: 'Pending',
   currentPerformingSide: null,
@@ -71,7 +71,7 @@ function calculateStandardDeviation(scores: number[]): number {
   if (scores.length < 2) return 0;
   const mean = scores.reduce((sum, score) => sum + score, 0) / scores.length;
   const variance = scores.reduce((sum, score) => sum + Math.pow(score - mean, 2), 0) / scores.length;
-  return parseFloat(Math.sqrt(variance).toFixed(2));
+  return parseFloat(Math.sqrt(variance).toFixed(3));
 }
 
 function calculateMedian(scores: number[]): number {
@@ -236,12 +236,8 @@ export default function KetuaPertandinganTGRPage() {
     
     const sides: ('biru' | 'merah')[] = [];
     if (scheduleDetails.pesilatBiruName) sides.push('biru');
-    // If only one participant (e.g. Tunggal), pesilatMerahName holds their info.
-    // If it's Ganda/Regu with only one "team" entry, it also uses pesilatMerahName.
     if (scheduleDetails.pesilatMerahName) sides.push('merah');
     
-    // This handles cases where a single performer is listed, ensuring they are processed.
-    // If sides is empty but we have a name (e.g. only pesilatMerahName), default to merah.
     if (sides.length === 0 && (scheduleDetails.pesilatMerahName || scheduleDetails.pesilatBiruName) ) {
         sides.push(scheduleDetails.pesilatMerahName ? 'merah' : 'biru'); 
     }
@@ -276,7 +272,7 @@ export default function KetuaPertandinganTGRPage() {
     if (seconds === undefined || seconds === null || isNaN(seconds)) return { menit: 0, detik: 0};
     const validSeconds = Math.max(0, seconds); 
     const minutes = Math.floor(validSeconds / 60);
-    const remainingSeconds = Math.round(validSeconds % 60); // Round to nearest second
+    const remainingSeconds = Math.round(validSeconds % 60);
     return { menit: minutes, detik: remainingSeconds };
   };
   
@@ -341,9 +337,6 @@ export default function KetuaPertandinganTGRPage() {
   };
   
   const renderSideScoresTable = (side: 'biru' | 'merah') => {
-    // Condition to render a side:
-    // - For 'biru', only if pesilatBiruName exists.
-    // - For 'merah', if pesilatMerahName exists (covers both Ganda/Regu Merah and Tunggal/Solo Merah).
     if (side === 'biru' && !scheduleDetails.pesilatBiruName) return null;
     if (side === 'merah' && !scheduleDetails.pesilatMerahName) return null; 
     
@@ -415,6 +408,18 @@ export default function KetuaPertandinganTGRPage() {
                   <span className="font-bold px-2 text-yellow-700 dark:text-yellow-300">Median</span>
                   <span className="font-bold text-center text-yellow-700 dark:text-yellow-300">{derivedIsLoading ? <Skeleton className="h-5 w-12 inline-block"/> : median.toFixed(2)}</span>
                 </div>
+                 <div className="grid grid-cols-[200px_1fr] items-center bg-red-100 dark:bg-red-800/30 p-1 rounded">
+                  <span className="font-semibold px-2 text-red-700 dark:text-red-300">Pelanggaran Dewan</span>
+                  <span className="font-semibold text-center text-red-700 dark:text-red-300">{derivedIsLoading ? <Skeleton className="h-5 w-12 inline-block"/> : penalties.toFixed(2)}</span>
+                </div>
+                 <div className="grid grid-cols-[200px_1fr] items-center bg-green-100 dark:bg-green-800/30 p-1 rounded">
+                  <span className="font-bold text-lg px-2 text-green-700 dark:text-green-300">Skor Akhir</span>
+                  <span className="font-bold text-lg text-center text-green-700 dark:text-green-300">{derivedIsLoading ? <Skeleton className="h-6 w-16 inline-block"/> : final.toFixed(2)}</span>
+                </div>
+                <div className="grid grid-cols-[200px_1fr] items-center bg-indigo-100 dark:bg-indigo-800/30 p-1 rounded">
+                  <span className="font-medium px-2 text-indigo-700 dark:text-indigo-300">Standard Deviasi</span>
+                  <span className="font-medium text-center text-indigo-700 dark:text-indigo-300">{derivedIsLoading ? <Skeleton className="h-5 w-12 inline-block"/> : stdDev.toFixed(3)}</span>
+                </div>
               </div>
             </div>
             <div className="border-l border-gray-300 dark:border-gray-600 pl-3">
@@ -435,18 +440,6 @@ export default function KetuaPertandinganTGRPage() {
                 })}
               </div>
             </div>
-          </div>
-          <div className="mt-4 pt-3 border-t border-gray-300 dark:border-gray-600 space-y-1 text-sm">
-             <div className="grid grid-cols-[200px_1fr_200px_1fr] items-center gap-x-4">
-                <span className="font-bold text-lg text-right text-green-600 dark:text-green-400">Final Skor</span>
-                <span className="font-bold text-lg text-left text-green-700 dark:text-green-300 py-1 px-2 bg-green-100 dark:bg-green-800/30 rounded w-min">
-                    {derivedIsLoading ? <Skeleton className="h-6 w-16 inline-block"/> : final.toFixed(2)}
-                </span>
-                <span className="font-medium text-right">Standard Deviation</span>
-                <span className="font-medium text-left py-1 px-2 bg-gray-100 dark:bg-gray-700/50 rounded w-min">
-                    {derivedIsLoading ? <Skeleton className="h-5 w-12 inline-block"/> : stdDev.toFixed(2)}
-                </span>
-             </div>
           </div>
         </div>
       </div>
