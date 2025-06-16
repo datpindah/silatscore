@@ -437,12 +437,14 @@ export default function MonitoringSkorTGRPage() {
     let textColorClass = "text-[var(--monitor-text)]";
     let sideToDisplayDetails: 'biru' | 'merah' | null = tgrTimerStatus.currentPerformingSide;
 
+    // If match is fully finished, try to show Merah first if they performed, then Biru
     if (tgrTimerStatus.matchStatus === 'Finished' && tgrTimerStatus.currentPerformingSide === null) {
         if (summaryDataMerah.hasPerformed && scheduleDetails.pesilatMerahName) sideToDisplayDetails = 'merah';
         else if (summaryDataBiru.hasPerformed && scheduleDetails.pesilatBiruName) sideToDisplayDetails = 'biru';
-        else if (scheduleDetails.pesilatMerahName) sideToDisplayDetails = 'merah';
-        else if (scheduleDetails.pesilatBiruName) sideToDisplayDetails = 'biru';
+        else if (scheduleDetails.pesilatMerahName) sideToDisplayDetails = 'merah'; // Fallback if no performance recorded but scheduled
+        else if (scheduleDetails.pesilatBiruName) sideToDisplayDetails = 'biru'; // Fallback
     }
+
 
     if (sideToDisplayDetails === 'biru' && scheduleDetails.pesilatBiruName) {
       name = scheduleDetails.pesilatBiruName;
@@ -452,13 +454,13 @@ export default function MonitoringSkorTGRPage() {
       name = scheduleDetails.pesilatMerahName;
       contingent = scheduleDetails.pesilatMerahContingent || "Kontingen";
       textColorClass = "text-[var(--monitor-pesilat-merah-name-text)]";
-    } else if (scheduleDetails.pesilatMerahName) { // Fallback if no current side but merah exists
+    } else if (scheduleDetails.pesilatMerahName) { 
         name = scheduleDetails.pesilatMerahName;
         contingent = scheduleDetails.pesilatMerahContingent || "Kontingen";
         textColorClass = "text-[var(--monitor-pesilat-merah-name-text)]";
-    } else if (scheduleDetails.pesilatBiruName) { // Fallback if no current side but biru exists
+    } else if (scheduleDetails.pesilatBiruName) { 
         name = scheduleDetails.pesilatBiruName;
-        contingent = scheduleDetails.pesilatBiruContingent || "Kontingen";
+        contingent = scheduleDetails.pesilatBiruContingent || scheduleDetails.pesilatMerahContingent || "Kontingen";
         textColorClass = "text-[var(--monitor-pesilat-biru-name-text)]";
     }
     return { name: name || "N/A", contingent: contingent || "N/A", textColorClass };
@@ -467,13 +469,14 @@ export default function MonitoringSkorTGRPage() {
   const { name: participantName, contingent: participantContingent, textColorClass: participantTextColorClass } = getParticipantDetails();
 
   return (
+    <>
+      <Header />
       <div className={cn(
           "flex flex-col min-h-screen font-sans overflow-hidden relative",
           pageTheme === 'light' ? 'tgr-monitoring-theme-light' : 'tgr-monitoring-theme-dark',
           "bg-[var(--monitor-bg)] text-[var(--monitor-text)]"
         )}
       >
-        <Header />
         <Button
           variant="outline"
           size="icon"
@@ -591,6 +594,7 @@ export default function MonitoringSkorTGRPage() {
             </Button>
         )}
       </div>
+    </>
   );
 }
 
