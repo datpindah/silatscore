@@ -296,8 +296,15 @@ export default function KetuaPertandinganTGRPage() {
 
   const handleTentukanPemenang = async () => {
     if (!scheduleDetails || !activeMatchId) return;
-    if (tgrTimerStatus.matchStatus !== 'Finished' || tgrTimerStatus.currentPerformingSide !== null) {
-        alert("Pertandingan belum selesai sepenuhnya. Pastikan kedua sisi (jika ada) telah selesai dan status match adalah 'Finished'.");
+    if (
+      tgrTimerStatus.matchStatus !== 'Finished' ||
+      !(
+        tgrTimerStatus.currentPerformingSide === null ||
+        tgrTimerStatus.currentPerformingSide === 'merah' ||
+        (tgrTimerStatus.currentPerformingSide === 'biru' && !scheduleDetails.pesilatMerahName)
+      )
+    ) {
+        alert("Pertandingan belum selesai sesuai kriteria untuk menentukan pemenang, atau sisi yang tampil belum selesai.");
         return;
     }
 
@@ -538,11 +545,15 @@ export default function KetuaPertandinganTGRPage() {
     );
   };
 
-  const isDetermineWinnerDisabled = derivedIsLoading || 
-                                   tgrTimerStatus.matchStatus !== 'Finished' || 
-                                   tgrTimerStatus.currentPerformingSide !== null ||
-                                   !scheduleDetails ||
-                                   (!scheduleDetails.pesilatBiruName && !scheduleDetails.pesilatMerahName); // No participants
+  const isDetermineWinnerDisabled = derivedIsLoading ||
+    !scheduleDetails ||
+    (!scheduleDetails.pesilatBiruName && !scheduleDetails.pesilatMerahName) ||
+    tgrTimerStatus.matchStatus !== 'Finished' || // Must be Finished
+    !( // One of these must be true if status is Finished
+        tgrTimerStatus.currentPerformingSide === null ||
+        tgrTimerStatus.currentPerformingSide === 'merah' ||
+        (tgrTimerStatus.currentPerformingSide === 'biru' && !scheduleDetails.pesilatMerahName)
+    );
 
 
   return (
