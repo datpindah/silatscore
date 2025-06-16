@@ -438,11 +438,12 @@ export default function MonitoringSkorTGRPage() {
     let textColorClass = "text-[var(--monitor-text)]";
     let sideToDisplayDetails: 'biru' | 'merah' | null = tgrTimerStatus.currentPerformingSide;
 
+    // If match finished and no specific side is active, try to show details for the last performed or any relevant side
     if (tgrTimerStatus.matchStatus === 'Finished' && tgrTimerStatus.currentPerformingSide === null) {
         if (summaryDataMerah.hasPerformed && scheduleDetails.pesilatMerahName) sideToDisplayDetails = 'merah';
         else if (summaryDataBiru.hasPerformed && scheduleDetails.pesilatBiruName) sideToDisplayDetails = 'biru';
-        else if (scheduleDetails.pesilatMerahName) sideToDisplayDetails = 'merah';
-        else if (scheduleDetails.pesilatBiruName) sideToDisplayDetails = 'biru';
+        else if (scheduleDetails.pesilatMerahName) sideToDisplayDetails = 'merah'; // Fallback to Merah if scheduled
+        else if (scheduleDetails.pesilatBiruName) sideToDisplayDetails = 'biru';   // Fallback to Biru if scheduled
     }
 
 
@@ -454,11 +455,11 @@ export default function MonitoringSkorTGRPage() {
       name = scheduleDetails.pesilatMerahName;
       contingent = scheduleDetails.pesilatMerahContingent || "Kontingen";
       textColorClass = "text-[var(--monitor-pesilat-merah-name-text)]";
-    } else if (scheduleDetails.pesilatMerahName) { 
+    } else if (scheduleDetails.pesilatMerahName) { // Fallback if no specific side is active, but Merah is defined
         name = scheduleDetails.pesilatMerahName;
         contingent = scheduleDetails.pesilatMerahContingent || "Kontingen";
         textColorClass = "text-[var(--monitor-pesilat-merah-name-text)]";
-    } else if (scheduleDetails.pesilatBiruName) { 
+    } else if (scheduleDetails.pesilatBiruName) { // Fallback if no specific side is active, but Biru is defined
         name = scheduleDetails.pesilatBiruName;
         contingent = scheduleDetails.pesilatBiruContingent || scheduleDetails.pesilatMerahContingent || "Kontingen";
         textColorClass = "text-[var(--monitor-pesilat-biru-name-text)]";
