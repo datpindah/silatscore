@@ -45,7 +45,7 @@ const initialSideSummary = {
 };
 
 
-// Helper functions for calculations (can be moved to a utils file if shared)
+// Helper functions for calculations
 function calculateMedian(scores: number[]): number {
   if (scores.length === 0) return 0;
   if (scores.length < 3) { 
@@ -60,10 +60,10 @@ function calculateMedian(scores: number[]): number {
 }
 
 function calculateStandardDeviation(scores: number[]): number {
-  if (scores.length < 2) return 0; // Standard deviation is not meaningful for less than 2 scores
+  if (scores.length < 2) return 0; 
   const mean = scores.reduce((sum, score) => sum + score, 0) / scores.length;
-  const variance = scores.reduce((sum, score) => sum + Math.pow(score - mean, 2), 0) / scores.length; // Population variance
-  return parseFloat(Math.sqrt(variance).toFixed(8)); // Keep more precision as per image
+  const variance = scores.reduce((sum, score) => sum + Math.pow(score - mean, 2), 0) / scores.length; 
+  return parseFloat(Math.sqrt(variance).toFixed(8)); 
 }
 
 
@@ -82,7 +82,7 @@ const TGRSideSummaryTable: React.FC<TGRSideSummaryTableProps> = ({
 }) => {
   const formatTimePerformance = (seconds: number) => {
     const minutes = Math.floor(seconds / 60);
-    const remainingSeconds = Math.round(seconds % 60); // Round to nearest second for display
+    const remainingSeconds = Math.round(seconds % 60); 
     return `${String(minutes).padStart(2, '0')}.${String(remainingSeconds).padStart(2, '0')}`;
   };
 
@@ -283,7 +283,11 @@ export default function MonitoringSkorTGRPage() {
 
   // Calculate summaries
   useEffect(() => {
-    if (!scheduleDetails) return;
+    if (!scheduleDetails) {
+      setSummaryDataBiru(initialSideSummary);
+      setSummaryDataMerah(initialSideSummary);
+      return;
+    }
 
     const calculateSideSummary = (side: 'biru' | 'merah') => {
       const validJuriScoresForSide = TGR_JURI_IDS
@@ -298,13 +302,15 @@ export default function MonitoringSkorTGRPage() {
         .filter(p => p.side === side)
         .reduce((sum, p) => sum + p.pointsDeducted, 0);
       
-      const finalScore = parseFloat((median + totalPenalties).toFixed(2));
+      const finalScore = parseFloat((median + totalPenalties).toFixed(2)); // Changed toFixed(2) for final score consistency
       const timePerformance = side === 'biru' ? tgrTimerStatus.performanceDurationBiru : tgrTimerStatus.performanceDurationMerah;
       
       const hasPerformed = (side === 'biru' && tgrTimerStatus.performanceDurationBiru > 0) || 
                            (side === 'merah' && tgrTimerStatus.performanceDurationMerah > 0) ||
-                           (tgrTimerStatus.matchStatus === 'Finished' && tgrTimerStatus.currentPerformingSide === null && 
-                             ((side === 'biru' && scheduleDetails.pesilatBiruName) || (side === 'merah' && scheduleDetails.pesilatMerahName)) && validJuriScoresForSide.length > 0
+                           ( // Fallback for when overall match is finished, check if this side was part of it and has scores
+                             tgrTimerStatus.matchStatus === 'Finished' && tgrTimerStatus.currentPerformingSide === null &&
+                             ((side === 'biru' && scheduleDetails?.pesilatBiruName) || (side === 'merah' && scheduleDetails?.pesilatMerahName)) && 
+                             validJuriScoresForSide.length > 0
                            );
 
 
@@ -314,12 +320,12 @@ export default function MonitoringSkorTGRPage() {
     if (scheduleDetails.pesilatBiruName) {
         setSummaryDataBiru(calculateSideSummary('biru'));
     } else {
-        setSummaryDataBiru(initialSideSummary); // Ensure reset if no biru pesilat
+        setSummaryDataBiru(initialSideSummary); 
     }
     if (scheduleDetails.pesilatMerahName) {
         setSummaryDataMerah(calculateSideSummary('merah'));
     } else {
-        setSummaryDataMerah(initialSideSummary); // Ensure reset if no merah pesilat
+        setSummaryDataMerah(initialSideSummary); 
     }
 
   }, [allJuriScores, dewanPenalties, tgrTimerStatus, scheduleDetails]);
@@ -376,17 +382,19 @@ export default function MonitoringSkorTGRPage() {
     
     let sideToConsider: 'biru' | 'merah' | null = tgrTimerStatus.currentPerformingSide;
     
+    // If overall match is finished, decide which side's score to display for this Juri
+    // based on which side actually performed and has Juri marked as ready.
     if (tgrTimerStatus.matchStatus === 'Finished' && !tgrTimerStatus.currentPerformingSide) {
-        // If overall match finished, try to show Merah's score if they performed, else Biru's
         if (scheduleDetails?.pesilatMerahName && juriScoreData?.merah?.isReady && tgrTimerStatus.performanceDurationMerah > 0) {
             sideToConsider = 'merah';
         } else if (scheduleDetails?.pesilatBiruName && juriScoreData?.biru?.isReady && tgrTimerStatus.performanceDurationBiru > 0) {
             sideToConsider = 'biru';
-        } else if (scheduleDetails?.pesilatMerahName && juriScoreData?.merah?.isReady) { // Fallback if duration not set but ready
-            sideToConsider = 'merah';
+        } else if (scheduleDetails?.pesilatMerahName && juriScoreData?.merah?.isReady) {
+             sideToConsider = 'merah';
         } else if (scheduleDetails?.pesilatBiruName && juriScoreData?.biru?.isReady) {
-            sideToConsider = 'biru';
+             sideToConsider = 'biru';
         }
+        // If neither side is definitively "last performed and ready", `sideToConsider` might remain null, leading to '-'
     }
     
     if (juriScoreData && sideToConsider) {
@@ -421,11 +429,14 @@ export default function MonitoringSkorTGRPage() {
     if (side === 'merah' && scheduleDetails.pesilatMerahName) return scheduleDetails.pesilatMerahName;
     
     if (tgrTimerStatus.matchStatus === 'Finished' && !side) {
-        if (summaryDataMerah.hasPerformed) return scheduleDetails.pesilatMerahName || "Peserta Merah";
-        if (summaryDataBiru.hasPerformed) return scheduleDetails.pesilatBiruName || "Peserta Biru";
+        // If overall match finished, show the name corresponding to the summary that *has* performed.
+        // Prioritize Merah if both, as it's typically last.
+        if (summaryDataMerah.hasPerformed && scheduleDetails.pesilatMerahName) return scheduleDetails.pesilatMerahName;
+        if (summaryDataBiru.hasPerformed && scheduleDetails.pesilatBiruName) return scheduleDetails.pesilatBiruName;
     }
 
-    if (scheduleDetails.pesilatBiruName) return scheduleDetails.pesilatBiruName;
+    // Fallback based on schedule if currentPerformingSide is null but match isn't 'Finished' yet
+    if (scheduleDetails.pesilatBiruName && (!scheduleDetails.pesilatMerahName || tgrTimerStatus.performanceDurationBiru > 0 && tgrTimerStatus.performanceDurationMerah === 0)) return scheduleDetails.pesilatBiruName;
     if (scheduleDetails.pesilatMerahName) return scheduleDetails.pesilatMerahName;
     return "Nama Peserta";
   };
@@ -438,11 +449,11 @@ export default function MonitoringSkorTGRPage() {
     if (side === 'merah' && scheduleDetails.pesilatMerahContingent) return scheduleDetails.pesilatMerahContingent;
 
     if (tgrTimerStatus.matchStatus === 'Finished' && !side) {
-        if (summaryDataMerah.hasPerformed) return scheduleDetails.pesilatMerahContingent || "Kontingen";
-        if (summaryDataBiru.hasPerformed) return scheduleDetails.pesilatBiruContingent || "Kontingen";
+        if (summaryDataMerah.hasPerformed && scheduleDetails.pesilatMerahContingent) return scheduleDetails.pesilatMerahContingent;
+        if (summaryDataBiru.hasPerformed && scheduleDetails.pesilatBiruContingent) return scheduleDetails.pesilatBiruContingent;
     }
-
-    if (scheduleDetails.pesilatBiruName) return scheduleDetails.pesilatBiruContingent || "Kontingen";
+    
+    if (scheduleDetails.pesilatBiruName) return scheduleDetails.pesilatBiruContingent || scheduleDetails.pesilatMerahContingent || "Kontingen";
     if (scheduleDetails.pesilatMerahName) return scheduleDetails.pesilatMerahContingent || "Kontingen";
     return "Kontingen";
   };
@@ -451,21 +462,20 @@ export default function MonitoringSkorTGRPage() {
     if (tgrTimerStatus.currentPerformingSide) {
         return tgrTimerStatus.currentPerformingSide === 'biru' ? 'SUDUT BIRU' : 'SUDUT MERAH';
     }
-     // Handle display when overall match is finished and we need to show a general label or last performing side
     if (tgrTimerStatus.matchStatus === 'Finished' && !tgrTimerStatus.currentPerformingSide) {
-        if (summaryDataMerah.hasPerformed && summaryDataBiru.hasPerformed) return "PARTAI SELESAI";
-        if (summaryDataMerah.hasPerformed) return "SUDUT MERAH SELESAI";
-        if (summaryDataBiru.hasPerformed) return "SUDUT BIRU SELESAI";
-        return "PARTAI SELESAI"; // Default for finished match
+        if (summaryDataMerah.hasPerformed && summaryDataBiru.hasPerformed && scheduleDetails?.pesilatBiruName && scheduleDetails?.pesilatMerahName) return "PARTAI SELESAI";
+        if (summaryDataMerah.hasPerformed && scheduleDetails?.pesilatMerahName) return "SUDUT MERAH SELESAI";
+        if (summaryDataBiru.hasPerformed && scheduleDetails?.pesilatBiruName) return "SUDUT BIRU SELESAI";
+        return "PARTAI SELESAI";
     }
-    // Fallback for initial or indeterminate states
     if (scheduleDetails?.pesilatBiruName && !scheduleDetails.pesilatMerahName) return 'PESERTA (BIRU)';
     if (scheduleDetails?.pesilatMerahName && !scheduleDetails.pesilatBiruName) return 'PESERTA (MERAH)';
+    if (scheduleDetails?.pesilatBiruName && scheduleDetails?.pesilatMerahName) return 'MENUNGGU SISI';
     return 'N/A';
   }
 
-  const showBiruSummary = (summaryDataBiru.hasPerformed || (tgrTimerStatus.matchStatus === 'Finished' && scheduleDetails?.pesilatBiruName));
-  const showMerahSummary = (summaryDataMerah.hasPerformed || (tgrTimerStatus.matchStatus === 'Finished' && scheduleDetails?.pesilatMerahName));
+  const showBiruSummaryTable = summaryDataBiru.hasPerformed && !!scheduleDetails?.pesilatBiruName;
+  const showMerahSummaryTable = summaryDataMerah.hasPerformed && !!scheduleDetails?.pesilatMerahName;
 
   return (
     <>
@@ -510,12 +520,11 @@ export default function MonitoringSkorTGRPage() {
               </div>
             </div>
           </div>
-
-          {/* Summary Tables Section */}
+          
           <div className="mb-4 space-y-4">
-            {showBiruSummary && scheduleDetails?.pesilatBiruName && (
+            {showBiruSummaryTable && (
               <TGRSideSummaryTable
-                sideLabel={`Ringkasan Sudut Biru: ${scheduleDetails.pesilatBiruName}`}
+                sideLabel={`Ringkasan Sudut Biru: ${scheduleDetails?.pesilatBiruName || 'N/A'}`}
                 median={summaryDataBiru.median}
                 penalty={summaryDataBiru.penalty}
                 timePerformanceSeconds={tgrTimerStatus.performanceDurationBiru}
@@ -524,9 +533,9 @@ export default function MonitoringSkorTGRPage() {
                 isLoadingData={isLoading && !matchDetailsLoaded}
               />
             )}
-            {showMerahSummary && scheduleDetails?.pesilatMerahName && (
+            {showMerahSummaryTable && (
                <TGRSideSummaryTable
-                sideLabel={`Ringkasan Sudut Merah: ${scheduleDetails.pesilatMerahName}`}
+                sideLabel={`Ringkasan Sudut Merah: ${scheduleDetails?.pesilatMerahName || 'N/A'}`}
                 median={summaryDataMerah.median}
                 penalty={summaryDataMerah.penalty}
                 timePerformanceSeconds={tgrTimerStatus.performanceDurationMerah}
@@ -597,4 +606,3 @@ export default function MonitoringSkorTGRPage() {
     </>
   );
 }
-
