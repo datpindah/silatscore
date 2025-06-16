@@ -4,7 +4,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
-import { Header } from '@/components/layout/Header'; 
+import { Header } from '@/components/layout/Header';
 import { ArrowLeft, Loader2, Sun, Moon, ChevronsRight, AlertTriangle } from 'lucide-react';
 import type { ScheduleTGR, TGRTimerStatus, TGRJuriScore, SideSpecificTGRScore, TGRDewanPenalty, TGRMatchResult, TGRMatchResultDetail } from '@/lib/types';
 import { db } from '@/lib/firebase';
@@ -12,6 +12,7 @@ import { doc, onSnapshot, getDoc, collection, query, orderBy, Timestamp, where, 
 import { cn } from '@/lib/utils';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 
 
 const ACTIVE_TGR_SCHEDULE_CONFIG_PATH = 'app_settings/active_match_tgr';
@@ -90,7 +91,7 @@ const TGRSideSummaryTable: React.FC<TGRSideSummaryTableProps> = ({
 
   if (isLoadingData) {
     return (
-      <div className="w-full max-w-xl mx-auto mb-4 p-2 border border-[var(--monitor-border)] rounded-md bg-[var(--monitor-dialog-bg)] shadow-lg">
+      <div className="flex-1 min-w-[300px] md:min-w-0 p-2 border border-[var(--monitor-border)] rounded-md bg-[var(--monitor-dialog-bg)] shadow-lg">
         <h3 className="text-center text-md font-semibold mb-2 text-[var(--monitor-text)]"><Skeleton className="h-6 w-48 mx-auto bg-[var(--monitor-skeleton-bg)]" /></h3>
         <div className="overflow-x-auto">
           <table className="w-full text-xs md:text-sm border-collapse">
@@ -122,7 +123,7 @@ const TGRSideSummaryTable: React.FC<TGRSideSummaryTableProps> = ({
 
 
   return (
-    <div className="w-full max-w-xl mx-auto mb-4 p-2 border border-[var(--monitor-border)] rounded-md bg-[var(--monitor-dialog-bg)] shadow-lg">
+    <div className="flex-1 min-w-[300px] md:min-w-0 p-2 border border-[var(--monitor-border)] rounded-md bg-[var(--monitor-dialog-bg)] shadow-lg">
       <h3 className="text-center text-md font-semibold mb-2 text-[var(--monitor-text)]">{sideLabel}</h3>
       <div className="overflow-x-auto">
         <table className="w-full text-xs md:text-sm border-collapse text-[var(--monitor-text)]">
@@ -495,13 +496,10 @@ export default function MonitoringSkorTGRPage() {
 
   if (isLoading && configMatchId === undefined) {
     return (
-      <>
-      <Header />
         <div className={cn("flex flex-col min-h-screen items-center justify-center", pageTheme === 'light' ? 'tgr-monitoring-theme-light' : 'tgr-monitoring-theme-dark', "bg-[var(--monitor-bg)] text-[var(--monitor-text)]")}>
             <Loader2 className="h-16 w-16 animate-spin text-[var(--monitor-overlay-accent-text)] mb-4" />
             <p className="text-xl">Memuat Konfigurasi Monitor...</p>
         </div>
-      </>
     );
   }
 
@@ -555,13 +553,13 @@ export default function MonitoringSkorTGRPage() {
             </div>
           </div>
 
-          <div className="mb-4 space-y-4">
+          <div className="flex flex-col md:flex-row justify-center items-start md:items-stretch gap-4 my-4">
             {showBiruSummaryTable && (
               <TGRSideSummaryTable
-                sideLabel={`Ringkasan Sudut Biru: ${scheduleDetails?.pesilatBiruName || 'N/A'}`}
+                sideLabel={`Ringkasan Sudut Biru: ${scheduleDetails?.pesilatBiruName || 'N/A'}${summaryDataBiru.hasPerformed ? " (Selesai)" : ""}`}
                 median={summaryDataBiru.median}
                 penalty={summaryDataBiru.penalty}
-                timePerformanceSeconds={tgrTimerStatus.performanceDurationBiru ?? 0}
+                timePerformanceSeconds={summaryDataBiru.timePerformance ?? 0}
                 total={summaryDataBiru.total}
                 stdDev={summaryDataBiru.stdDev}
                 isLoadingData={isLoading && !matchDetailsLoaded}
@@ -569,10 +567,10 @@ export default function MonitoringSkorTGRPage() {
             )}
             {showMerahSummaryTable && (
               <TGRSideSummaryTable
-                sideLabel={`Ringkasan Sudut Merah: ${scheduleDetails?.pesilatMerahName || 'N/A'}`}
+                sideLabel={`Ringkasan Sudut Merah: ${scheduleDetails?.pesilatMerahName || 'N/A'}${summaryDataMerah.hasPerformed ? " (Selesai)" : ""}`}
                 median={summaryDataMerah.median}
                 penalty={summaryDataMerah.penalty}
-                timePerformanceSeconds={tgrTimerStatus.performanceDurationMerah ?? 0}
+                timePerformanceSeconds={summaryDataMerah.timePerformance ?? 0}
                 total={summaryDataMerah.total}
                 stdDev={summaryDataMerah.stdDev}
                 isLoadingData={isLoading && !matchDetailsLoaded}
@@ -628,7 +626,16 @@ export default function MonitoringSkorTGRPage() {
                     pageTheme === 'light' ? 'tgr-monitoring-theme-light' : 'tgr-monitoring-theme-dark',
                     "bg-[var(--monitor-dialog-bg)] text-[var(--monitor-dialog-text)] border-[var(--monitor-dialog-border)]"
                 )}>
-                    <div className="bg-blue-600 text-white p-4">
+                    <DialogHeader className="sr-only">
+                      <DialogTitle>Hasil Akhir Pertandingan TGR</DialogTitle>
+                      <DialogDescription>
+                        Rincian skor dan pemenang pertandingan TGR: Gelanggang {winnerData.gelanggang}, Babak {winnerData.babak}, Kategori {winnerData.kategori}.
+                        {winnerData.namaSudutBiru && ` Sudut Biru: ${winnerData.namaSudutBiru} (${winnerData.kontingenBiru}).`}
+                        {winnerData.namaSudutMerah && ` Sudut Merah: ${winnerData.namaSudutMerah} (${winnerData.kontingenMerah}).`}
+                        Pemenang: {winnerData.winner === 'biru' ? winnerData.namaSudutBiru || 'Biru' : winnerData.winner === 'merah' ? winnerData.namaSudutMerah || 'Merah' : 'Seri'}.
+                      </DialogDescription>
+                    </DialogHeader>
+                    <div className="bg-blue-600 text-white p-4 rounded-t-lg">
                         <div className="flex justify-around text-center text-sm sm:text-base font-semibold">
                             <span>GLG: {winnerData.gelanggang}</span>
                             <span>BABAK: {winnerData.babak}</span>
@@ -706,10 +713,10 @@ export default function MonitoringSkorTGRPage() {
         )}
 
 
-        {tgrTimerStatus.matchStatus === 'Finished' && tgrTimerStatus.currentPerformingSide === null && (
+        {(tgrTimerStatus.matchStatus === 'Finished' && tgrTimerStatus.currentPerformingSide === null && !isLoading && activeScheduleId) && (
             <Button
                 onClick={handleNextMatchNavigation}
-                disabled={isNavigatingNextMatch || isLoading}
+                disabled={isNavigatingNextMatch}
                 className="fixed bottom-6 right-6 z-50 shadow-lg bg-green-600 hover:bg-green-700 text-white py-3 px-4 text-sm md:text-base rounded-full"
                 title="Lanjut ke Partai TGR Berikutnya"
             >
