@@ -192,17 +192,15 @@ export default function KetuaPertandinganTGRPage() {
             const data = docSnap.data();
             const fsTimerStatus = data?.timerStatus as TGRTimerStatus | undefined;
             setTgrTimerStatus(fsTimerStatus ? { ...initialGlobalTgrTimerStatus, ...fsTimerStatus } : initialGlobalTgrTimerStatus);
-            if (data?.matchResult) { // If match result exists from previous determination
+            if (data?.matchResult) { 
               setWinnerData(data.matchResult as TGRMatchResult);
               setIsWinnerModalOpen(true);
             } else {
               setWinnerData(null);
-              // setIsWinnerModalOpen(false); // Don't close if already open for a new determination
             }
           } else {
             setTgrTimerStatus(initialGlobalTgrTimerStatus);
             setWinnerData(null);
-            // setIsWinnerModalOpen(false);
           }
         }));
 
@@ -548,8 +546,8 @@ export default function KetuaPertandinganTGRPage() {
   const isDetermineWinnerDisabled = derivedIsLoading ||
     !scheduleDetails ||
     (!scheduleDetails.pesilatBiruName && !scheduleDetails.pesilatMerahName) ||
-    tgrTimerStatus.matchStatus !== 'Finished' || // Must be Finished
-    !( // One of these must be true if status is Finished
+    tgrTimerStatus.matchStatus !== 'Finished' ||
+    !( 
         tgrTimerStatus.currentPerformingSide === null ||
         tgrTimerStatus.currentPerformingSide === 'merah' ||
         (tgrTimerStatus.currentPerformingSide === 'biru' && !scheduleDetails.pesilatMerahName)
@@ -580,6 +578,15 @@ export default function KetuaPertandinganTGRPage() {
         {winnerData && (
             <Dialog open={isWinnerModalOpen} onOpenChange={setIsWinnerModalOpen}>
                 <DialogContent className="max-w-2xl bg-gradient-to-br from-gray-100 to-gray-200 dark:from-gray-800 dark:to-gray-900 p-0">
+                    <DialogHeader className="sr-only">
+                      <DialogTitle>Hasil Akhir Pertandingan TGR</DialogTitle>
+                      <DialogDescription>
+                        Rincian skor dan pemenang pertandingan TGR: Gelanggang {winnerData.gelanggang}, Babak {winnerData.babak}, Kategori {winnerData.kategori}.
+                        {winnerData.namaSudutBiru && ` Sudut Biru: ${winnerData.namaSudutBiru} (${winnerData.kontingenBiru}).`}
+                        {winnerData.namaSudutMerah && ` Sudut Merah: ${winnerData.namaSudutMerah} (${winnerData.kontingenMerah}).`}
+                        Pemenang: {winnerData.winner === 'biru' ? winnerData.namaSudutBiru || 'Biru' : winnerData.winner === 'merah' ? winnerData.namaSudutMerah || 'Merah' : 'Seri'}.
+                      </DialogDescription>
+                    </DialogHeader>
                     <div className="bg-blue-600 text-white p-4 rounded-t-lg">
                         <div className="flex justify-around text-center text-sm sm:text-base font-semibold">
                             <span>GLG: {winnerData.gelanggang}</span>
@@ -591,8 +598,8 @@ export default function KetuaPertandinganTGRPage() {
                     <div className="p-6 space-y-6">
                         <div className="flex justify-between items-start text-center">
                             <div className="w-2/5">
-                                <div className="text-lg sm:text-xl font-bold text-blue-700 dark:text-blue-400">{winnerData.namaSudutBiru || "SUDUT BIRU"}</div>
-                                <div className="text-xs sm:text-sm text-blue-600 dark:text-blue-500">{winnerData.kontingenBiru || "-"}</div>
+                                <div className="text-lg sm:text-xl font-bold text-blue-700 dark:text-blue-400">{winnerData.namaSudutBiru || (scheduleDetails?.pesilatBiruName ? "SUDUT BIRU" : "")}</div>
+                                <div className="text-xs sm:text-sm text-blue-600 dark:text-blue-500">{winnerData.kontingenBiru || (scheduleDetails?.pesilatBiruName ? (scheduleDetails.pesilatBiruContingent || scheduleDetails.pesilatMerahContingent || "-") : "")}</div>
                             </div>
                             <div className="w-1/5 flex flex-col items-center pt-2">
                                 <p className="text-sm font-medium text-gray-600 dark:text-gray-400">Pemenang</p>
@@ -607,8 +614,8 @@ export default function KetuaPertandinganTGRPage() {
                                 </p>
                             </div>
                             <div className="w-2/5">
-                                <div className="text-lg sm:text-xl font-bold text-red-700 dark:text-red-400">{winnerData.namaSudutMerah || "SUDUT MERAH"}</div>
-                                <div className="text-xs sm:text-sm text-red-600 dark:text-red-500">{winnerData.kontingenMerah || "-"}</div>
+                                <div className="text-lg sm:text-xl font-bold text-red-700 dark:text-red-400">{winnerData.namaSudutMerah || (scheduleDetails?.pesilatMerahName ? "SUDUT MERAH" : "")}</div>
+                                <div className="text-xs sm:text-sm text-red-600 dark:text-red-500">{winnerData.kontingenMerah || (scheduleDetails?.pesilatMerahName ? (scheduleDetails.pesilatMerahContingent || "-") : "")}</div>
                             </div>
                         </div>
 
@@ -621,7 +628,7 @@ export default function KetuaPertandinganTGRPage() {
                                         <TableHead className="w-[32.5%] text-center p-2 bg-red-500 text-white">Merah</TableHead>
                                     </TableRow>
                                 </TableHeader>
-                                <TableBody className="bg-white dark:bg-gray-800">
+                                <TableBody className="bg-white dark:bg-gray-800 text-gray-800 dark:text-gray-200">
                                     {[
                                         { label: "Standar Deviasi", keyBiru: "standarDeviasi", keyMerah: "standarDeviasi", precision: 3 },
                                         { label: "Waktu Penampilan (detik)", keyBiru: "waktuPenampilan", keyMerah: "waktuPenampilan", precision: 0 },
@@ -629,10 +636,10 @@ export default function KetuaPertandinganTGRPage() {
                                     ].map(item => (
                                         <TableRow key={item.label}>
                                             <TableCell className="font-medium p-2 text-gray-600 dark:text-gray-400">{item.label}</TableCell>
-                                            <TableCell className="text-center p-2 text-gray-800 dark:text-gray-200">
+                                            <TableCell className="text-center p-2">
                                                 {winnerData.detailPoint.biru ? winnerData.detailPoint.biru[item.keyBiru as keyof TGRMatchResultDetail].toFixed(item.precision) : '-'}
                                             </TableCell>
-                                            <TableCell className="text-center p-2 text-gray-800 dark:text-gray-200">
+                                            <TableCell className="text-center p-2">
                                                  {winnerData.detailPoint.merah ? winnerData.detailPoint.merah[item.keyMerah as keyof TGRMatchResultDetail].toFixed(item.precision) : '-'}
                                             </TableCell>
                                         </TableRow>
@@ -650,7 +657,7 @@ export default function KetuaPertandinganTGRPage() {
                             </Table>
                         </div>
                     </div>
-                    <DialogFooter className="p-4 bg-gray-100 dark:bg-gray-800 rounded-b-lg">
+                    <DialogFooter className="p-4 bg-gray-100 dark:bg-gray-800 rounded-b-lg border-t border-gray-300 dark:border-gray-600">
                         <Button onClick={() => setIsWinnerModalOpen(false)} variant="outline">Tutup</Button>
                     </DialogFooter>
                 </DialogContent>
@@ -661,4 +668,3 @@ export default function KetuaPertandinganTGRPage() {
     </div>
   );
 }
-
