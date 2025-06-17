@@ -1,24 +1,25 @@
 
 "use client";
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, Suspense } from 'react';
 import Link from 'next/link';
+import { useSearchParams } from 'next/navigation';
 import { Header } from '@/components/layout/Header';
 import { PageTitle } from '@/components/shared/PageTitle';
 import { Button } from '@/components/ui/button';
-import { ArrowLeft, Trash2, Loader2, MinusCircle, UserCircle } from 'lucide-react';
+import { ArrowLeft, Trash2, Loader2, MinusCircle, UserCircle, Info } from 'lucide-react';
 import type { ScheduleTGR, TGRDewanPenalty, TGRDewanPenaltyType, TGRJuriScore, TGRTimerStatus, SideSpecificTGRScore } from '@/lib/types';
 import { db, auth } from '@/lib/firebase'; 
 import { doc, onSnapshot, getDoc, collection, addDoc, query, orderBy, limit, deleteDoc, serverTimestamp, Timestamp, where, getDocs, setDoc, writeBatch } from 'firebase/firestore';
 import { Skeleton } from '@/components/ui/skeleton';
 import { cn } from '@/lib/utils';
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 
-const ACTIVE_TGR_SCHEDULE_CONFIG_PATH = 'app_settings/active_match_tgr';
+const ACTIVE_TGR_MATCHES_BY_GELANGGANG_PATH = 'app_settings/active_tgr_matches_by_gelanggang';
 const SCHEDULE_TGR_COLLECTION = 'schedules_tgr';
 const MATCHES_TGR_COLLECTION = 'matches_tgr';
 const DEWAN_PENALTIES_TGR_SUBCOLLECTION = 'dewan_penalties_tgr';
 const JURI_SCORES_TGR_SUBCOLLECTION = 'juri_scores_tgr';
-
 
 const TGR_JURI_IDS = ['juri-1', 'juri-2', 'juri-3', 'juri-4', 'juri-5', 'juri-6'] as const;
 const BASE_SCORE_TGR = 9.90;
@@ -53,16 +54,16 @@ const PENALTY_CONFIG_REGU: PenaltyConfigItem[] = [
   { id: 'movement_hold_violation', description: "Manahan gerakan lebih dari 5 (lima) detik", points: -0.50 },
 ];
 
-
 const initialTgrTimerStatus: TGRTimerStatus = {
   timerSeconds: 0,
   isTimerRunning: false,
   matchStatus: 'Pending',
-  performanceDuration: 0,
+  performanceDurationBiru: 0,
+  performanceDurationMerah: 0,
   currentPerformingSide: null,
 };
 
-export default function DewanTGRPenaltyPage() {
+function DewanTGRPenaltyPageComponent({ gelanggangName }: { gelanggangName: string | null }) {
   const [configMatchId, setConfigMatchId] = useState<string | null | undefined>(undefined);
   const [activeMatchId, setActiveMatchId] = useState<string | null>(null);
   const [scheduleDetails, setScheduleDetails] = useState<ScheduleTGR | null>(null);
@@ -74,18 +75,32 @@ export default function DewanTGRPenaltyPage() {
   const [currentUserEmail, setCurrentUserEmail] = useState<string | null>(null);
   const [tgrTimerStatus, setTgrTimerStatus] = useState<TGRTimerStatus>(initialTgrTimerStatus);
 
-
   useEffect(() => {
-    const unsubConfig = onSnapshot(doc(db, ACTIVE_TGR_SCHEDULE_CONFIG_PATH), (docSnap) => {
-      const newDbConfigId = docSnap.exists() ? docSnap.data()?.activeScheduleId : null;
-      setConfigMatchId(prevId => prevId === newDbConfigId ? prevId : newDbConfigId);
+    if (!gelanggangName) {
+      setError("Nama gelanggang tidak ditemukan di URL.");
+      setConfigMatchId(null); 
+      setIsLoading(false);
+      return;
+    }
+    setError(null); 
+    setIsLoading(true);
+
+    const unsubGelanggangMap = onSnapshot(doc(db, ACTIVE_TGR_MATCHES_BY_GELANGGANG_PATH), (docSnap) => {
+      let newDbConfigId: string | null = null;
+      if (docSnap.exists()) {
+        newDbConfigId = docSnap.data()?.[gelanggangName] || null;
+      }
+      setConfigMatchId(prevId => (prevId === newDbConfigId ? prevId : newDbConfigId));
+      if (!newDbConfigId) {
+         setError(`Tidak ada jadwal TGR aktif untuk Gelanggang: ${gelanggangName}.`);
+      }
     }, (err) => {
-      console.error("Error fetching active TGR schedule config:", err);
-      setError("Gagal memuat konfigurasi jadwal aktif TGR.");
+      console.error(`[Dewan1TGR] Error fetching active TGR matches by gelanggang map:`, err);
+      setError("Gagal memuat peta jadwal aktif TGR per gelanggang.");
       setConfigMatchId(null);
     });
-    return () => unsubConfig();
-  }, []);
+    return () => unsubGelanggangMap();
+  }, [gelanggangName]);
 
   useEffect(() => {
     const unsubscribeAuth = auth.onAuthStateChanged(user => {
@@ -93,7 +108,6 @@ export default function DewanTGRPenaltyPage() {
     });
     return () => unsubscribeAuth();
   }, []);
-
 
   useEffect(() => {
     if (configMatchId === undefined) { setIsLoading(true); return; }
@@ -111,10 +125,10 @@ export default function DewanTGRPenaltyPage() {
     }
   }, [configMatchId, activeMatchId, isLoading]);
 
-
   useEffect(() => {
     if (!activeMatchId) {
-      if (isLoading && !configMatchId) setIsLoading(false);
+      if (isLoading && !configMatchId && !gelanggangName) setIsLoading(false); // No gelanggang, not loading config
+      else if (isLoading && !configMatchId && gelanggangName) setIsLoading(false); // No config for this gelanggang
       return;
     }
 
@@ -170,18 +184,13 @@ export default function DewanTGRPenaltyPage() {
         }
     }));
 
+    if (isLoading && matchDetailsLoaded) setIsLoading(false);
+
     return () => {
       mounted = false;
       unsubscribers.forEach(unsub => unsub());
     };
-  }, [activeMatchId, matchDetailsLoaded]);
-
-  useEffect(() => {
-    if (isLoading && matchDetailsLoaded) {
-      setIsLoading(false);
-    }
-  }, [isLoading, matchDetailsLoaded]);
-
+  }, [activeMatchId, matchDetailsLoaded, isLoading]);
 
   const handleAddPenalty = async (penalty: PenaltyConfigItem) => {
     const currentUser = auth.currentUser;
@@ -229,7 +238,6 @@ export default function DewanTGRPenaltyPage() {
             currentJuriData = juriDocSnap.data() as TGRJuriScore;
         } else {
             currentJuriData = { 
-                baseScore: BASE_SCORE_TGR,
                 biru: { gerakanSalahCount: 0, staminaKemantapanBonus: 0, externalDeductions: 0, calculatedScore: BASE_SCORE_TGR, isReady: false },
                 merah: { gerakanSalahCount: 0, staminaKemantapanBonus: 0, externalDeductions: 0, calculatedScore: BASE_SCORE_TGR, isReady: false },
                 lastUpdated: null,
@@ -389,14 +397,33 @@ export default function DewanTGRPenaltyPage() {
     currentPenaltyListToDisplay = PENALTY_CONFIG_TUNGGAL;
   }
 
+  if (!gelanggangName && !isLoading) {
+    return (
+        <div className="flex flex-col min-h-screen"><Header />
+            <main className="flex-1 container mx-auto p-4 md:p-8 flex flex-col items-center justify-center text-center">
+                <Info className="h-12 w-12 text-destructive mb-4" />
+                <h1 className="text-xl font-semibold text-destructive">Nama Gelanggang Diperlukan</h1>
+                <p className="text-muted-foreground mt-2">Parameter 'gelanggang' tidak ditemukan di URL. Halaman ini tidak dapat memuat data.</p>
+                <Button asChild className="mt-6">
+                    <Link href={`/scoring/tgr/login`}><ArrowLeft className="mr-2 h-4 w-4"/> Kembali ke Halaman Login</Link>
+                </Button>
+            </main>
+        </div>
+    );
+  }
 
-  if (isLoading && configMatchId === undefined) {
+  if (isLoading && (!activeMatchId || !matchDetailsLoaded)) {
     return (
       <div className="flex flex-col min-h-screen">
         <Header />
         <main className="flex-1 container mx-auto p-4 md:p-8 flex flex-col items-center justify-center">
           <Loader2 className="h-12 w-12 animate-spin text-primary mb-4" />
-          <p className="text-lg text-muted-foreground">Memuat konfigurasi Panel Dewan TGR...</p>
+          <p className="text-lg text-muted-foreground">
+            {configMatchId === undefined ? `Memuat konfigurasi Panel Dewan TGR untuk Gelanggang: ${gelanggangName || '...'}` : 
+             !activeMatchId && configMatchId === null ? `Tidak ada jadwal TGR aktif untuk Gelanggang: ${gelanggangName || '...'}` :
+             `Memuat data pertandingan TGR untuk Gelanggang: ${gelanggangName || '...'}`}
+          </p>
+          {error && <p className="text-sm text-red-500 mt-2">Error: {error}</p>}
         </main>
       </div>
     );
@@ -406,7 +433,10 @@ export default function DewanTGRPenaltyPage() {
     <div className="flex flex-col min-h-screen">
       <Header />
       <main className="flex-1 container mx-auto px-2 py-4 md:p-6">
-        <PageTitle title="Dewan Juri 1 - Pelanggaran TGR" description={`Catat pelanggaran untuk ${performingSideName()}.`}>
+        <PageTitle 
+          title={`Dewan Juri 1 - Pelanggaran TGR (Gel: ${gelanggangName || 'N/A'})`} 
+          description={`Catat pelanggaran untuk ${performingSideName()}.`}
+        >
             <div className="flex items-center gap-2">
                 {currentUserEmail ? (
                     <div className={cn("flex items-center text-sm p-2 border rounded-md", currentUserEmail ? "text-green-600 dark:text-green-400 border-green-500" : "text-red-600 dark:text-red-400 border-red-500")}>
@@ -419,7 +449,7 @@ export default function DewanTGRPenaltyPage() {
                     </div>
                 )}
                 <Button variant="outline" asChild>
-                    <Link href="/scoring/tgr/login"><ArrowLeft className="mr-2 h-4 w-4" /> Kembali</Link>
+                    <Link href={`/scoring/tgr/login?gelanggang=${gelanggangName || ''}`}><ArrowLeft className="mr-2 h-4 w-4" /> Kembali</Link>
                 </Button>
             </div>
         </PageTitle>
@@ -465,7 +495,13 @@ export default function DewanTGRPenaltyPage() {
               </div>
             </div>
 
-            {error && <p className="text-red-500 text-center mb-4 p-2 bg-red-100 border border-red-300 rounded-md">{error}</p>}
+            {error && (
+              <Alert variant="destructive" className="mb-4">
+                <Info className="h-4 w-4" />
+                <AlertTitle>Error</AlertTitle>
+                <AlertDescription>{error}</AlertDescription>
+              </Alert>
+            )}
 
             <div className="space-y-1 border border-gray-300 dark:border-gray-700 rounded-md shadow-sm">
               <div className="grid grid-cols-[1fr_auto_auto_auto] items-center p-2 bg-gray-100 dark:bg-gray-800 font-semibold border-b border-gray-300 dark:border-gray-700">
@@ -517,4 +553,26 @@ export default function DewanTGRPenaltyPage() {
       </main>
     </div>
   );
+}
+
+export default function DewanTGRPenaltyPageWrapper() {
+  return (
+    <Suspense fallback={
+      <div className="flex flex-col min-h-screen">
+        <Header />
+        <main className="flex-1 container mx-auto p-4 md:p-8 flex flex-col items-center justify-center">
+          <Loader2 className="h-12 w-12 animate-spin text-primary mb-4" />
+          <p className="text-lg text-muted-foreground">Memuat Panel Dewan TGR (Pelanggaran)...</p>
+        </main>
+      </div>
+    }>
+      <DewanTGRPenaltyPageComponentWithSearchParams />
+    </Suspense>
+  );
+}
+
+function DewanTGRPenaltyPageComponentWithSearchParams() {
+  const searchParams = useSearchParams();
+  const gelanggangName = searchParams.get('gelanggang');
+  return <DewanTGRPenaltyPageComponent gelanggangName={gelanggangName} />;
 }
