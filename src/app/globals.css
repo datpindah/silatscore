@@ -106,7 +106,8 @@ body {
     --monitor-bg: hsl(var(--background));
     --monitor-text: hsl(var(--foreground));
     --monitor-text-muted: hsl(var(--muted-foreground));
-    --monitor-header-section-bg: hsl(205, 65%, 88%); /* Light Blue */
+    --monitor-header-section-bg: hsl(var(--primary));
+    --monitor-header-section-text: hsl(var(--primary-foreground));
     
     --monitor-skeleton-bg: hsl(var(--muted));
 
@@ -168,7 +169,8 @@ body {
     --monitor-bg: theme('colors.gray.700');
     --monitor-text: theme('colors.white');
     --monitor-text-muted: theme('colors.gray.400');
-    --monitor-header-section-bg: hsl(210, 30%, 20%); /* Dark Blue */
+    --monitor-header-section-bg: hsl(var(--primary)); 
+    --monitor-header-section-text: hsl(var(--primary-foreground));
 
     --monitor-skeleton-bg: theme('colors.gray.600');
 
@@ -231,19 +233,20 @@ body {
     --monitor-bg: hsl(var(--background));
     --monitor-text: hsl(var(--foreground));
     --monitor-text-muted: hsl(var(--muted-foreground));
-    --monitor-header-section-bg: hsl(120, 60%, 88%); /* Light Green for TGR */
+    --monitor-header-section-bg: hsl(var(--primary)); 
+    --monitor-header-section-text: hsl(var(--primary-foreground));
     
     --monitor-skeleton-bg: hsl(var(--muted));
 
-    --monitor-pesilat-biru-name-text: theme('colors.teal.700'); /* Example color change for TGR */
+    --monitor-pesilat-biru-name-text: theme('colors.teal.700'); 
     --monitor-pesilat-biru-contingent-text: theme('colors.teal.500');
-    --monitor-pesilat-merah-name-text: theme('colors.orange.700'); /* Example color change for TGR */
+    --monitor-pesilat-merah-name-text: theme('colors.orange.700'); 
     --monitor-pesilat-merah-contingent-text: theme('colors.orange.500');
 
     --monitor-foulbox-inactive-bg: theme('colors.gray.200');
     --monitor-foulbox-inactive-text: theme('colors.gray.700');
     --monitor-foulbox-inactive-border: theme('colors.gray.400');
-    --monitor-foulbox-active-bg: theme('colors.amber.400'); /* Amber for TGR fouls */
+    --monitor-foulbox-active-bg: theme('colors.amber.400'); 
     --monitor-foulbox-active-text: theme('colors.black');
     --monitor-foulbox-active-border: theme('colors.amber.500');
 
@@ -254,7 +257,7 @@ body {
     --monitor-juri-indicator-inactive-bg: theme('colors.gray.200');
     --monitor-juri-indicator-inactive-text: theme('colors.gray.700');
     --monitor-juri-indicator-inactive-border: theme('colors.gray.400');
-    --monitor-juri-indicator-active-bg: theme('colors.lime.400'); /* Lime for TGR juri input */
+    --monitor-juri-indicator-active-bg: theme('colors.lime.400'); 
     --monitor-juri-indicator-active-text: theme('colors.black');
     
     --monitor-timer-text: hsl(var(--foreground));
@@ -269,7 +272,7 @@ body {
     --monitor-dialog-bg: hsl(var(--popover));
     --monitor-dialog-text: hsl(var(--popover-foreground));
     --monitor-dialog-border: hsl(var(--border));
-    --monitor-dialog-title-text: theme('colors.green.600'); /* Green for TGR dialog */
+    --monitor-dialog-title-text: theme('colors.green.600'); 
     --monitor-dialog-vote-merah-bg: theme('colors.orange.500');
     --monitor-dialog-vote-merah-text: theme('colors.white');
     --monitor-dialog-vote-biru-bg: theme('colors.teal.500');
@@ -290,10 +293,11 @@ body {
   }
 
   .tgr-monitoring-theme-dark {
-    --monitor-bg: theme('colors.gray.800'); /* Darker green-ish for TGR dark */
+    --monitor-bg: theme('colors.gray.800'); 
     --monitor-text: theme('colors.gray.100');
     --monitor-text-muted: theme('colors.gray.400');
-    --monitor-header-section-bg: hsl(120, 25%, 20%); /* Darker Green */
+    --monitor-header-section-bg: hsl(var(--primary)); 
+    --monitor-header-section-text: hsl(var(--primary-foreground));
 
     --monitor-skeleton-bg: theme('colors.gray.700');
 
@@ -328,7 +332,7 @@ body {
     --monitor-babak-indicator-active-border: theme('colors.lime.400');
     --monitor-status-text: theme('colors.gray.300');
 
-    --monitor-dialog-bg: theme('colors.gray.900'); /* Darker dialog for TGR dark */
+    --monitor-dialog-bg: theme('colors.gray.900'); 
     --monitor-dialog-text: theme('colors.gray.100');
     --monitor-dialog-border: theme('colors.gray.700');
     --monitor-dialog-title-text: theme('colors.green.300');

@@ -252,7 +252,7 @@ function MonitoringSkorPageComponent({ gelanggangName }: { gelanggangName: strin
 
 
   useEffect(() => {
-    if (!activeScheduleId || Object.values(juriScoresData).every(data => data === null)) {
+    if (!activeScheduleId || Object.values(juriScoresData).every(data => data === null) && prevSavedUnstruckKeysFromDewan.size === 0) {
         let calculatedTotalMerah = 0;
         let calculatedTotalBiru = 0;
         ketuaActionsLog.forEach(action => {
@@ -484,7 +484,6 @@ function MonitoringSkorPageComponent({ gelanggangName }: { gelanggangName: strin
             const nextMatchDoc = querySnapshot.docs[0];
             const venueMapRef = doc(db, ACTIVE_TANDING_MATCHES_BY_GELANGGANG_PATH);
             await updateDoc(venueMapRef, { [gelanggangName]: nextMatchDoc.id });
-            // alert(`Berpindah ke Partai No. ${nextMatchDoc.data().matchNumber}: ${nextMatchDoc.data().pesilatMerahName} vs ${nextMatchDoc.data().pesilatBiruName} di ${gelanggangName}`);
         }
     } catch (err) {
         console.error("Error navigating to next match:", err);
@@ -522,7 +521,7 @@ function MonitoringSkorPageComponent({ gelanggangName }: { gelanggangName: strin
         variant="outline"
         size="icon"
         onClick={() => setPageTheme(prev => prev === 'light' ? 'dark' : 'light')}
-        className="absolute top-2 right-2 z-[100] bg-[var(--monitor-dialog-bg)] text-[var(--monitor-text)] border-[var(--monitor-border)] hover:bg-[var(--monitor-neutral-bg)]"
+        className="absolute top-2 right-2 z-[100] bg-[var(--monitor-dialog-bg)] text-[var(--monitor-header-section-text)] border-[var(--monitor-border)] hover:bg-[var(--monitor-neutral-bg)]"
         aria-label={pageTheme === "dark" ? "Ganti ke mode terang" : "Ganti ke mode gelap"}
       >
         {pageTheme === 'dark' ? (
@@ -531,7 +530,7 @@ function MonitoringSkorPageComponent({ gelanggangName }: { gelanggangName: strin
           <Moon className="h-[1.2rem] w-[1.2rem]" />
         )}
       </Button>
-      <div className="bg-[var(--monitor-header-section-bg)] p-5 md:p-6 text-center">
+      <div className="bg-[var(--monitor-header-section-bg)] p-5 md:p-6 text-center text-[var(--monitor-header-section-text)]">
         <div className="grid grid-cols-3 gap-1 md:gap-2 text-base md:text-lg font-semibold">
           <div>{matchDetails?.place || <Skeleton className="h-5 w-24 md:h-6 md:w-32 inline-block bg-[var(--monitor-skeleton-bg)]" />}</div>
           <div>{matchDetails?.round || <Skeleton className="h-5 w-24 md:h-6 md:w-32 inline-block bg-[var(--monitor-skeleton-bg)]" />}</div>
@@ -645,10 +644,10 @@ function MonitoringSkorPageComponent({ gelanggangName }: { gelanggangName: strin
           {/* Kolom Tengah Bawah (Info Boxes "Pukulan" / "Tendangan") */}
           <div className="flex flex-col items-center justify-start w-full">
             <div className="w-full max-w-[180px] flex flex-col space-y-1 md:space-y-2">
-                <div className="py-1 md:py-2 border border-[var(--monitor-border)] rounded-md flex items-center justify-center text-xs md:text-sm text-[var(--monitor-text-muted)] bg-[var(--monitor-header-section-bg)] shadow-sm">
+                <div className="py-1 md:py-2 border border-[var(--monitor-border)] rounded-md flex items-center justify-center text-xs md:text-sm text-[var(--monitor-text-muted)] bg-[var(--monitor-header-section-bg)] text-[var(--monitor-header-section-text)] shadow-sm">
                     Pukulan
                 </div>
-                <div className="py-1 md:py-2 border border-[var(--monitor-border)] rounded-md flex items-center justify-center text-xs md:text-sm text-[var(--monitor-text-muted)] bg-[var(--monitor-header-section-bg)] shadow-sm">
+                <div className="py-1 md:py-2 border border-[var(--monitor-border)] rounded-md flex items-center justify-center text-xs md:text-sm text-[var(--monitor-text-muted)] bg-[var(--monitor-header-section-bg)] text-[var(--monitor-header-section-text)] shadow-sm">
                     Tendangan
                 </div>
             </div>
