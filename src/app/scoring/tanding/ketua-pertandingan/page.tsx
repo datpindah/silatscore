@@ -188,7 +188,7 @@ function KetuaPertandinganPageComponent({ gelanggangName }: { gelanggangName: st
     } else if (configMatchId === null && activeMatchId === null && isLoading) {
       setIsLoading(false);
     }
-  }, [configMatchId, activeMatchId, resetAllMatchData, isLoading]);
+  }, [configMatchId, activeMatchId, isLoading, resetAllMatchData]);
 
 
   useEffect(() => {
@@ -248,28 +248,28 @@ function KetuaPertandinganPageComponent({ gelanggangName }: { gelanggangName: st
     unsubscribers.push(unsubActions);
 
     const verificationsQuery = query(
-      collection(db, MATCHES_TANDING_COLLECTION, activeMatchId, VERIFICATIONS_SUBCOLLECTION),
-      orderBy('timestamp', 'desc'),
-      limit(1)
+        collection(db, MATCHES_TANDING_COLLECTION, activeMatchId, VERIFICATIONS_SUBCOLLECTION),
+        orderBy('timestamp', 'desc'),
+        limit(1)
     );
     const unsubActiveVerification = onSnapshot(verificationsQuery, (snapshot) => {
-      if (!mounted) return;
-      if (!snapshot.empty) {
-        const latestVerification = { id: snapshot.docs[0].id, ...snapshot.docs[0].data() } as VerificationRequest;
-        setActiveVerificationDetails(latestVerification);
-        if (latestVerification.status === 'pending') {
-            setIsVoteResultModalOpen(true);
+        if (!mounted) return;
+        if (!snapshot.empty) {
+            const latestVerification = { id: snapshot.docs[0].id, ...snapshot.docs[0].data() } as VerificationRequest;
+            setActiveVerificationDetails(latestVerification);
+            if (latestVerification.status === 'pending') {
+                setIsVoteResultModalOpen(true);
+            } else {
+                setIsVoteResultModalOpen(false);
+            }
         } else {
-            setIsVoteResultModalOpen(false); 
+            setActiveVerificationDetails(null);
+            setIsVoteResultModalOpen(false);
         }
-      } else {
-        setActiveVerificationDetails(null);
-        setIsVoteResultModalOpen(false);
-      }
     }, (err) => {
-      if (!mounted) return;
-      console.error("Error fetching active verification details:", err);
-      setError("Gagal memuat detail verifikasi aktif.");
+        if (!mounted) return;
+        console.error("Error fetching active verification details:", err);
+        setError("Gagal memuat detail verifikasi aktif.");
     });
     unsubscribers.push(unsubActiveVerification);
 
@@ -477,6 +477,7 @@ function KetuaPertandinganPageComponent({ gelanggangName }: { gelanggangName: st
 
       alert(`Verifikasi ${activeVerificationDetails.type} dikonfirmasi dengan hasil: ${ketuaSelectedDecision}.${pointsAwardedMessage}`);
       setKetuaSelectedDecision(null);
+      // The useEffect listening to verifications will auto-close the modal when status changes from 'pending'
     } catch (err) {
       console.error("Error confirming verification:", err);
       setError(err instanceof Error ? `Gagal mengkonfirmasi verifikasi: ${err.message}` : "Gagal mengkonfirmasi verifikasi.");
@@ -496,6 +497,7 @@ function KetuaPertandinganPageComponent({ gelanggangName }: { gelanggangName: st
       await updateDoc(verificationDocRef, { status: 'cancelled' });
       alert(`Verifikasi ${activeVerificationDetails.type} telah dibatalkan.`);
       setKetuaSelectedDecision(null);
+      // The useEffect listening to verifications will auto-close the modal
     } catch (err) {
        console.error("Error cancelling verification:", err);
        setError(err instanceof Error ? `Gagal membatalkan verifikasi: ${err.message}` : "Gagal membatalkan verifikasi.");
@@ -753,17 +755,25 @@ function KetuaPertandinganPageComponent({ gelanggangName }: { gelanggangName: st
         </div>
         {error && <div className="text-red-500 text-center mt-4 p-2 bg-red-100 border border-red-500 rounded-md">Error: {error}</div>}
 
-        <Dialog open={isVoteResultModalOpen && !!activeVerificationDetails && activeVerificationDetails.status === 'pending'} onOpenChange={(isOpen) => {
-          if (!isOpen) { 
-            if (activeVerificationDetails && activeVerificationDetails.status === 'pending') {
-                return; 
+        <Dialog 
+          open={isVoteResultModalOpen} 
+          onOpenChange={(isOpenFromRadix) => {
+            if (!isOpenFromRadix) {
+                // Allow closing if verification is not strictly pending anymore,
+                // or if the modal is explicitly closed by Ketua actions later.
+                if (!activeVerificationDetails || activeVerificationDetails.status !== 'pending') {
+                    setIsVoteResultModalOpen(false);
+                }
+                // If still pending, onPointerDownOutside/onEscapeKeyDown should prevent external close.
             }
-            setIsVoteResultModalOpen(false);
-          } else if (activeVerificationDetails && activeVerificationDetails.status === 'pending') {
-            setIsVoteResultModalOpen(true);
-          }
-        }}>
-          <DialogContent className="sm:max-w-lg" onPointerDownOutside={(e) => { if(activeVerificationDetails?.status === 'pending') e.preventDefault(); }} onEscapeKeyDown={(e) => { if(activeVerificationDetails?.status === 'pending') e.preventDefault(); }}>
+            // No action needed if isOpenFromRadix is true, as isVoteResultModalOpen controls the open prop.
+          }}
+        >
+          <DialogContent 
+            className="sm:max-w-lg" 
+            onPointerDownOutside={(e) => { if(activeVerificationDetails?.status === 'pending') e.preventDefault(); }} 
+            onEscapeKeyDown={(e) => { if(activeVerificationDetails?.status === 'pending') e.preventDefault(); }}
+          >
             <DialogTitle className="sr-only">Hasil Verifikasi Juri</DialogTitle>
             <DialogHeader>
               <DialogTitle className="text-2xl font-bold font-headline text-center">Hasil Verifikasi Juri</DialogTitle>
