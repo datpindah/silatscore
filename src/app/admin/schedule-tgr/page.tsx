@@ -8,7 +8,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardFooter } from '@/componen
 import { FormField } from '@/components/admin/ScheduleFormFields';
 import { ScheduleTable } from '@/components/admin/ScheduleTable';
 import { PrintScheduleButton } from '@/components/admin/PrintScheduleButton';
-import { Upload, PlusCircle, User, Users, UserSquare, Swords, PlayCircle, Loader2 } from 'lucide-react';
+import { Upload, PlusCircle, User, Users, UserSquare, Swords, PlayCircle, Loader2, Download } from 'lucide-react'; // Added Download
 import type { ScheduleTGR, TGRCategoryType } from '@/lib/types';
 import { tgrCategoriesList } from '@/lib/types';
 import { TableCell } from '@/components/ui/table';
@@ -249,6 +249,27 @@ export default function ScheduleTGRPage() {
     }
   };
 
+  const handleDownloadTGRTemplate = () => {
+    const fileName = "Template_Jadwal_TGR.xlsx";
+    const headers = [
+      "Nomor Undian",
+      "Tanggal (YYYY-MM-DD)",
+      "Gelanggang",
+      "Pool/Grup",
+      "Babak Pertandingan",
+      "Kategori (Tunggal/Ganda/Regu)",
+      "Nama Peserta (Pisahkan dengan koma)",
+      "Kontingen"
+    ];
+    const ws = XLSX.utils.aoa_to_sheet([headers]);
+    const colWidths = headers.map(header => ({ wch: header.length + 5 }));
+    ws['!cols'] = colWidths;
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "Jadwal TGR");
+    XLSX.writeFile(wb, fileName);
+    alert("Mengunduh template XLSX jadwal TGR.");
+  };
+
   const tableHeaders = ["No. Partai/Undian", "Tanggal", "Gelanggang", "Babak", "Kategori", "Pesilat Merah", "Kontingen Merah", "Pesilat Biru", "Kontingen Biru"];
 
   const categoryIcons: Record<TGRCategoryType, React.ReactNode> = {
@@ -262,7 +283,10 @@ export default function ScheduleTGRPage() {
     return (
       <>
         <PageTitle title="Jadwal Pertandingan TGR" description="Memuat data jadwal TGR...">
-          <div className="flex gap-2">
+          <div className="flex flex-wrap gap-2">
+            <Button onClick={handleDownloadTGRTemplate} variant="outline" disabled className="bg-accent hover:bg-accent/90 text-accent-foreground">
+                <Download className="mr-2 h-4 w-4" /> Download Template
+            </Button>
             <input type="file" accept=".xlsx" ref={fileInputRef} onChange={processUploadedFile} style={{ display: 'none' }} />
             <Button onClick={handleFileUpload} variant="outline" disabled><Upload className="mr-2 h-4 w-4" /> Unggah XLS</Button>
             <PrintScheduleButton scheduleType="TGR" disabled />
@@ -278,7 +302,10 @@ export default function ScheduleTGRPage() {
   return (
     <>
       <PageTitle title="Jadwal Pertandingan TGR" description="Kelola jadwal pertandingan kategori Tunggal, Ganda, Regu, dan Jurus Tunggal Bebas.">
-        <div className="flex gap-2">
+        <div className="flex flex-wrap gap-2">
+           <Button onClick={handleDownloadTGRTemplate} variant="outline" className="bg-accent hover:bg-accent/90 text-accent-foreground">
+            <Download className="mr-2 h-4 w-4" /> Download Template
+          </Button>
           <input type="file" accept=".xlsx" ref={fileInputRef} onChange={processUploadedFile} style={{ display: 'none' }} />
           <Button onClick={handleFileUpload} variant="outline">
             <Upload className="mr-2 h-4 w-4" /> Unggah XLS TGR
