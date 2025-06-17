@@ -60,8 +60,8 @@ function DewanSatuPageComponent() {
   const searchParams = useSearchParams();
   const gelanggangName = searchParams.get('gelanggang');
 
-  const [configMatchId, setConfigMatchId] = useState<string | null | undefined>(undefined); // ID from gelanggang map
-  const [activeScheduleId, setActiveScheduleId] = useState<string | null>(null); // The ID actually being processed
+  const [configMatchId, setConfigMatchId] = useState<string | null | undefined>(undefined); 
+  const [activeScheduleId, setActiveScheduleId] = useState<string | null>(null); 
   const [matchDetails, setMatchDetails] = useState<ScheduleTanding | null>(null);
 
   const [pesilatMerahInfo, setPesilatMerahInfo] = useState<PesilatInfo | null>(null);
@@ -161,14 +161,13 @@ function DewanSatuPageComponent() {
         setActiveScheduleId(null);
       }
       setIsLoading(false);
-      return () => { mounted = false; /* unsubscribers handled by main data effect */ };
+      return () => { mounted = false; };
     }
 
     if (configMatchId !== activeScheduleId) {
       resetAllMatchData(`configMatchId changed from ${activeScheduleId} to ${configMatchId}`);
       setActiveScheduleId(configMatchId);
-      // Data loading for the new activeScheduleId will be triggered by the data effect.
-      return () => { mounted = false; /* unsubscribers handled by main data effect */ };
+      return () => { mounted = false; };
     }
     
     return () => { mounted = false; };
@@ -185,9 +184,9 @@ function DewanSatuPageComponent() {
     } catch (e) { console.error(`[Dewan-1] Error updating timer status in Firestore:`, e); setError("Gagal memperbarui status timer di server."); }
   }, [activeScheduleId]); 
 
-  useEffect(() => { // Main data loading and synchronization logic
+  useEffect(() => { 
     if (!activeScheduleId) {
-      setIsLoading(false); // No active match to load.
+      setIsLoading(false); 
       return;
     }
 
@@ -197,7 +196,7 @@ function DewanSatuPageComponent() {
 
     const loadData = async () => {
       if (!mounted) return;
-      setError(null); // Clear previous match-specific errors
+      setError(null); 
 
       try {
         const scheduleDocRef = doc(db, SCHEDULE_TANDING_COLLECTION, activeScheduleId);
@@ -263,34 +262,16 @@ function DewanSatuPageComponent() {
             setKetuaActionsLog(actions);
         }, (err) => { if (mounted) { console.error(`[Dewan-1] Error fetching official actions:`, err); setKetuaActionsLog([]); }}));
         
-        const verificationQuery = query(collection(db, MATCHES_TANDING_COLLECTION, activeScheduleId, VERIFICATIONS_SUBCOLLECTION), orderBy('timestamp', 'desc'), limit(1));
+        const verificationQuery = query(collection(db, MATCHES_TANDING_COLLECTION, activeScheduleId, VERIFICATIONS_SUBCOLLECTION), where('status', '==', 'pending'), orderBy('timestamp', 'desc'), limit(1));
         unsubscribers.push(onSnapshot(verificationQuery, (snapshot) => {
           if (!mounted) return;
-          if (!snapshot.empty) {
-            const latestVerification = { id: snapshot.docs[0].id, ...snapshot.docs[0].data() } as VerificationRequest;
-            if (latestVerification.status === 'pending') {
-              setActiveDisplayVerificationRequest(latestVerification);
-              setIsDisplayVerificationModalOpen(true);
-              if (timerStatus.isTimerRunning || !timerStatus.matchStatus.startsWith('PausedForVerificationRound')) {
-                 updateTimerStatusInFirestore({
-                    isTimerRunning: false,
-                    matchStatus: `PausedForVerificationRound${timerStatus.currentRound}` as TimerMatchStatus
-                 });
-              }
-            } else { 
-              setActiveDisplayVerificationRequest(null);
-              setIsDisplayVerificationModalOpen(false);
-              if (timerStatus.matchStatus.startsWith('PausedForVerificationRound')) {
-                updateTimerStatusInFirestore({
-                  isTimerRunning: false,
-                  matchStatus: 'Pending', 
-                  timerSeconds: timerStatus.roundDuration,
-                });
-              }
+
+          if (snapshot.empty) { // No 'pending' verifications
+            if (isDisplayVerificationModalOpen) { // If modal was open for a verification that's now resolved/deleted
+                 setActiveDisplayVerificationRequest(null);
+                 setIsDisplayVerificationModalOpen(false);
             }
-          } else { 
-            setActiveDisplayVerificationRequest(null);
-            setIsDisplayVerificationModalOpen(false);
+            // If match was paused for ANY verification, and no verification is NOW pending, reset to 'Pending' state.
             if (timerStatus.matchStatus.startsWith('PausedForVerificationRound')) {
               updateTimerStatusInFirestore({
                 isTimerRunning: false,
@@ -298,8 +279,35 @@ function DewanSatuPageComponent() {
                 timerSeconds: timerStatus.roundDuration,
               });
             }
+          } else { // There is at least one 'pending' verification
+            const latestPendingVerification = { id: snapshot.docs[0].id, ...snapshot.docs[0].data() } as VerificationRequest;
+            setActiveDisplayVerificationRequest(latestPendingVerification);
+            setIsDisplayVerificationModalOpen(true);
+
+            // Ensure timer is paused specifically for THIS verification's round
+            const expectedPausedStatus: TimerMatchStatus = `PausedForVerificationRound${latestPendingVerification.round}`;
+            if (timerStatus.isTimerRunning || timerStatus.matchStatus !== expectedPausedStatus) {
+               updateTimerStatusInFirestore({
+                  isTimerRunning: false,
+                  matchStatus: expectedPausedStatus
+               });
+            }
           }
-        }, (err) => { if (mounted) { console.error(`[Dewan-1] Error fetching verification for display:`, err); setActiveDisplayVerificationRequest(null); setIsDisplayVerificationModalOpen(false); }}));
+        }, (err) => { 
+          if (mounted) { 
+            console.error(`[Dewan-1] Error fetching verification for display:`, err); 
+            setActiveDisplayVerificationRequest(null); 
+            setIsDisplayVerificationModalOpen(false); 
+            // Potentially reset timer status if it was stuck in PausedForVerification
+            if (timerStatus.matchStatus.startsWith('PausedForVerificationRound')) {
+                updateTimerStatusInFirestore({
+                  isTimerRunning: false,
+                  matchStatus: 'Pending',
+                  timerSeconds: timerStatus.roundDuration,
+                });
+            }
+          }
+        }));
 
       } catch (err) {
         if (mounted) { console.error("[Dewan-1] Error in loadData function:", err); setError("Gagal memuat data pertandingan."); }
@@ -309,10 +317,9 @@ function DewanSatuPageComponent() {
     };
     loadData();
     return () => { mounted = false; unsubscribers.forEach(unsub => unsub()); };
-  }, [activeScheduleId, updateTimerStatusInFirestore]); // Added updateTimerStatusInFirestore
+  }, [activeScheduleId, updateTimerStatusInFirestore]);
 
 
-  // Effect B: Score calculation
   useEffect(() => {
     if (isLoading) return; 
     
@@ -433,7 +440,6 @@ function DewanSatuPageComponent() {
     }
   }, [isLoading, juri1Scores, juri2Scores, juri3Scores, activeScheduleId, prevSavedUnstruckKeys, prevSavedStruckKeys, ketuaActionsLog]);
 
-  // Timer interval management
   useEffect(() => {
     let interval: NodeJS.Timeout | null = null;
     if (timerStatus.isTimerRunning && timerStatus.timerSeconds > 0 && activeScheduleId) {
@@ -612,13 +618,10 @@ function DewanSatuPageComponent() {
         const querySnapshot = await getDocs(q);
         if (querySnapshot.empty) {
             alert(`Tidak ada partai berikutnya untuk Gelanggang: ${gelanggangName}.`);
-            // Optionally, clear this gelanggang's active match from the map
-            // const venueMapRef = doc(db, ACTIVE_TANDING_MATCHES_BY_GELANGGANG_PATH);
-            // await updateDoc(venueMapRef, { [gelanggangName]: deleteField() });
         } else {
             const nextMatchDoc = querySnapshot.docs[0];
             const venueMapRef = doc(db, ACTIVE_TANDING_MATCHES_BY_GELANGGANG_PATH);
-            await updateDoc(venueMapRef, { [gelanggangName]: nextMatchDoc.id }); // Update map to new ID
+            await updateDoc(venueMapRef, { [gelanggangName]: nextMatchDoc.id }); 
             alert(`Berpindah ke Partai No. ${nextMatchDoc.data().matchNumber} (${nextMatchDoc.data().pesilatMerahName} vs ${nextMatchDoc.data().pesilatBiruName}) di ${gelanggangName}.`);
         }
     } catch (err) { console.error("Error navigating to next match:", err); alert("Gagal berpindah ke partai berikutnya."); }
@@ -802,7 +805,6 @@ function DewanSatuPageComponent() {
 }
 
 export default function ScoringTandingDewanSatuPage() {
-  // Suspense boundary for useSearchParams
   return (
     <Suspense fallback={
       <div className="flex flex-col min-h-screen"> <Header />
@@ -823,3 +825,4 @@ interface CombinedScoreEntry extends ScoreEntry {
   round: keyof LibRoundScores;
   color: 'merah' | 'biru';
 }
+
