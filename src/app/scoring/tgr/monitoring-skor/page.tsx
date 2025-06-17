@@ -14,6 +14,7 @@ import { cn } from '@/lib/utils';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { Card, CardContent } from '@/components/ui/card'; // Import Card and CardContent
 
 
 const ACTIVE_TGR_MATCHES_BY_GELANGGANG_PATH = 'app_settings/active_tgr_matches_by_gelanggang'; // Path baru
@@ -535,30 +536,34 @@ function MonitoringSkorTGRPageComponent({ gelanggangName }: { gelanggangName: st
           "bg-[var(--monitor-bg)] text-[var(--monitor-text)]"
         )}
       >
-        {/* Top Bar Info Pertandingan */}
-        <div className="bg-[var(--monitor-header-section-bg)] p-3 md:p-4 text-center text-sm md:text-base font-semibold text-[var(--monitor-header-section-text)]">
-          <div className="flex justify-between items-center">
-            <div className="flex-1 grid grid-cols-2 sm:grid-cols-4 gap-1 items-center">
-              <div>Gelanggang: {gelanggangName || <Skeleton className="h-5 w-16 inline-block bg-[var(--monitor-skeleton-bg)]" />}</div>
-              <div>Partai: {scheduleDetails?.lotNumber || <Skeleton className="h-5 w-10 inline-block bg-[var(--monitor-skeleton-bg)]" />}</div>
-              <div>Babak: {scheduleDetails?.round || <Skeleton className="h-5 w-16 inline-block bg-[var(--monitor-skeleton-bg)]" />}</div>
-              <div>Kategori: {scheduleDetails?.category || <Skeleton className="h-5 w-20 inline-block bg-[var(--monitor-skeleton-bg)]" />}</div>
-            </div>
-            <Button
-              variant="ghost"
-              size="icon"
-              onClick={() => setPageTheme(prev => prev === 'light' ? 'dark' : 'light')}
-              className="ml-2 text-[var(--monitor-header-section-text)] hover:bg-black/10 dark:hover:bg-white/10"
-              aria-label={pageTheme === "dark" ? "Ganti ke mode terang" : "Ganti ke mode gelap"}
-            >
-              {pageTheme === 'dark' ? (
-                <Sun className="h-[1.2rem] w-[1.2rem]" />
-              ) : (
-                <Moon className="h-[1.2rem] w-[1.2rem]" />
-              )}
-            </Button>
-          </div>
-        </div>
+        <Button
+          variant="outline"
+          size="icon"
+          onClick={() => setPageTheme(prev => prev === 'light' ? 'dark' : 'light')}
+          className="absolute top-2 right-2 z-[100] bg-[var(--monitor-dialog-bg)] text-[var(--monitor-text)] border-[var(--monitor-border)] hover:bg-opacity-80"
+          aria-label={pageTheme === "dark" ? "Ganti ke mode terang" : "Ganti ke mode gelap"}
+        >
+          {pageTheme === 'dark' ? (
+            <Sun className="h-[1.2rem] w-[1.2rem]" />
+          ) : (
+            <Moon className="h-[1.2rem] w-[1.2rem]" />
+          )}
+        </Button>
+        
+        <Card className="mb-2 md:mb-4 shadow-xl bg-gradient-to-r from-primary to-red-700 text-primary-foreground mx-1 md:mx-2 mt-1 md:mt-2">
+          <CardContent className="p-3 md:p-4 text-center">
+            <h1 className="text-xl md:text-2xl font-bold font-headline">
+              PENCAK SILAT TGR - GELANGGANG: {gelanggangName || <Loader2 className="inline h-5 w-5 animate-spin"/>}
+            </h1>
+            {scheduleDetails && (
+                <p className="text-xs md:text-sm">
+                    Partai No. {scheduleDetails.lotNumber} | {scheduleDetails.round} | {scheduleDetails.category}
+                </p>
+            )}
+            {error && !isLoading && !scheduleDetails && <p className="text-xs md:text-sm text-yellow-300 mt-1">Gagal memuat detail pertandingan. {error}</p>}
+          </CardContent>
+        </Card>
+
 
         <div className="flex-grow flex flex-col p-2 md:p-4">
           {/* Name/Kontingen and Timer Row */}
