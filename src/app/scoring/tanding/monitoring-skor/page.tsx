@@ -3,10 +3,9 @@
 
 import { useState, useEffect, useCallback, useRef, Suspense } from 'react';
 import Link from 'next/link';
-import { useSearchParams } from 'next/navigation';
+import { useSearchParams } from 'next/navigation'; // Ditambahkan
 import { Button } from '@/components/ui/button';
-import { Dialog, DialogContent, DialogHeader, DialogTitle as RadixDialogTitle } from "@/components/ui/dialog";
-import { Card, CardContent } from '@/components/ui/card';
+import { Header } from '@/components/layout/Header';
 import { ArrowLeft, Eye, Loader2, RadioTower, AlertTriangle, Sun, Moon, ChevronsRight } from 'lucide-react';
 import type { ScheduleTanding, TimerStatus, VerificationRequest, JuriVoteValue, KetuaActionLogEntry, PesilatColorIdentity, KetuaActionType } from '@/lib/types';
 import type { ScoreEntry as LibScoreEntryType, RoundScores as LibRoundScoresType } from '@/lib/types';
@@ -14,7 +13,9 @@ import { db } from '@/lib/firebase';
 import { doc, onSnapshot, getDoc, collection, query, orderBy, limit, Timestamp, setDoc, where, getDocs, updateDoc, deleteField } from 'firebase/firestore';
 import { cn } from '@/lib/utils';
 import { Skeleton } from '@/components/ui/skeleton';
-import { Header } from '@/components/layout/Header';
+import { Dialog, DialogContent, DialogHeader, DialogTitle as RadixDialogTitle } from "@/components/ui/dialog"; // Added Dialog components
+import { Card, CardContent } from '@/components/ui/card';
+
 
 const ACTIVE_TANDING_MATCHES_BY_GELANGGANG_PATH = 'app_settings/active_tanding_matches_by_gelanggang';
 const SCHEDULE_TANDING_COLLECTION = 'schedules_tanding';
@@ -498,7 +499,7 @@ function MonitoringSkorPageComponent({ gelanggangName }: { gelanggangName: strin
 
   if (!gelanggangName && !isLoading) {
     return (
-      <div className={cn("flex flex-col min-h-screen items-center justify-center", pageTheme === 'light' ? 'monitoring-theme-light' : 'monitoring-theme-dark', "bg-[var(--monitor-bg)] text-[var(--monitor-text)]")}>
+      <div className={cn("flex flex-col min-h-screen items-center justify-center", pageTheme === 'light' ? 'monitoring-theme-light' : 'monitoring-theme-dark', "bg-gray-100 dark:bg-gray-900 text-[var(--monitor-text)]")}>
         <AlertTriangle className="h-16 w-16 text-[var(--monitor-overlay-accent-text)] mb-4" />
         <p className="text-xl text-center text-[var(--monitor-overlay-text-primary)] mb-2">Gelanggang Tidak Ditemukan</p>
         <p className="text-sm text-center text-[var(--monitor-overlay-text-secondary)] mb-6">Parameter 'gelanggang' tidak ada di URL. Halaman monitor tidak bisa memuat data.</p>
@@ -511,7 +512,7 @@ function MonitoringSkorPageComponent({ gelanggangName }: { gelanggangName: strin
 
   if (isLoading && configMatchId === undefined) {
     return (
-        <div className={cn("flex flex-col min-h-screen items-center justify-center", pageTheme === 'light' ? 'monitoring-theme-light' : 'monitoring-theme-dark', "bg-[var(--monitor-bg)] text-[var(--monitor-text)]")}>
+        <div className={cn("flex flex-col min-h-screen items-center justify-center", pageTheme === 'light' ? 'monitoring-theme-light' : 'monitoring-theme-dark', "bg-gray-100 dark:bg-gray-900 text-[var(--monitor-text)]")}>
             <Loader2 className="h-16 w-16 animate-spin text-[var(--monitor-overlay-accent-text)] mb-4" />
             <p className="text-xl">Memuat Konfigurasi Monitor untuk Gelanggang: {gelanggangName || '...'}</p>
         </div>
@@ -521,7 +522,13 @@ function MonitoringSkorPageComponent({ gelanggangName }: { gelanggangName: strin
   return (
     <>
       <Header />
-      <div className={cn("flex flex-col min-h-screen font-sans overflow-hidden relative", pageTheme === 'light' ? 'monitoring-theme-light' : 'monitoring-theme-dark', "bg-[var(--monitor-bg)] text-[var(--monitor-text)]")}>
+      <div
+        className={cn(
+          "flex flex-col min-h-screen font-sans overflow-hidden relative",
+          pageTheme === 'light' ? 'monitoring-theme-light' : 'monitoring-theme-dark',
+          "bg-gray-100 dark:bg-gray-900 text-[var(--monitor-text)]" // Use direct Tailwind classes for page background
+        )}
+      >
         <Button
           variant="outline"
           size="icon"
@@ -542,9 +549,9 @@ function MonitoringSkorPageComponent({ gelanggangName }: { gelanggangName: strin
               GELANGGANG: {gelanggangName || <Skeleton className="h-6 w-20 inline-block bg-red-400" />}
             </h1>
             {matchDetails && (
-              <p className="text-xs md:text-sm">
+              <div className="text-xs md:text-sm"> {/* Changed p to div */}
                 Partai No. {matchDetails.matchNumber} | {matchDetails.round} | {matchDetails.class}
-              </p>
+              </div>
             )}
             {isLoading && !matchDetailsLoaded && activeScheduleId && (
               <div className="text-xs md:text-sm"> {/* Changed from p to div */}
@@ -775,7 +782,7 @@ export default function MonitoringSkorPageSuspended() {
     <Suspense fallback={
       <div className={cn("flex flex-col min-h-screen items-center justify-center bg-gray-100 dark:bg-gray-900")}>
         <Loader2 className="h-16 w-16 animate-spin text-primary mb-4" />
-        <p className="text-xl text-muted-foreground">Memuat Halaman Monitor Skor...</p>
+        <p className="text-lg text-muted-foreground">Memuat Halaman Monitor Skor...</p>
       </div>
     }>
       <PageWithSearchParams />
