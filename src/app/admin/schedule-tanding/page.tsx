@@ -8,7 +8,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardFooter } from '@/componen
 import { FormField } from '@/components/admin/ScheduleFormFields';
 import { ScheduleTable } from '@/components/admin/ScheduleTable';
 import { PrintScheduleButton } from '@/components/admin/PrintScheduleButton';
-import { Upload, PlusCircle, PlayCircle } from 'lucide-react';
+import { Upload, PlusCircle, PlayCircle, Download } from 'lucide-react'; // Added Download
 import type { ScheduleTanding } from '@/lib/types';
 import { TableCell } from '@/components/ui/table';
 import { db } from '@/lib/firebase';
@@ -220,7 +220,6 @@ export default function ScheduleTandingPage() {
     reader.readAsArrayBuffer(file);
   };
 
-
   const handleActivateSchedule = async (schedule: ScheduleTanding) => {
     if (!schedule.place || schedule.place.trim() === "") {
       alert("Tidak dapat mengaktifkan jadwal: Tempat Pertandingan (Gelanggang) kosong.");
@@ -238,17 +237,42 @@ export default function ScheduleTandingPage() {
     }
   };
 
+  const handleDownloadTandingTemplate = () => {
+    const fileName = "Template_Jadwal_Tanding.xlsx";
+    const headers = [
+      "Nomor Pertandingan",
+      "Tanggal (YYYY-MM-DD)",
+      "Tempat Pertandingan",
+      "Nama Pesilat Merah",
+      "Kontingen Pesilat Merah",
+      "Nama Pesilat Biru",
+      "Kontingen Pesilat Biru",
+      "Babak",
+      "Kelas Tanding"
+    ];
+    const ws = XLSX.utils.aoa_to_sheet([headers]);
+    const colWidths = headers.map(header => ({ wch: header.length + 5 }));
+    ws['!cols'] = colWidths;
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "Jadwal Tanding");
+    XLSX.writeFile(wb, fileName);
+    alert("Mengunduh template XLSX jadwal Tanding.");
+  };
+
   const tandingTableHeaders = ["No. Match", "Tanggal", "Gelanggang", "Pesilat Merah", "Pesilat Biru", "Babak", "Kelas"];
 
   if (isLoading) {
-    return <PageTitle title="Jadwal Pertandingan Tanding" description="Memuat data jadwal..."><div className="flex gap-2"><Button variant="outline" disabled><Upload className="mr-2 h-4 w-4" /> Unggah XLS</Button><PrintScheduleButton scheduleType="Tanding" disabled /></div></PageTitle>;
+    return <PageTitle title="Jadwal Pertandingan Tanding" description="Memuat data jadwal..."><div className="flex gap-2"><Button variant="outline" disabled><Download className="mr-2 h-4 w-4" /> Download Template</Button><Button variant="outline" disabled><Upload className="mr-2 h-4 w-4" /> Unggah XLS</Button><PrintScheduleButton scheduleType="Tanding" disabled /></div></PageTitle>;
   }
 
   return (
     <>
       <PageTitle title="Jadwal Pertandingan Tanding" description="Kelola jadwal pertandingan kategori tanding.">
-        <div className="flex gap-2">
+        <div className="flex flex-wrap gap-2">
            <input type="file" accept=".xlsx" ref={fileInputRef} onChange={processUploadedFile} style={{ display: 'none' }} />
+           <Button onClick={handleDownloadTandingTemplate} variant="outline" className="bg-accent hover:bg-accent/90 text-accent-foreground">
+            <Download className="mr-2 h-4 w-4" /> Download Template
+          </Button>
           <Button onClick={handleFileUpload} variant="outline">
             <Upload className="mr-2 h-4 w-4" /> Unggah XLS
           </Button>
@@ -341,3 +365,4 @@ export default function ScheduleTandingPage() {
     </>
   );
 }
+
