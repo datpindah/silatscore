@@ -1,13 +1,13 @@
-
 "use client";
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, Suspense } from 'react';
 import Link from 'next/link';
+import { useSearchParams } from 'next/navigation';
 import { Header } from '@/components/layout/Header';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { ArrowLeft, Loader2, Trash2, ShieldCheck, Trophy, Vote, Play, Pause, Info, Eye } from 'lucide-react';
+import { ArrowLeft, Loader2, Trash2, ShieldCheck, Trophy, Vote, Play, Pause, Info, Eye, AlertTriangle } from 'lucide-react';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger, DialogClose } from "@/components/ui/dialog";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Label } from "@/components/ui/label";
@@ -19,7 +19,7 @@ import { doc, onSnapshot, getDoc, Timestamp, collection, addDoc, query, orderBy,
 import { cn } from '@/lib/utils';
 import { Skeleton } from '@/components/ui/skeleton';
 
-const ACTIVE_TANDING_SCHEDULE_CONFIG_PATH = 'app_settings/active_match_tanding';
+const ACTIVE_TANDING_MATCHES_BY_GELANGGANG_PATH = 'app_settings/active_tanding_matches_by_gelanggang';
 const SCHEDULE_TANDING_COLLECTION = 'schedules_tanding';
 const MATCHES_TANDING_COLLECTION = 'matches_tanding';
 const OFFICIAL_ACTIONS_SUBCOLLECTION = 'official_actions';
@@ -102,9 +102,9 @@ const formatFirestoreTimestamp = (timestamp: KetuaActionLogEntry['timestamp']): 
 };
 
 
-export default function KetuaPertandinganPage() {
-  const [configMatchId, setConfigMatchId] = useState<string | null | undefined>(undefined);
-  const [activeMatchId, setActiveMatchId] = useState<string | null>(null);
+function KetuaPertandinganPageComponent({ gelanggangName }: { gelanggangName: string | null }) {
+  const [configMatchId, setConfigMatchId] = useState<string | null | undefined>(undefined); // ID dari peta gelanggang
+  const [activeMatchId, setActiveMatchId] = useState<string | null>(null); // ID yang sedang diproses
 
   const [matchDetails, setMatchDetails] = useState<ScheduleTanding | null>(null);
   const [pesilatMerahInfo, setPesilatMerahInfo] = useState<PesilatDisplayInfo | null>(null);
@@ -142,42 +142,67 @@ export default function KetuaPertandinganPage() {
   }, []);
 
   useEffect(() => {
-    const unsubConfig = onSnapshot(doc(db, ACTIVE_TANDING_SCHEDULE_CONFIG_PATH), (docSnap) => {
-      const newDbConfigId = docSnap.exists() ? docSnap.data()?.activeScheduleId : null;
-      if (newDbConfigId !== configMatchId) setConfigMatchId(newDbConfigId);
-      else if (configMatchId === undefined && newDbConfigId === null) setConfigMatchId(null);
+    if (!gelanggangName) {
+      setError("Nama gelanggang tidak ditemukan di URL.");
+      setConfigMatchId(null); 
+      setIsLoading(false);
+      return;
+    }
+    setError(null); 
+    setIsLoading(true);
+
+    const unsubGelanggangMap = onSnapshot(doc(db, ACTIVE_TANDING_MATCHES_BY_GELANGGANG_PATH), (docSnap) => {
+      let newDbConfigId: string | null = null;
+      if (docSnap.exists()) {
+        newDbConfigId = docSnap.data()?.[gelanggangName] || null;
+      }
+      
+      setConfigMatchId(prevId => {
+        if (prevId === newDbConfigId) return prevId;
+        return newDbConfigId;
+      });
+
+      if (!newDbConfigId) {
+         setError(`Tidak ada jadwal Tanding aktif untuk Gelanggang: ${gelanggangName}.`);
+      }
     }, (err) => {
-      console.error("Error fetching active schedule config:", err);
-      setError("Gagal memuat konfigurasi jadwal aktif.");
+      console.error(`[KetuaTanding] Error fetching active matches by gelanggang map:`, err);
+      setError("Gagal memuat peta jadwal aktif per gelanggang.");
       setConfigMatchId(null);
     });
-    return () => unsubConfig();
-  }, [configMatchId]);
+    return () => unsubGelanggangMap();
+  }, [gelanggangName]);
+
 
   useEffect(() => {
-    if (configMatchId === undefined) { setIsLoading(true); return; }
+    if (configMatchId === undefined) {
+      setIsLoading(true); 
+      return; 
+    }
     if (configMatchId !== activeMatchId) {
       resetAllMatchData();
       setActiveMatchId(configMatchId);
-      setMatchDetailsLoaded(false);
+      setMatchDetailsLoaded(false); 
       if (configMatchId) setIsLoading(true); else setIsLoading(false);
     } else if (configMatchId === null && activeMatchId === null && isLoading) {
       setIsLoading(false);
     }
   }, [configMatchId, activeMatchId, resetAllMatchData, isLoading]);
 
+
   useEffect(() => {
     if (!activeMatchId) {
       if (isLoading) setIsLoading(false);
-      setError(null);
+      setError(null); 
       setMatchDetails(null); setPesilatMerahInfo(null); setPesilatBiruInfo(null);
       setKetuaActionsLog([]); setDewanTimerStatus(initialDewanTimerStatus);
       setActiveVerificationDetails(null); setIsVoteResultModalOpen(false);
+      setMatchDetailsLoaded(false);
       return;
     }
 
     let mounted = true;
-    if (!isLoading && !matchDetailsLoaded) setIsLoading(true);
+    if (!isLoading && !matchDetailsLoaded) setIsLoading(true); 
 
     const unsubscribers: (() => void)[] = [];
 
@@ -214,7 +239,7 @@ export default function KetuaPertandinganPage() {
         actions.push({ 
             id: doc.id, 
             ...data,
-            timestamp: data.timestamp // Keep as Firestore Timestamp or plain object
+            timestamp: data.timestamp 
         } as KetuaActionLogEntry)
     });
       setKetuaActionsLog(actions);
@@ -251,7 +276,7 @@ export default function KetuaPertandinganPage() {
     if (matchDetailsLoaded && isLoading) setIsLoading(false);
 
     return () => { mounted = false; unsubscribers.forEach(unsub => unsub()); };
-  }, [activeMatchId, isLoading, matchDetailsLoaded]); 
+  }, [activeMatchId, isLoading, matchDetailsLoaded, resetAllMatchData]); 
 
   useEffect(() => { if (isLoading && (matchDetailsLoaded || activeMatchId === null)) setIsLoading(false); }, [isLoading, matchDetailsLoaded, activeMatchId]);
 
@@ -490,38 +515,63 @@ export default function KetuaPertandinganPage() {
     return "bg-white dark:bg-gray-700"; 
   };
 
-
-  if (configMatchId === undefined || (isLoading && activeMatchId && !matchDetailsLoaded)) {
+  if (!gelanggangName && !isLoading) {
+    return (
+      <div className="flex flex-col min-h-screen"><Header />
+        <main className="flex-1 container mx-auto p-4 md:p-8 flex flex-col items-center justify-center text-center">
+            <AlertTriangle className="h-12 w-12 text-destructive mb-4" />
+            <h1 className="text-xl font-semibold text-destructive">Nama Gelanggang Diperlukan</h1>
+            <p className="text-muted-foreground mt-2">Parameter 'gelanggang' tidak ditemukan di URL. Halaman ini tidak dapat memuat data pertandingan tanpa nama gelanggang.</p>
+            <Button asChild className="mt-6">
+                <Link href={`/login?redirect=/scoring/tanding/ketua-pertandingan`}><ArrowLeft className="mr-2 h-4 w-4"/> Kembali ke Halaman Login</Link>
+            </Button>
+        </main>
+      </div>
+    );
+  }
+  
+  if (isLoading && (!activeMatchId || !matchDetailsLoaded)) {
     return (
       <div className="flex flex-col min-h-screen"><Header />
         <main className="flex-1 container mx-auto p-4 md:p-8 flex flex-col items-center justify-center">
           <Loader2 className="h-12 w-12 animate-spin text-primary mb-4" />
-          <p className="text-lg text-muted-foreground">Memuat Panel Ketua Pertandingan...</p>
+          <p className="text-lg text-muted-foreground">
+            {configMatchId === undefined ? `Memuat konfigurasi untuk Gelanggang: ${gelanggangName || '...'}` : 
+             !activeMatchId && configMatchId === null ? `Tidak ada jadwal aktif untuk Gelanggang: ${gelanggangName || '...'}` :
+             `Memuat data pertandingan untuk Gelanggang: ${gelanggangName || '...'}`}
+          </p>
+          {error && <p className="text-sm text-red-500 mt-2">Error: {error}</p>}
         </main>
       </div>
     );
   }
 
-  if (!activeMatchId && !isLoading) {
+  if (!activeMatchId && !isLoading && configMatchId === null) {
     return (
       <div className="flex flex-col min-h-screen"><Header />
         <main className="flex-1 container mx-auto px-4 py-8 text-center">
-           <h1 className="text-2xl font-bold text-primary mb-2">Ketua Pertandingan</h1>
-           <div className="text-muted-foreground mb-4">{error || "Tidak ada pertandingan yang aktif."}</div>
-           <Button variant="outline" asChild><Link href="/admin/schedule-tanding"><ArrowLeft className="mr-2 h-4 w-4" /> Kembali ke Admin</Link></Button>
+           <h1 className="text-2xl font-bold text-primary mb-2">Ketua Pertandingan (Gel: {gelanggangName || 'N/A'})</h1>
+           <div className="text-muted-foreground mb-4">{error || `Tidak ada pertandingan yang aktif untuk Gelanggang: ${gelanggangName}.`}</div>
+           <Button variant="outline" asChild>
+            <Link href={`/login?redirect=/scoring/tanding/ketua-pertandingan&gelanggang=${gelanggangName || ''}`}>
+                <ArrowLeft className="mr-2 h-4 w-4" /> Kembali ke Login
+            </Link>
+           </Button>
         </main>
       </div>
     );
   }
+
 
   return (
     <div className="flex flex-col min-h-screen bg-gray-50 dark:bg-black">
       <Header />
       <main className="flex-1 container mx-auto px-2 py-4 md:p-6">
         <div className="text-center mb-4">
-          <h1 className="text-2xl md:text-3xl font-bold text-gray-800 dark:text-gray-100">Ketua Pertandingan</h1>
+          <h1 className="text-2xl md:text-3xl font-bold text-gray-800 dark:text-gray-100">Ketua Pertandingan (Gel: {gelanggangName || 'N/A'})</h1>
           <div className="text-sm text-gray-600 dark:text-gray-400">
-             {isLoading && !matchDetailsLoaded ? <Skeleton className="h-4 w-32 inline-block" /> : (matchDetails?.place || `Gelanggang ${matchDetails?.matchNumber || 'A'}`)}
+             {isLoading && !matchDetailsLoaded ? <Skeleton className="h-4 w-32 inline-block" /> : (matchDetails?.place || `Partai No. ${matchDetails?.matchNumber || 'N/A'}`)}
+             {matchDetails && matchDetailsLoaded && ` - ${matchDetails.class} (${matchDetails.round})`}
           </div>
         </div>
 
@@ -569,7 +619,6 @@ export default function KetuaPertandinganPage() {
           </Table>
         </div>
         
-        {/* Log Tindakan Ketua */}
         <Card className="mb-6">
           <CardHeader>
             <CardTitle className="text-lg">Log Tindakan Ketua</CardTitle>
@@ -782,9 +831,34 @@ export default function KetuaPertandinganPage() {
             </DialogFooter>
           </DialogContent>
         </Dialog>
-
+        <div className="mt-8 text-center">
+            <Button variant="outline" asChild>
+                <Link href={`/login?redirect=/scoring/tanding/ketua-pertandingan&gelanggang=${gelanggangName || ''}`}><ArrowLeft className="mr-2 h-4 w-4"/> Kembali ke Login</Link>
+            </Button>
+        </div>
       </main>
     </div>
   );
+}
+
+export default function KetuaPertandinganTandingPage() {
+  return (
+    <Suspense fallback={
+      <div className="flex flex-col min-h-screen"> <Header />
+        <main className="flex-1 container mx-auto p-4 md:p-8 flex flex-col items-center justify-center">
+          <Loader2 className="h-12 w-12 animate-spin text-primary mb-4" />
+          <p className="text-lg text-muted-foreground">Memuat halaman Ketua Pertandingan...</p>
+        </main>
+      </div>
+    }>
+      <PageWithSearchParams />
+    </Suspense>
+  );
+}
+
+function PageWithSearchParams() {
+  const searchParams = useSearchParams();
+  const gelanggangName = searchParams.get('gelanggang');
+  return <KetuaPertandinganPageComponent gelanggangName={gelanggangName} />;
 }
 
