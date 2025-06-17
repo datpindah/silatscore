@@ -106,8 +106,8 @@ body {
     --monitor-bg: hsl(var(--background));
     --monitor-text: hsl(var(--foreground));
     --monitor-text-muted: hsl(var(--muted-foreground));
-    --monitor-header-section-bg: hsl(var(--primary));
-    --monitor-header-section-text: hsl(var(--primary-foreground));
+    --monitor-header-section-bg: 229 76% 50%; /* New Blue Color */
+    --monitor-header-section-text: 0 0% 98%; /* White text */
     
     --monitor-skeleton-bg: hsl(var(--muted));
 
@@ -169,8 +169,8 @@ body {
     --monitor-bg: theme('colors.gray.700');
     --monitor-text: theme('colors.white');
     --monitor-text-muted: theme('colors.gray.400');
-    --monitor-header-section-bg: hsl(var(--primary)); 
-    --monitor-header-section-text: hsl(var(--primary-foreground));
+    --monitor-header-section-bg: 229 76% 50%; /* New Blue Color */
+    --monitor-header-section-text: 0 0% 98%; /* White text */
 
     --monitor-skeleton-bg: theme('colors.gray.600');
 
@@ -365,3 +365,4 @@ body {
     @apply bg-background text-foreground;
   }
 }
+
