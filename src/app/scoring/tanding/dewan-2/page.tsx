@@ -411,7 +411,7 @@ function DewanDuaPageComponent({ gelanggangName }: { gelanggangName: string | nu
                 <h1 className="text-xl font-semibold text-destructive">Gelanggang Diperlukan</h1>
                 <p className="text-muted-foreground mt-2">Parameter 'gelanggang' tidak ditemukan di URL. Halaman ini tidak dapat memuat data pertandingan tanpa nama gelanggang.</p>
                 <Button asChild className="mt-6">
-                    <Link href={`/login?redirect=/scoring/tanding/dewan-2`}><ArrowLeft className="mr-2 h-4 w-4"/> Kembali ke Halaman Login</Link>
+                    <Link href="/login"><ArrowLeft className="mr-2 h-4 w-4"/> Kembali ke Halaman Login</Link>
                 </Button>
             </main>
         </div>
@@ -442,7 +442,7 @@ function DewanDuaPageComponent({ gelanggangName }: { gelanggangName: string | nu
             <div className="p-6 text-center">
                 <p className="mb-4 text-muted-foreground">{error || `Tidak ada pertandingan yang aktif untuk Gelanggang: ${gelanggangName}.`}</p>
                 <Button variant="outline" asChild>
-                  <Link href={`/login?redirect=/scoring/tanding/dewan-2${gelanggangName ? `&gelanggang=${encodeURIComponent(gelanggangName)}` : ''}`}>
+                  <Link href="/login">
                     <ArrowLeft className="mr-2 h-4 w-4" /> Kembali ke Login
                   </Link>
                 </Button>
@@ -567,7 +567,7 @@ function DewanDuaPageComponent({ gelanggangName }: { gelanggangName: string | nu
         </div>
          <div className="mt-8 text-center">
             <Button variant="outline" asChild className="bg-white hover:bg-gray-100 text-gray-700 dark:bg-gray-700 dark:hover:bg-gray-600 dark:text-gray-200">
-                <Link href={`/login?redirect=/scoring/tanding/dewan-2${(gelanggangName && gelanggangName.trim()) ? `&gelanggang=${encodeURIComponent(gelanggangName.trim())}` : ''}`}><ArrowLeft className="mr-2 h-4 w-4"/> Kembali ke Login</Link>
+                <Link href="/login"><ArrowLeft className="mr-2 h-4 w-4"/> Kembali ke Login</Link>
             </Button>
         </div>
       </div>
@@ -598,4 +598,5 @@ function PageWithSearchParams() {
     
 
     
+
 
