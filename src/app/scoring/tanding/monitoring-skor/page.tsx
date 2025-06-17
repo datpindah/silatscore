@@ -5,7 +5,7 @@ import { useState, useEffect, useCallback, useRef, Suspense, type PointerEvent }
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation'; 
 import { Button } from '@/components/ui/button';
-// import { Header } from '@/components/layout/Header'; // Header global tidak lagi di-render di halaman ini
+import { Header } from '@/components/layout/Header'; // Re-added global Header
 import { ArrowLeft, Eye, Loader2, RadioTower, AlertTriangle, Sun, Moon, ChevronsRight } from 'lucide-react';
 import type { ScheduleTanding, TimerStatus, VerificationRequest, JuriVoteValue, KetuaActionLogEntry, PesilatColorIdentity, KetuaActionType } from '@/lib/types';
 import type { ScoreEntry as LibScoreEntryType, RoundScores as LibRoundScoresType } from '@/lib/types';
@@ -25,7 +25,7 @@ const OFFICIAL_ACTIONS_SUBCOLLECTION = 'official_actions';
 const JURI_SCORES_SUBCOLLECTION = 'juri_scores';
 const JURI_IDS = ['juri-1', 'juri-2', 'juri-3'] as const;
 const JURI_INPUT_VALIDITY_WINDOW_MS = 2000;
-const ACTIVATION_THRESHOLD_PX = 60;
+// const ACTIVATION_THRESHOLD_PX = 60; // No longer needed here, Header component handles its own logic
 
 
 interface PesilatDisplayInfo {
@@ -82,49 +82,7 @@ function MonitoringSkorPageComponent({ gelanggangName }: { gelanggangName: strin
   const [isDisplayVerificationModalOpen, setIsDisplayVerificationModalOpen] = useState(false);
   const [isNavigatingNextMatch, setIsNavigatingNextMatch] = useState(false);
 
-  const [isHeaderVisible, setIsHeaderVisible] = useState(true);
-  const [isMouseOverPageHeader, setIsMouseOverPageHeader] = useState(false);
-
-
-  useEffect(() => {
-    const handleMouseMove = (event: MouseEvent) => {
-      if (event.clientY < ACTIVATION_THRESHOLD_PX) {
-        setIsHeaderVisible(true);
-      } else {
-        if (!isMouseOverPageHeader) {
-          setIsHeaderVisible(false);
-        }
-      }
-    };
-
-    const handleDocumentMouseLeave = () => {
-      if (!isMouseOverPageHeader) {
-        setIsHeaderVisible(false);
-      }
-    };
-
-    document.addEventListener('mousemove', handleMouseMove);
-    document.documentElement.addEventListener('mouseleave', handleDocumentMouseLeave);
-
-    return () => {
-      document.removeEventListener('mousemove', handleMouseMove);
-      document.documentElement.removeEventListener('mouseleave', handleDocumentMouseLeave);
-    };
-  }, [isMouseOverPageHeader]);
-
-  const handlePageHeaderMouseEnter = () => {
-    setIsMouseOverPageHeader(true);
-    setIsHeaderVisible(true);
-  };
-
-  const handlePageHeaderMouseLeave = (event: PointerEvent<HTMLElement>) => {
-    setIsMouseOverPageHeader(false);
-    // Check if the mouse is still near the top, otherwise hide
-    if (event.clientY >= ACTIVATION_THRESHOLD_PX) {
-      setIsHeaderVisible(false);
-    }
-  };
-
+  // States for page-specific header visibility (auto-hide) are removed as the global header handles this.
 
   const resetMatchDisplayData = useCallback(() => {
     setMatchDetails(null);
@@ -292,7 +250,7 @@ function MonitoringSkorPageComponent({ gelanggangName }: { gelanggangName: strin
     return () => { mounted = false; unsubscribers.forEach(unsub => unsub()); };
   }, [activeScheduleId, matchDetailsLoaded, resetMatchDisplayData]); 
 
-  useEffect(() => {
+ useEffect(() => {
     if (isLoading && (matchDetailsLoaded || activeScheduleId === null)) {
         setIsLoading(false);
     }
@@ -545,6 +503,7 @@ function MonitoringSkorPageComponent({ gelanggangName }: { gelanggangName: strin
   if (!gelanggangName && !isLoading) {
     return (
       <div className={cn("flex flex-col min-h-screen items-center justify-center", pageTheme === 'light' ? 'monitoring-theme-light' : 'monitoring-theme-dark', "bg-gray-100 dark:bg-gray-900 text-[var(--monitor-text)]")}>
+        <Header overrideBackgroundClass="bg-gray-100 dark:bg-gray-900" />
         <AlertTriangle className="h-16 w-16 text-[var(--monitor-overlay-accent-text)] mb-4" />
         <p className="text-xl text-center text-[var(--monitor-overlay-text-primary)] mb-2">Gelanggang Tidak Ditemukan</p>
         <p className="text-sm text-center text-[var(--monitor-overlay-text-secondary)] mb-6">Parameter 'gelanggang' tidak ada di URL. Halaman monitor tidak bisa memuat data.</p>
@@ -558,6 +517,7 @@ function MonitoringSkorPageComponent({ gelanggangName }: { gelanggangName: strin
   if (isLoading && configMatchId === undefined) {
     return (
         <div className={cn("flex flex-col min-h-screen items-center justify-center", pageTheme === 'light' ? 'monitoring-theme-light' : 'monitoring-theme-dark', "bg-gray-100 dark:bg-gray-900 text-[var(--monitor-text)]")}>
+            <Header overrideBackgroundClass="bg-gray-100 dark:bg-gray-900" />
             <Loader2 className="h-16 w-16 animate-spin text-[var(--monitor-overlay-accent-text)] mb-4" />
             <p className="text-xl">Memuat Konfigurasi Monitor untuk Gelanggang: {gelanggangName || '...'}</p>
         </div>
@@ -566,9 +526,10 @@ function MonitoringSkorPageComponent({ gelanggangName }: { gelanggangName: strin
 
   return (
     <>
+      <Header overrideBackgroundClass="bg-gray-100 dark:bg-gray-900" />
       <div
         className={cn(
-          "flex flex-col min-h-screen font-sans bg-gray-100 dark:bg-gray-900", // Removed overflow-hidden
+          "flex flex-col min-h-screen font-sans bg-gray-100 dark:bg-gray-900", 
           pageTheme === 'light' ? 'monitoring-theme-light' : 'monitoring-theme-dark',
           "text-[var(--monitor-text)]"
         )}
@@ -577,7 +538,7 @@ function MonitoringSkorPageComponent({ gelanggangName }: { gelanggangName: strin
           variant="outline"
           size="icon"
           onClick={() => setPageTheme(prev => prev === 'light' ? 'dark' : 'light')}
-          className="absolute top-2 right-2 z-[100] bg-card text-card-foreground border-border hover:bg-muted"
+          className="absolute top-2 right-2 z-[60] bg-card text-card-foreground border-border hover:bg-muted"
           aria-label={pageTheme === "dark" ? "Ganti ke mode terang" : "Ganti ke mode gelap"}
         >
           {pageTheme === 'dark' ? (
@@ -589,13 +550,9 @@ function MonitoringSkorPageComponent({ gelanggangName }: { gelanggangName: strin
         
         <Card 
             className={cn(
-                "sticky top-0 z-40 w-full",
-                "mb-2 md:mb-4 shadow-xl bg-gradient-to-r from-primary to-red-700 text-primary-foreground mx-1 md:mx-2 mt-1 md:mt-2",
-                "transition-transform duration-300 ease-in-out",
-                !isHeaderVisible && "-translate-y-full"
+                "w-full", // Full width, not sticky, regular card flow
+                "mb-2 md:mb-4 shadow-xl bg-gradient-to-r from-primary to-red-700 text-primary-foreground mx-1 md:mx-2 mt-1 md:mt-2"
             )}
-            onMouseEnter={handlePageHeaderMouseEnter}
-            onMouseLeave={handlePageHeaderMouseLeave}
         >
           <CardContent className="p-3 md:p-4 text-center">
             <h1 className="text-xl md:text-2xl font-bold font-headline">
@@ -836,3 +793,4 @@ function PageWithSearchParams() {
   const gelanggangName = searchParams.get('gelanggang');
   return <MonitoringSkorPageComponent gelanggangName={gelanggangName} />;
 }
+
