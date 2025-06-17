@@ -104,8 +104,8 @@ const formatFirestoreTimestamp = (timestamp: KetuaActionLogEntry['timestamp']): 
 
 
 function KetuaPertandinganPageComponent({ gelanggangName }: { gelanggangName: string | null }) {
-  const [configMatchId, setConfigMatchId] = useState<string | null | undefined>(undefined); // ID dari peta gelanggang
-  const [activeMatchId, setActiveMatchId] = useState<string | null>(null); // ID yang sedang diproses
+  const [configMatchId, setConfigMatchId] = useState<string | null | undefined>(undefined); 
+  const [activeMatchId, setActiveMatchId] = useState<string | null>(null); 
 
   const [matchDetails, setMatchDetails] = useState<ScheduleTanding | null>(null);
   const [pesilatMerahInfo, setPesilatMerahInfo] = useState<PesilatDisplayInfo | null>(null);
@@ -116,7 +116,7 @@ function KetuaPertandinganPageComponent({ gelanggangName }: { gelanggangName: st
   const [ketuaActionsLog, setKetuaActionsLog] = useState<KetuaActionLogEntry[]>([]);
 
   const [isSubmittingAction, setIsSubmittingAction] = useState(false);
-  const [isLoading, setIsLoading] = useState(true);
+  const [isLoadingPage, setIsLoadingPage] = useState(true); // Renamed from isLoading for clarity
   const [error, setError] = useState<string | null>(null);
 
   const [isVerificationCreationDialogOpen, setIsVerificationCreationDialogOpen] = useState(false);
@@ -129,7 +129,7 @@ function KetuaPertandinganPageComponent({ gelanggangName }: { gelanggangName: st
   const [isConfirmingVerification, setIsConfirmingVerification] = useState(false);
 
 
-  const resetAllMatchData = useCallback(() => {
+  const resetPageData = useCallback(() => {
     setMatchDetails(null);
     setPesilatMerahInfo(null);
     setPesilatBiruInfo(null);
@@ -139,18 +139,18 @@ function KetuaPertandinganPageComponent({ gelanggangName }: { gelanggangName: st
     setActiveVerificationDetails(null);
     setIsVoteResultModalOpen(false);
     setKetuaSelectedDecision(null);
-    setError(null);
+    setError(null); // Clear general errors when resetting for a new match
   }, []);
 
   useEffect(() => {
     if (!gelanggangName) {
       setError("Nama gelanggang tidak ditemukan di URL.");
       setConfigMatchId(null); 
-      setIsLoading(false);
+      setIsLoadingPage(false);
       return;
     }
     setError(null); 
-    setIsLoading(true);
+    setIsLoadingPage(true);
 
     const unsubGelanggangMap = onSnapshot(doc(db, ACTIVE_TANDING_MATCHES_BY_GELANGGANG_PATH), (docSnap) => {
       let newDbConfigId: string | null = null;
@@ -170,6 +170,7 @@ function KetuaPertandinganPageComponent({ gelanggangName }: { gelanggangName: st
       console.error(`[KetuaTanding] Error fetching active matches by gelanggang map:`, err);
       setError("Gagal memuat peta jadwal aktif per gelanggang.");
       setConfigMatchId(null);
+      setIsLoadingPage(false);
     });
     return () => unsubGelanggangMap();
   }, [gelanggangName]);
@@ -177,109 +178,133 @@ function KetuaPertandinganPageComponent({ gelanggangName }: { gelanggangName: st
 
   useEffect(() => {
     if (configMatchId === undefined) {
-      setIsLoading(true); 
+      setIsLoadingPage(true); 
       return; 
     }
     if (configMatchId !== activeMatchId) {
-      resetAllMatchData();
+      resetPageData();
       setActiveMatchId(configMatchId);
       setMatchDetailsLoaded(false); 
-      if (configMatchId) setIsLoading(true); else setIsLoading(false);
-    } else if (configMatchId === null && activeMatchId === null && isLoading) {
-      setIsLoading(false);
     }
-  }, [configMatchId, activeMatchId, isLoading, resetAllMatchData]);
+    if (configMatchId === null && activeMatchId === null) {
+      setIsLoadingPage(false);
+      if (!error) setError(`Tidak ada jadwal Tanding aktif untuk Gelanggang: ${gelanggangName}.`);
+    }
+  }, [configMatchId, activeMatchId, resetPageData, gelanggangName, error]);
 
 
   useEffect(() => {
     if (!activeMatchId) {
-      if (isLoading) setIsLoading(false);
-      setError(null); 
-      setMatchDetails(null); setPesilatMerahInfo(null); setPesilatBiruInfo(null);
-      setKetuaActionsLog([]); setDewanTimerStatus(initialDewanTimerStatus);
-      setActiveVerificationDetails(null); setIsVoteResultModalOpen(false);
-      setMatchDetailsLoaded(false);
+      setMatchDetailsLoaded(false); 
+      setScheduleDetails(null);
+      setPesilatMerahInfo(null);
+      setPesilatBiruInfo(null);
+      setDewanTimerStatus(initialDewanTimerStatus);
+      setKetuaActionsLog([]);
+      setActiveVerificationDetails(null);
+      if (configMatchId === null) setIsLoadingPage(false);
       return;
     }
 
     let mounted = true;
-    if (!isLoading && !matchDetailsLoaded) setIsLoading(true); 
+    // Start loading only if we have an activeMatchId and details aren't loaded yet.
+    // This prevents setting isLoadingPage to true if only sub-data changes later.
+    if (!matchDetailsLoaded) {
+        setIsLoadingPage(true);
+    }
 
     const unsubscribers: (() => void)[] = [];
 
-    const loadScheduleDetails = async () => {
-      if (!mounted || !activeMatchId) return;
+    const loadAllDataForMatch = async () => {
+      if (!mounted) return;
+
+      let currentScheduleDetailsLoaded = false;
+
       try {
-        const scheduleDoc = await getDoc(doc(db, SCHEDULE_TANDING_COLLECTION, activeMatchId));
+        const scheduleDocRef = doc(db, SCHEDULE_TANDING_COLLECTION, activeMatchId);
+        const scheduleDocSnap = await getDoc(scheduleDocRef);
         if (!mounted) return;
-        if (scheduleDoc.exists()) {
-          const data = scheduleDoc.data() as ScheduleTanding;
-          setMatchDetails(data);
+
+        if (scheduleDocSnap.exists()) {
+          const data = scheduleDocSnap.data() as ScheduleTanding;
+          setScheduleDetails(data);
           setPesilatMerahInfo({ name: data.pesilatMerahName, contingent: data.pesilatMerahContingent });
           setPesilatBiruInfo({ name: data.pesilatBiruName, contingent: data.pesilatBiruContingent });
           setMatchDetailsLoaded(true);
-        } else { setError(`Detail jadwal ${activeMatchId} tidak ditemukan.`); setMatchDetailsLoaded(false); }
-      } catch (err) { console.error("Error fetching schedule details:", err); setError("Gagal memuat detail jadwal."); setMatchDetailsLoaded(false); }
-    };
-    if (!matchDetailsLoaded) loadScheduleDetails();
-
-
-    const unsubTimer = onSnapshot(doc(db, MATCHES_TANDING_COLLECTION, activeMatchId), (docSnap) => {
-      if (!mounted) return;
-      if (docSnap.exists() && docSnap.data()?.timer_status) setDewanTimerStatus(docSnap.data()?.timer_status as DewanTimerType);
-      else setDewanTimerStatus(initialDewanTimerStatus);
-    }, (err) => { if (!mounted) return; console.error("Error fetching dewan timer:", err); setError("Gagal status timer dewan."); });
-    unsubscribers.push(unsubTimer);
-
-    const actionsQuery = query(collection(db, MATCHES_TANDING_COLLECTION, activeMatchId, OFFICIAL_ACTIONS_SUBCOLLECTION), orderBy("timestamp", "asc"));
-    const unsubActions = onSnapshot(actionsQuery, (snap) => {
-      if (!mounted) return;
-      const actions: KetuaActionLogEntry[] = [];
-      snap.forEach((doc) => {
-        const data = doc.data();
-        actions.push({ 
-            id: doc.id, 
-            ...data,
-            timestamp: data.timestamp 
-        } as KetuaActionLogEntry)
-    });
-      setKetuaActionsLog(actions);
-    }, (err) => { if (!mounted) return; console.error("Error fetching official actions:", err); setError("Gagal memuat log tindakan."); });
-    unsubscribers.push(unsubActions);
-
-    const verificationsQuery = query(
-        collection(db, MATCHES_TANDING_COLLECTION, activeMatchId, VERIFICATIONS_SUBCOLLECTION),
-        orderBy('timestamp', 'desc'),
-        limit(1)
-    );
-    const unsubActiveVerification = onSnapshot(verificationsQuery, (snapshot) => {
-        if (!mounted) return;
-        if (!snapshot.empty) {
-            const latestVerification = { id: snapshot.docs[0].id, ...snapshot.docs[0].data() } as VerificationRequest;
-            setActiveVerificationDetails(latestVerification);
-            if (latestVerification.status === 'pending') {
-                setIsVoteResultModalOpen(true);
-            } else {
-                setIsVoteResultModalOpen(false);
-            }
+          currentScheduleDetailsLoaded = true;
         } else {
-            setActiveVerificationDetails(null);
-            setIsVoteResultModalOpen(false);
+          setError(`Detail jadwal ${activeMatchId} tidak ditemukan.`);
+          setMatchDetails(null); setPesilatMerahInfo(null); setPesilatBiruInfo(null);
+          setMatchDetailsLoaded(false);
+          if (mounted) setIsLoadingPage(false);
+          return;
         }
-    }, (err) => {
-        if (!mounted) return;
-        console.error("Error fetching active verification details:", err);
-        setError("Gagal memuat detail verifikasi aktif.");
-    });
-    unsubscribers.push(unsubActiveVerification);
+      } catch (err) {
+        if (mounted) setError("Gagal memuat detail jadwal.");
+        setMatchDetails(null); setPesilatMerahInfo(null); setPesilatBiruInfo(null);
+        setMatchDetailsLoaded(false);
+        if (mounted) setIsLoadingPage(false);
+        return;
+      }
+      
+      // Only subscribe if schedule details were successfully loaded
+      if (currentScheduleDetailsLoaded) {
+        const matchDocRef = doc(db, MATCHES_TANDING_COLLECTION, activeMatchId);
+        
+        unsubscribers.push(onSnapshot(matchDocRef, (docSnap) => {
+          if (!mounted) return;
+          if (docSnap.exists() && docSnap.data()?.timer_status) setDewanTimerStatus(docSnap.data()?.timer_status as DewanTimerType);
+          else setDewanTimerStatus(initialDewanTimerStatus);
+        }, (err) => { if (mounted) console.error("Error fetching dewan timer:", err); }));
 
+        const actionsQuery = query(collection(db, MATCHES_TANDING_COLLECTION, activeMatchId, OFFICIAL_ACTIONS_SUBCOLLECTION), orderBy("timestamp", "asc"));
+        unsubscribers.push(onSnapshot(actionsQuery, (snap) => {
+          if (!mounted) return;
+          const actions: KetuaActionLogEntry[] = snap.docs.map(d => ({ id: d.id, ...d.data(), timestamp: d.data().timestamp } as KetuaActionLogEntry));
+          setKetuaActionsLog(actions);
+        }, (err) => { if (mounted) console.error("Error fetching official actions:", err);}));
 
-    if (matchDetailsLoaded && isLoading) setIsLoading(false);
+        const verificationsQuery = query(collection(db, MATCHES_TANDING_COLLECTION, activeMatchId, VERIFICATIONS_SUBCOLLECTION), orderBy('timestamp', 'desc'), limit(1));
+        unsubscribers.push(onSnapshot(verificationsQuery, (snapshot) => {
+            if (!mounted) return;
+            if (!snapshot.empty) {
+                const newVerificationData = { id: snapshot.docs[0].id, ...snapshot.docs[0].data() } as VerificationRequest;
+                setActiveVerificationDetails(currentDetails => {
+                    if (!currentDetails || currentDetails.id !== newVerificationData.id || currentDetails.status !== newVerificationData.status || JSON.stringify(currentDetails.votes) !== JSON.stringify(newVerificationData.votes) ) {
+                        return newVerificationData;
+                    }
+                    return currentDetails; 
+                });
+            } else {
+                setActiveVerificationDetails(currentDetails => currentDetails !== null ? null : currentDetails);
+            }
+        }, (err) => { if (mounted) console.error("Error fetching active verification details:", err); }));
+      }
+      // Set loading to false after initial data fetch and subscriptions are set up
+      if (mounted && currentScheduleDetailsLoaded) {
+          setIsLoadingPage(false);
+      }
+    };
+    
+    loadAllDataForMatch();
 
-    return () => { mounted = false; unsubscribers.forEach(unsub => unsub()); };
-  }, [activeMatchId, isLoading, matchDetailsLoaded, resetAllMatchData]); 
+    return () => { 
+      mounted = false; 
+      unsubscribers.forEach(unsub => unsub()); 
+    };
+  }, [activeMatchId]); // Only activeMatchId. resetPageData is stable.
 
-  useEffect(() => { if (isLoading && (matchDetailsLoaded || activeMatchId === null)) setIsLoading(false); }, [isLoading, matchDetailsLoaded, activeMatchId]);
+  // Effect to manage modal visibility based on activeVerificationDetails
+  useEffect(() => {
+    if (activeVerificationDetails && activeVerificationDetails.status === 'pending') {
+      setIsVoteResultModalOpen(true);
+    } else {
+      setIsVoteResultModalOpen(false);
+      if (activeVerificationDetails && activeVerificationDetails.status !== 'pending') {
+        setKetuaSelectedDecision(null);
+      }
+    }
+  }, [activeVerificationDetails]);
 
   const handleKetuaAction = async (pesilatColor: PesilatColorIdentity, actionTypeButtonPressed: KetuaActionType) => {
     if (!activeMatchId || activeMatchId.trim() === "") { alert("Tidak bisa menambah tindakan: ID pertandingan aktif tidak valid."); return; }
@@ -301,7 +326,7 @@ function KetuaPertandinganPageComponent({ gelanggangName }: { gelanggangName: st
           log => log.pesilatColor === pesilatColor &&
                  log.round === dewanTimerStatus.currentRound &&
                  log.actionType === 'Binaan' &&
-                 typeof log.originalActionType === 'undefined' // Ensure it's a "pure" Binaan
+                 typeof log.originalActionType === 'undefined' 
         ).length;
 
         if (binaanAsliCount < 1) { 
@@ -329,7 +354,6 @@ function KetuaPertandinganPageComponent({ gelanggangName }: { gelanggangName: st
         points: pointsToLog,
       };
       
-
       const actionDataWithOptionalField = currentOriginalActionType !== undefined
         ? { ...baseActionData, originalActionType: currentOriginalActionType }
         : baseActionData;
@@ -477,7 +501,6 @@ function KetuaPertandinganPageComponent({ gelanggangName }: { gelanggangName: st
 
       alert(`Verifikasi ${activeVerificationDetails.type} dikonfirmasi dengan hasil: ${ketuaSelectedDecision}.${pointsAwardedMessage}`);
       setKetuaSelectedDecision(null);
-      // The useEffect listening to verifications will auto-close the modal when status changes from 'pending'
     } catch (err) {
       console.error("Error confirming verification:", err);
       setError(err instanceof Error ? `Gagal mengkonfirmasi verifikasi: ${err.message}` : "Gagal mengkonfirmasi verifikasi.");
@@ -497,7 +520,6 @@ function KetuaPertandinganPageComponent({ gelanggangName }: { gelanggangName: st
       await updateDoc(verificationDocRef, { status: 'cancelled' });
       alert(`Verifikasi ${activeVerificationDetails.type} telah dibatalkan.`);
       setKetuaSelectedDecision(null);
-      // The useEffect listening to verifications will auto-close the modal
     } catch (err) {
        console.error("Error cancelling verification:", err);
        setError(err instanceof Error ? `Gagal membatalkan verifikasi: ${err.message}` : "Gagal membatalkan verifikasi.");
@@ -506,10 +528,9 @@ function KetuaPertandinganPageComponent({ gelanggangName }: { gelanggangName: st
     }
   };
 
-
   const handleTentukanPemenang = () => alert("Fungsi Tentukan Pemenang belum diimplementasikan.");
 
-  const isActionButtonDisabled = isSubmittingAction || dewanTimerStatus.matchStatus === 'MatchFinished' || isLoading || !dewanTimerStatus.isTimerRunning;
+  const isActionButtonDisabled = isSubmittingAction || dewanTimerStatus.matchStatus === 'MatchFinished' || isLoadingPage || !dewanTimerStatus.isTimerRunning;
 
   const getJuriVoteBoxClass = (vote: JuriVoteValue) => {
     if (vote === 'merah') return "bg-red-500";
@@ -518,7 +539,7 @@ function KetuaPertandinganPageComponent({ gelanggangName }: { gelanggangName: st
     return "bg-white dark:bg-gray-700"; 
   };
 
-  if (!gelanggangName && !isLoading) {
+  if (!gelanggangName && !isLoadingPage) {
     return (
       <div className="flex flex-col min-h-screen"><Header />
         <main className="flex-1 container mx-auto p-4 md:p-8 flex flex-col items-center justify-center text-center">
@@ -533,7 +554,7 @@ function KetuaPertandinganPageComponent({ gelanggangName }: { gelanggangName: st
     );
   }
   
-  if (isLoading && (!activeMatchId || !matchDetailsLoaded)) {
+  if (isLoadingPage && (!activeMatchId || !matchDetailsLoaded)) {
     return (
       <div className="flex flex-col min-h-screen"><Header />
         <main className="flex-1 container mx-auto p-4 md:p-8 flex flex-col items-center justify-center">
@@ -549,7 +570,7 @@ function KetuaPertandinganPageComponent({ gelanggangName }: { gelanggangName: st
     );
   }
 
-  if (!activeMatchId && !isLoading && configMatchId === null) {
+  if (!activeMatchId && !isLoadingPage && configMatchId === null) {
     return (
       <div className="flex flex-col min-h-screen"><Header />
         <main className="flex-1 container mx-auto px-4 py-8 text-center">
@@ -565,7 +586,6 @@ function KetuaPertandinganPageComponent({ gelanggangName }: { gelanggangName: st
     );
   }
 
-
   return (
     <div className="flex flex-col min-h-screen bg-gray-50 dark:bg-black">
       <Header />
@@ -573,19 +593,19 @@ function KetuaPertandinganPageComponent({ gelanggangName }: { gelanggangName: st
         <div className="text-center mb-4">
           <h1 className="text-2xl md:text-3xl font-bold text-gray-800 dark:text-gray-100">Ketua Pertandingan (Gel: {gelanggangName || 'N/A'})</h1>
           <div className="text-sm text-gray-600 dark:text-gray-400">
-             {isLoading && !matchDetailsLoaded ? <Skeleton className="h-4 w-32 inline-block" /> : (matchDetails?.place || `Partai No. ${matchDetails?.matchNumber || 'N/A'}`)}
+             {isLoadingPage && !matchDetailsLoaded ? <Skeleton className="h-4 w-32 inline-block" /> : (matchDetails?.place || `Partai No. ${matchDetails?.matchNumber || 'N/A'}`)}
              {matchDetails && matchDetailsLoaded && ` - ${matchDetails.class} (${matchDetails.round})`}
           </div>
         </div>
 
         <div className="flex justify-between items-center mb-4 px-1">
           <div className="text-left">
-            <div className="text-sm font-semibold text-red-600">KONTINGEN {pesilatMerahInfo?.contingent || (isLoading && activeMatchId ? <Skeleton className="h-4 w-16 inline-block" /> : '-')}</div>
-            <div className="text-lg font-bold text-red-600">{pesilatMerahInfo?.name || (isLoading && activeMatchId ? <Skeleton className="h-6 w-32" /> : 'PESILAT MERAH')}</div>
+            <div className="text-sm font-semibold text-red-600">KONTINGEN {pesilatMerahInfo?.contingent || (isLoadingPage && activeMatchId ? <Skeleton className="h-4 w-16 inline-block" /> : '-')}</div>
+            <div className="text-lg font-bold text-red-600">{pesilatMerahInfo?.name || (isLoadingPage && activeMatchId ? <Skeleton className="h-6 w-32" /> : 'PESILAT MERAH')}</div>
           </div>
           <div className="text-right">
-            <div className="text-sm font-semibold text-blue-600">KONTINGEN {pesilatBiruInfo?.contingent || (isLoading && activeMatchId ? <Skeleton className="h-4 w-16 inline-block" /> : '-')}</div>
-            <div className="text-lg font-bold text-blue-600">{pesilatBiruInfo?.name || (isLoading && activeMatchId ? <Skeleton className="h-6 w-32" /> : 'PESILAT BIRU')}</div>
+            <div className="text-sm font-semibold text-blue-600">KONTINGEN {pesilatBiruInfo?.contingent || (isLoadingPage && activeMatchId ? <Skeleton className="h-4 w-16 inline-block" /> : '-')}</div>
+            <div className="text-lg font-bold text-blue-600">{pesilatBiruInfo?.name || (isLoadingPage && activeMatchId ? <Skeleton className="h-6 w-32" /> : 'PESILAT BIRU')}</div>
           </div>
         </div>
 
@@ -608,13 +628,13 @@ function KetuaPertandinganPageComponent({ gelanggangName }: { gelanggangName: st
                 const scoresBiru = calculateDisplayScoresForTable(ketuaActionsLog, 'biru', round);
                 return (
                   <TableRow key={`round-display-${round}`} className={dewanTimerStatus.currentRound === round ? 'bg-yellow-100 dark:bg-yellow-900/30' : 'bg-white dark:bg-gray-800/50'}>
-                    <TableCell className="border border-gray-300 dark:border-gray-700 text-center font-medium py-2 px-1">{isLoading && !matchDetailsLoaded ? <Skeleton className="h-5 w-8 mx-auto"/> : scoresMerah.hukuman}</TableCell>
-                    <TableCell className="border border-gray-300 dark:border-gray-700 text-center font-medium py-2 px-1">{isLoading && !matchDetailsLoaded ? <Skeleton className="h-5 w-8 mx-auto"/> : scoresMerah.binaan}</TableCell>
-                    <TableCell className="border border-gray-300 dark:border-gray-700 text-center font-medium py-2 px-1">{isLoading && !matchDetailsLoaded ? <Skeleton className="h-5 w-8 mx-auto"/> : scoresMerah.jatuhan}</TableCell>
+                    <TableCell className="border border-gray-300 dark:border-gray-700 text-center font-medium py-2 px-1">{isLoadingPage && !matchDetailsLoaded ? <Skeleton className="h-5 w-8 mx-auto"/> : scoresMerah.hukuman}</TableCell>
+                    <TableCell className="border border-gray-300 dark:border-gray-700 text-center font-medium py-2 px-1">{isLoadingPage && !matchDetailsLoaded ? <Skeleton className="h-5 w-8 mx-auto"/> : scoresMerah.binaan}</TableCell>
+                    <TableCell className="border border-gray-300 dark:border-gray-700 text-center font-medium py-2 px-1">{isLoadingPage && !matchDetailsLoaded ? <Skeleton className="h-5 w-8 mx-auto"/> : scoresMerah.jatuhan}</TableCell>
                     <TableCell className="border border-gray-300 dark:border-gray-700 text-center font-bold py-2 px-1">{round === 1 ? 'I' : round === 2 ? 'II' : 'III'}</TableCell>
-                    <TableCell className="border border-gray-300 dark:border-gray-700 text-center font-medium py-2 px-1">{isLoading && !matchDetailsLoaded ? <Skeleton className="h-5 w-8 mx-auto"/> : scoresBiru.jatuhan}</TableCell>
-                    <TableCell className="border border-gray-300 dark:border-gray-700 text-center font-medium py-2 px-1">{isLoading && !matchDetailsLoaded ? <Skeleton className="h-5 w-8 mx-auto"/> : scoresBiru.binaan}</TableCell>
-                    <TableCell className="border border-gray-300 dark:border-gray-700 text-center font-medium py-2 px-1">{isLoading && !matchDetailsLoaded ? <Skeleton className="h-5 w-8 mx-auto"/> : scoresBiru.hukuman}</TableCell>
+                    <TableCell className="border border-gray-300 dark:border-gray-700 text-center font-medium py-2 px-1">{isLoadingPage && !matchDetailsLoaded ? <Skeleton className="h-5 w-8 mx-auto"/> : scoresBiru.jatuhan}</TableCell>
+                    <TableCell className="border border-gray-300 dark:border-gray-700 text-center font-medium py-2 px-1">{isLoadingPage && !matchDetailsLoaded ? <Skeleton className="h-5 w-8 mx-auto"/> : scoresBiru.binaan}</TableCell>
+                    <TableCell className="border border-gray-300 dark:border-gray-700 text-center font-medium py-2 px-1">{isLoadingPage && !matchDetailsLoaded ? <Skeleton className="h-5 w-8 mx-auto"/> : scoresBiru.hukuman}</TableCell>
                   </TableRow>
                 );
               })}
@@ -662,7 +682,6 @@ function KetuaPertandinganPageComponent({ gelanggangName }: { gelanggangName: st
           </CardContent>
         </Card>
 
-
         <div className="grid grid-cols-1 md:grid-cols-[1fr_auto_1fr] gap-4 md:gap-8 items-start">
           <div className="space-y-2">
             <div className="grid grid-cols-2 gap-2">
@@ -697,7 +716,7 @@ function KetuaPertandinganPageComponent({ gelanggangName }: { gelanggangName: st
               <DialogTrigger asChild>
                 <Button
                   className="w-full md:w-auto bg-yellow-500 hover:bg-yellow-600 text-black py-3 text-sm sm:text-base"
-                  disabled={isLoading || dewanTimerStatus.matchStatus === 'MatchFinished' || isCreatingVerification || (activeVerificationDetails !== null && activeVerificationDetails.status === 'pending')}
+                  disabled={isLoadingPage || dewanTimerStatus.matchStatus === 'MatchFinished' || isCreatingVerification || (activeVerificationDetails !== null && activeVerificationDetails.status === 'pending')}
                   onClick={() => setSelectedVerificationTypeForCreation('')}
                 >
                   {isCreatingVerification ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Vote className="mr-2 h-4 w-4"/>}
@@ -738,7 +757,7 @@ function KetuaPertandinganPageComponent({ gelanggangName }: { gelanggangName: st
               </DialogContent>
             </Dialog>
             
-            <Button onClick={handleTentukanPemenang} className="w-full md:w-auto bg-green-600 hover:bg-green-700 text-white py-3 text-sm sm:text-base" disabled={isLoading || dewanTimerStatus.matchStatus !== 'MatchFinished'}><Trophy className="mr-2 h-4 w-4"/>Tentukan Pemenang</Button>
+            <Button onClick={handleTentukanPemenang} className="w-full md:w-auto bg-green-600 hover:bg-green-700 text-white py-3 text-sm sm:text-base" disabled={isLoadingPage || dewanTimerStatus.matchStatus !== 'MatchFinished'}><Trophy className="mr-2 h-4 w-4"/>Tentukan Pemenang</Button>
           </div>
 
           <div className="space-y-2">
@@ -753,21 +772,18 @@ function KetuaPertandinganPageComponent({ gelanggangName }: { gelanggangName: st
             </Button>
           </div>
         </div>
-        {error && <div className="text-red-500 text-center mt-4 p-2 bg-red-100 border border-red-500 rounded-md">Error: {error}</div>}
+        {error && !isLoadingPage && <div className="text-red-500 text-center mt-4 p-2 bg-red-100 border border-red-500 rounded-md">Error: {error}</div>}
 
-        <Dialog 
-          open={isVoteResultModalOpen} 
-          onOpenChange={(isOpenFromRadix) => {
-            if (!isOpenFromRadix) {
-                // Allow closing if verification is not strictly pending anymore,
-                // or if the modal is explicitly closed by Ketua actions later.
-                if (!activeVerificationDetails || activeVerificationDetails.status !== 'pending') {
-                    setIsVoteResultModalOpen(false);
+        <Dialog
+            open={isVoteResultModalOpen}
+            onOpenChange={(openStateFromDialog) => {
+                if (!openStateFromDialog) {
+                    if (!activeVerificationDetails || activeVerificationDetails.status !== 'pending') {
+                        setIsVoteResultModalOpen(false);
+                        setKetuaSelectedDecision(null);
+                    }
                 }
-                // If still pending, onPointerDownOutside/onEscapeKeyDown should prevent external close.
-            }
-            // No action needed if isOpenFromRadix is true, as isVoteResultModalOpen controls the open prop.
-          }}
+            }}
         >
           <DialogContent 
             className="sm:max-w-lg" 
