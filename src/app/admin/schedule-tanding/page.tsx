@@ -12,7 +12,7 @@ import { Upload, PlusCircle, PlayCircle } from 'lucide-react';
 import type { ScheduleTanding } from '@/lib/types';
 import { TableCell } from '@/components/ui/table';
 import { db } from '@/lib/firebase';
-import { collection, addDoc, getDocs, doc, updateDoc, deleteDoc, onSnapshot, setDoc, getDoc, Timestamp } from 'firebase/firestore';
+import { collection, addDoc, getDocs, doc, updateDoc, deleteDoc, onSnapshot, setDoc, getDoc, Timestamp, deleteField } from 'firebase/firestore';
 import * as XLSX from 'xlsx';
 
 const initialFormState: Omit<ScheduleTanding, 'id'> = {
@@ -22,12 +22,12 @@ const initialFormState: Omit<ScheduleTanding, 'id'> = {
   pesilatMerahContingent: '',
   pesilatBiruName: '',
   pesilatBiruContingent: '',
-  round: 'Penyisihan', // Default to Penyisihan
+  round: 'Penyisihan',
   class: '',
   matchNumber: 1,
 };
 
-const ACTIVE_TANDING_SCHEDULE_CONFIG_PATH = 'app_settings/active_match_tanding';
+const ACTIVE_TANDING_MATCHES_BY_GELANGGANG_PATH = 'app_settings/active_tanding_matches_by_gelanggang';
 const SCHEDULE_TANDING_COLLECTION = 'schedules_tanding';
 
 const roundOptions = [
@@ -41,26 +41,24 @@ export default function ScheduleTandingPage() {
   const [schedules, setSchedules] = useState<ScheduleTanding[]>([]);
   const [formData, setFormData] = useState<Omit<ScheduleTanding, 'id'>>(initialFormState);
   const [isEditing, setIsEditing] = useState<string | null>(null);
-  const [activeScheduleId, setActiveScheduleId] = useState<string | null>(null);
+  const [activeSchedulesByGelanggang, setActiveSchedulesByGelanggang] = useState<Record<string, string | null>>({});
   const [isLoading, setIsLoading] = useState(true);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // Fetch active schedule ID
   useEffect(() => {
-    const unsub = onSnapshot(doc(db, ACTIVE_TANDING_SCHEDULE_CONFIG_PATH), (docSnap) => {
+    const unsub = onSnapshot(doc(db, ACTIVE_TANDING_MATCHES_BY_GELANGGANG_PATH), (docSnap) => {
       if (docSnap.exists()) {
-        setActiveScheduleId(docSnap.data()?.activeScheduleId || null);
+        setActiveSchedulesByGelanggang(docSnap.data() as Record<string, string | null>);
       } else {
-        setActiveScheduleId(null);
+        setActiveSchedulesByGelanggang({});
       }
     }, (error) => {
-      console.error("Error fetching active schedule ID:", error);
-      setActiveScheduleId(null);
+      console.error("Error fetching active schedules by gelanggang:", error);
+      setActiveSchedulesByGelanggang({});
     });
     return () => unsub();
   }, []);
 
-  // Fetch all schedules
   useEffect(() => {
     setIsLoading(true);
     const unsub = onSnapshot(collection(db, SCHEDULE_TANDING_COLLECTION), (querySnapshot) => {
@@ -79,7 +77,6 @@ export default function ScheduleTandingPage() {
             processedDate = new Date().toISOString().split('T')[0];
           }
         } else if (data.date && typeof data.date.seconds === 'number' && typeof data.date.nanoseconds === 'number') {
-          // Handle plain object {seconds, nanoseconds} representation of a Timestamp
           processedDate = new Date(data.date.seconds * 1000).toISOString().split('T')[0];
         } else {
           console.warn(`[ScheduleTanding] Unexpected date type from Firestore for match ${docSnap.id}: ${typeof data.date}, value: ${JSON.stringify(data.date)}. Defaulting to today.`);
@@ -123,10 +120,14 @@ export default function ScheduleTandingPage() {
 
   const handleSubmit = async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
+    if (!formData.place || formData.place.trim() === "") {
+        alert("Tempat Pertandingan (Gelanggang) tidak boleh kosong.");
+        return;
+    }
     
     const scheduleDataForFirestore = {
       ...formData,
-      date: Timestamp.fromDate(new Date(formData.date + "T00:00:00")), // Ensure local date is used
+      date: Timestamp.fromDate(new Date(formData.date + "T00:00:00")), 
     };
 
     try {
@@ -149,18 +150,22 @@ export default function ScheduleTandingPage() {
   const handleEdit = (id: string) => {
     const scheduleToEdit = schedules.find(s => s.id === id);
     if (scheduleToEdit) {
-      // scheduleToEdit.date is already guaranteed to be a YYYY-MM-DD string by the fetching logic
       setFormData({...scheduleToEdit });
       setIsEditing(id);
     }
   };
 
-  const handleDelete = async (id: string) => {
-    if (confirm('Apakah Anda yakin ingin menghapus jadwal ini?')) {
+  const handleDelete = async (scheduleToDelete: ScheduleTanding) => {
+    if (confirm(`Apakah Anda yakin ingin menghapus jadwal No. ${scheduleToDelete.matchNumber} (${scheduleToDelete.pesilatMerahName} vs ${scheduleToDelete.pesilatBiruName}) di ${scheduleToDelete.place}?`)) {
       try {
-        await deleteDoc(doc(db, SCHEDULE_TANDING_COLLECTION, id));
-        if (id === activeScheduleId) {
-          await setDoc(doc(db, ACTIVE_TANDING_SCHEDULE_CONFIG_PATH), { activeScheduleId: null });
+        await deleteDoc(doc(db, SCHEDULE_TANDING_COLLECTION, scheduleToDelete.id));
+        
+        // If this schedule was active for its venue, deactivate it
+        if (activeSchedulesByGelanggang[scheduleToDelete.place] === scheduleToDelete.id) {
+          const venueMapRef = doc(db, ACTIVE_TANDING_MATCHES_BY_GELANGGANG_PATH);
+          await updateDoc(venueMapRef, {
+            [scheduleToDelete.place]: deleteField() // Or set to null
+          });
         }
       } catch (error) {
         console.error("Error deleting schedule: ", error);
@@ -175,152 +180,65 @@ export default function ScheduleTandingPage() {
 
   const processUploadedFile = async (event: ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
-    if (!file) {
-      return;
-    }
-
+    if (!file) return;
     const reader = new FileReader();
     reader.onload = async (e) => {
       try {
         const data = e.target?.result;
-        if (!data) {
-          alert('Gagal membaca file.');
-          return;
-        }
+        if (!data) { alert('Gagal membaca file.'); return; }
         const workbook = XLSX.read(data, { type: 'array' });
         const sheetName = workbook.SheetNames[0];
         const worksheet = workbook.Sheets[sheetName];
         const jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1 }) as any[][];
-
-        if (jsonData.length < 2) {
-          alert('File XLSX kosong atau tidak memiliki header.');
-          return;
-        }
-
+        if (jsonData.length < 2) { alert('File XLSX kosong atau tidak memiliki header.'); return; }
         const headers = jsonData[0];
-        const expectedHeaders = [
-          "Nomor Pertandingan", "Tanggal (YYYY-MM-DD)", "Tempat Pertandingan", 
-          "Nama Pesilat Merah", "Kontingen Pesilat Merah", "Nama Pesilat Biru", 
-          "Kontingen Pesilat Biru", "Babak", "Kelas Tanding"
-        ];
-
-        if (headers.length !== expectedHeaders.length || !expectedHeaders.every((eh, i) => eh === headers[i])) {
-          alert('Format header file XLSX tidak sesuai template. Pastikan urutan dan nama kolom benar.');
-          return;
-        }
-
+        const expectedHeaders = ["Nomor Pertandingan", "Tanggal (YYYY-MM-DD)", "Tempat Pertandingan", "Nama Pesilat Merah", "Kontingen Pesilat Merah", "Nama Pesilat Biru", "Kontingen Pesilat Biru", "Babak", "Kelas Tanding"];
+        if (headers.length !== expectedHeaders.length || !expectedHeaders.every((eh, i) => eh === headers[i])) { alert('Format header file XLSX tidak sesuai template.'); return; }
         const dataRows = jsonData.slice(1);
-        let successCount = 0;
-        let errorCount = 0;
-        const errorMessages: string[] = [];
-
+        let successCount = 0; let errorCount = 0; const errorMessages: string[] = [];
         for (let i = 0; i < dataRows.length; i++) {
           const row = dataRows[i];
-          if (row.filter(cell => cell !== null && cell !== undefined && cell !== '').length === 0) {
-            continue; // Skip empty rows
-          }
-          
-          if (row.length < expectedHeaders.length) {
-            errorMessages.push(`Baris ${i + 2}: Data tidak lengkap, harap isi semua kolom.`);
-            errorCount++;
-            continue;
-          }
-
-          const [
-            matchNumStr, dateStr, place, pMerahName, pMerahCont, 
-            pBiruName, pBiruCont, round, tandingClass
-          ] = row;
-
+          if (row.filter(cell => cell !== null && cell !== undefined && cell !== '').length === 0) continue;
+          if (row.length < expectedHeaders.length) { errorMessages.push(`Baris ${i + 2}: Data tidak lengkap.`); errorCount++; continue; }
+          const [matchNumStr, dateStr, place, pMerahName, pMerahCont, pBiruName, pBiruCont, round, tandingClass] = row;
+          if (!place || String(place).trim() === "") { errorMessages.push(`Baris ${i + 2}: Tempat Pertandingan (Gelanggang) kosong.`); errorCount++; continue; }
           const matchNumber = parseInt(String(matchNumStr));
-          if (isNaN(matchNumber)) {
-            errorMessages.push(`Baris ${i + 2}: Nomor Pertandingan tidak valid.`);
-            errorCount++;
-            continue;
-          }
-
-          let parsedDate;
-          let originalDateStrForForm: string;
-
-          if (typeof dateStr === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(dateStr)) {
-            parsedDate = Timestamp.fromDate(new Date(dateStr + "T00:00:00"));
-            originalDateStrForForm = dateStr;
-          } else if (typeof dateStr === 'number') { 
-             const excelEpoch = new Date(1899, 11, 30);
-             const jsDate = new Date(excelEpoch.getTime() + dateStr * 24 * 60 * 60 * 1000);
-             if (!isNaN(jsDate.getTime())) {
-                parsedDate = Timestamp.fromDate(jsDate);
-                originalDateStrForForm = jsDate.toISOString().split('T')[0];
-             } else {
-                errorMessages.push(`Baris ${i + 2}: Format tanggal Excel (angka) tidak bisa diproses: ${dateStr}. Harap gunakan format YYYY-MM-DD.`);
-                errorCount++;
-                continue;
-             }
-          }
-           else {
-            errorMessages.push(`Baris ${i + 2}: Format tanggal tidak valid: ${dateStr}. Harap gunakan YYYY-MM-DD.`);
-            errorCount++;
-            continue;
-          }
-
-          const newScheduleData: Omit<ScheduleTanding, 'id'> = {
-            matchNumber,
-            date: originalDateStrForForm, 
-            place: String(place),
-            pesilatMerahName: String(pMerahName),
-            pesilatMerahContingent: String(pMerahCont),
-            pesilatBiruName: String(pBiruName),
-            pesilatBiruContingent: String(pBiruCont),
-            round: String(round),
-            class: String(tandingClass),
-          };
-          
+          if (isNaN(matchNumber)) { errorMessages.push(`Baris ${i + 2}: Nomor Pertandingan tidak valid.`); errorCount++; continue; }
+          let parsedDate; let originalDateStrForForm: string;
+          if (typeof dateStr === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(dateStr)) { parsedDate = Timestamp.fromDate(new Date(dateStr + "T00:00:00")); originalDateStrForForm = dateStr; }
+          else if (typeof dateStr === 'number') { const excelEpoch = new Date(1899, 11, 30); const jsDate = new Date(excelEpoch.getTime() + dateStr * 24 * 60 * 60 * 1000); if (!isNaN(jsDate.getTime())) { parsedDate = Timestamp.fromDate(jsDate); originalDateStrForForm = jsDate.toISOString().split('T')[0]; } else { errorMessages.push(`Baris ${i + 2}: Format tanggal Excel tidak valid: ${dateStr}.`); errorCount++; continue; }}
+          else { errorMessages.push(`Baris ${i + 2}: Format tanggal tidak valid: ${dateStr}. Harap YYYY-MM-DD.`); errorCount++; continue; }
+          const newScheduleData: Omit<ScheduleTanding, 'id'> = { matchNumber, date: originalDateStrForForm, place: String(place), pesilatMerahName: String(pMerahName), pesilatMerahContingent: String(pMerahCont), pesilatBiruName: String(pBiruName), pesilatBiruContingent: String(pBiruCont), round: String(round), class: String(tandingClass) };
           const scheduleDataForFirestore = { ...newScheduleData, date: parsedDate };
-
-          try {
-            const newScheduleId = `${Date.now()}-${i}-${Math.random().toString(36).substring(2, 9)}`;
-            const newScheduleRef = doc(db, SCHEDULE_TANDING_COLLECTION, newScheduleId);
-            await setDoc(newScheduleRef, scheduleDataForFirestore);
-            successCount++;
-          } catch (dbError) {
-            console.error("Error writing to Firestore: ", dbError);
-            errorMessages.push(`Baris ${i + 2}: Gagal menyimpan ke database. ${dbError instanceof Error ? dbError.message : ''}`);
-            errorCount++;
-          }
+          try { const newScheduleId = `${Date.now()}-${i}-${Math.random().toString(36).substring(2, 9)}`; const newScheduleRef = doc(db, SCHEDULE_TANDING_COLLECTION, newScheduleId); await setDoc(newScheduleRef, scheduleDataForFirestore); successCount++; }
+          catch (dbError) { console.error("Error writing to Firestore: ", dbError); errorMessages.push(`Baris ${i + 2}: Gagal menyimpan. ${dbError instanceof Error ? dbError.message : ''}`); errorCount++; }
         }
-
-        let summaryMessage = `${successCount} jadwal berhasil diimpor.`;
-        if (errorCount > 0) {
-          summaryMessage += `\n${errorCount} jadwal gagal diimpor.\nKesalahan:\n${errorMessages.slice(0, 5).join('\n')}`;
-          if (errorMessages.length > 5) {
-            summaryMessage += `\n...dan ${errorMessages.length - 5} kesalahan lainnya.`;
-          }
-        }
-        alert(summaryMessage);
-
-      } catch (err) {
-        console.error("Error processing file: ", err);
-        alert(`Gagal memproses file: ${err instanceof Error ? err.message : String(err)}`);
-      } finally {
-        if (fileInputRef.current) {
-          fileInputRef.current.value = '';
-        }
-      }
+        let summaryMessage = `${successCount} jadwal berhasil diimpor.`; if (errorCount > 0) { summaryMessage += `\n${errorCount} jadwal gagal.\nKesalahan:\n${errorMessages.slice(0, 5).join('\n')}`; if (errorMessages.length > 5) summaryMessage += `\n...dan ${errorMessages.length - 5} lainnya.`; } alert(summaryMessage);
+      } catch (err) { console.error("Error processing file: ", err); alert(`Gagal memproses file: ${err instanceof Error ? err.message : String(err)}`); }
+      finally { if (fileInputRef.current) fileInputRef.current.value = ''; }
     };
     reader.readAsArrayBuffer(file);
   };
 
 
   const handleActivateSchedule = async (schedule: ScheduleTanding) => {
+    if (!schedule.place || schedule.place.trim() === "") {
+      alert("Tidak dapat mengaktifkan jadwal: Tempat Pertandingan (Gelanggang) kosong.");
+      return;
+    }
+    const venue = schedule.place;
+    const scheduleIdToActivate = schedule.id;
     try {
-      await setDoc(doc(db, ACTIVE_TANDING_SCHEDULE_CONFIG_PATH), { activeScheduleId: schedule.id });
-      alert(`Jadwal Pertandingan No. ${schedule.matchNumber} (${schedule.pesilatMerahName} vs ${schedule.pesilatBiruName}) telah diaktifkan.`);
+      const venueMapRef = doc(db, ACTIVE_TANDING_MATCHES_BY_GELANGGANG_PATH);
+      await setDoc(venueMapRef, { [venue]: scheduleIdToActivate }, { merge: true });
+      alert(`Jadwal Pertandingan No. ${schedule.matchNumber} (${schedule.pesilatMerahName} vs ${schedule.pesilatBiruName}) telah diaktifkan untuk Gelanggang: ${venue}.`);
     } catch (error) {
       console.error("Error activating schedule: ", error);
       alert(`Gagal mengaktifkan jadwal: ${error instanceof Error ? error.message : String(error)}`);
     }
   };
 
-  const tandingTableHeaders = ["No. Match", "Tanggal", "Tempat", "Pesilat Merah", "Pesilat Biru", "Babak", "Kelas"];
+  const tandingTableHeaders = ["No. Match", "Tanggal", "Gelanggang", "Pesilat Merah", "Pesilat Biru", "Babak", "Kelas"];
 
   if (isLoading) {
     return <PageTitle title="Jadwal Pertandingan Tanding" description="Memuat data jadwal..."><div className="flex gap-2"><Button variant="outline" disabled><Upload className="mr-2 h-4 w-4" /> Unggah XLS</Button><PrintScheduleButton scheduleType="Tanding" disabled /></div></PageTitle>;
@@ -346,7 +264,7 @@ export default function ScheduleTandingPage() {
           <CardContent className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
             <FormField id="matchNumber" label="Nomor Pertandingan" type="number" value={formData.matchNumber} onChange={handleChange} required />
             <FormField id="date" label="Tanggal" type="date" value={formData.date} onChange={handleChange} required />
-            <FormField id="place" label="Tempat Pertandingan" value={formData.place} onChange={handleChange} required />
+            <FormField id="place" label="Tempat Pertandingan (Gelanggang)" value={formData.place} onChange={handleChange} placeholder="cth: Gelanggang A" required />
             
             <FormField id="pesilatMerahName" label="Nama Pesilat Merah" value={formData.pesilatMerahName} onChange={handleChange} required />
             <FormField id="pesilatMerahContingent" label="Kontingen Pesilat Merah" value={formData.pesilatMerahContingent} onChange={handleChange} required />
@@ -398,18 +316,21 @@ export default function ScheduleTandingPage() {
                 <TableCell key={`class-${s.id}`}>{s.class}</TableCell>,
             ]}
             onEdit={handleEdit}
-            onDelete={handleDelete}
+            onDelete={(id) => {
+                const scheduleToDelete = schedules.find(s => s.id === id);
+                if (scheduleToDelete) handleDelete(scheduleToDelete);
+            }}
             renderCustomActions={(schedule) => (
               <>
-                {schedule.id === activeScheduleId ? (
+                {activeSchedulesByGelanggang[schedule.place] === schedule.id ? (
                   <Button variant="default" size="sm" disabled className="bg-green-500 hover:bg-green-600">
                     <PlayCircle className="mr-1 h-4 w-4" />
-                    Jadwal Aktif
+                    Aktif di {schedule.place}
                   </Button>
                 ) : (
-                  <Button variant="outline" size="sm" onClick={() => handleActivateSchedule(schedule)}>
+                  <Button variant="outline" size="sm" onClick={() => handleActivateSchedule(schedule)} disabled={!schedule.place || schedule.place.trim() === ""}>
                     <PlayCircle className="mr-1 h-4 w-4" />
-                    Aktifkan Jadwal
+                    Aktifkan
                   </Button>
                 )}
               </>
@@ -420,4 +341,3 @@ export default function ScheduleTandingPage() {
     </>
   );
 }
-

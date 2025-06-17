@@ -1,7 +1,7 @@
 
 "use client";
 
-import { useState, type FormEvent, type ChangeEvent, useEffect, useCallback } from 'react';
+import { useState, type FormEvent, type ChangeEvent, useEffect, useCallback, useRef } from 'react';
 import { PageTitle } from '@/components/shared/PageTitle';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardFooter } from '@/components/ui/card';
@@ -14,18 +14,18 @@ import { tgrCategoriesList } from '@/lib/types';
 import { TableCell } from '@/components/ui/table';
 import { cn } from '@/lib/utils';
 import { db } from '@/lib/firebase';
-import { collection, addDoc, getDocs, doc, updateDoc, deleteDoc, onSnapshot, setDoc, query, orderBy, Timestamp } from 'firebase/firestore';
-import * as XLSX from 'xlsx'; // Keep for future upload functionality
+import { collection, addDoc, getDocs, doc, updateDoc, deleteDoc, onSnapshot, setDoc, query, orderBy, Timestamp, deleteField } from 'firebase/firestore';
+import * as XLSX from 'xlsx'; 
 
 const SCHEDULE_TGR_COLLECTION = 'schedules_tgr';
-const ACTIVE_TGR_SCHEDULE_CONFIG_PATH = 'app_settings/active_match_tgr';
+const ACTIVE_TGR_MATCHES_BY_GELANGGANG_PATH = 'app_settings/active_tgr_matches_by_gelanggang';
 
 const initialFormState: Omit<ScheduleTGR, 'id'> = {
   lotNumber: 1,
   category: 'Tunggal',
   date: new Date().toISOString().split('T')[0],
   place: '',
-  round: 'Penyisihan', // Default to Penyisihan
+  round: 'Penyisihan',
   pesilatMerahName: '',
   pesilatMerahContingent: '',
   pesilatBiruName: '',
@@ -43,26 +43,24 @@ export default function ScheduleTGRPage() {
   const [schedules, setSchedules] = useState<ScheduleTGR[]>([]);
   const [formData, setFormData] = useState<Omit<ScheduleTGR, 'id'>>(initialFormState);
   const [isEditing, setIsEditing] = useState<string | null>(null);
-  const [activeTgrScheduleId, setActiveTgrScheduleId] = useState<string | null>(null);
+  const [activeTgrSchedulesByGelanggang, setActiveTgrSchedulesByGelanggang] = useState<Record<string, string | null>>({});
   const [isLoading, setIsLoading] = useState(true);
-  // const fileInputRef = useRef<HTMLInputElement>(null); // For XLS upload in future
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // Fetch active TGR schedule ID
   useEffect(() => {
-    const unsub = onSnapshot(doc(db, ACTIVE_TGR_SCHEDULE_CONFIG_PATH), (docSnap) => {
+    const unsub = onSnapshot(doc(db, ACTIVE_TGR_MATCHES_BY_GELANGGANG_PATH), (docSnap) => {
       if (docSnap.exists()) {
-        setActiveTgrScheduleId(docSnap.data()?.activeScheduleId || null);
+        setActiveTgrSchedulesByGelanggang(docSnap.data() as Record<string, string | null>);
       } else {
-        setActiveTgrScheduleId(null);
+        setActiveTgrSchedulesByGelanggang({});
       }
     }, (error) => {
-      console.error("Error fetching active TGR schedule ID:", error);
-      setActiveTgrScheduleId(null);
+      console.error("Error fetching active TGR schedules by gelanggang:", error);
+      setActiveTgrSchedulesByGelanggang({});
     });
     return () => unsub();
   }, []);
 
-  // Fetch all TGR schedules
   useEffect(() => {
     setIsLoading(true);
     const q = query(collection(db, SCHEDULE_TGR_COLLECTION), orderBy("lotNumber", "asc"));
@@ -75,7 +73,6 @@ export default function ScheduleTGRPage() {
         if (data.date instanceof Timestamp) {
           processedDate = data.date.toDate().toISOString().split('T')[0];
         } else if (typeof data.date === 'string') {
-          // Basic validation for YYYY-MM-DD format if it's a string
           if (/^\d{4}-\d{2}-\d{2}$/.test(data.date)) {
             processedDate = data.date;
           } else {
@@ -83,7 +80,6 @@ export default function ScheduleTGRPage() {
             processedDate = new Date().toISOString().split('T')[0];
           }
         } else if (data.date && typeof data.date.seconds === 'number' && typeof data.date.nanoseconds === 'number') {
-          // Handle plain object {seconds, nanoseconds} representation of a Timestamp
           processedDate = new Date(data.date.seconds * 1000).toISOString().split('T')[0];
         } else {
           console.warn(`[ScheduleTGR] Unexpected date type from Firestore: ${typeof data.date}. Defaulting to today.`);
@@ -96,7 +92,7 @@ export default function ScheduleTGRPage() {
           category: data.category as TGRCategoryType,
           date: processedDate,
           place: data.place as string,
-          round: data.round as string, // Added round
+          round: data.round as string,
           pesilatMerahName: data.pesilatMerahName as string,
           pesilatMerahContingent: data.pesilatMerahContingent as string,
           pesilatBiruName: (data.pesilatBiruName as string | undefined) || '',
@@ -122,7 +118,7 @@ export default function ScheduleTGRPage() {
   };
 
   const handleSelectChange = (name: string) => (value: string) => {
-     setFormData(prev => ({ ...prev, [name]: value })); // Simplified for both category and round
+     setFormData(prev => ({ ...prev, [name]: value }));
   };
 
   const handleSubmit = async (e: FormEvent<HTMLFormElement>) => {
@@ -132,14 +128,14 @@ export default function ScheduleTGRPage() {
         alert("Nama Pesilat Merah dan Kontingen Merah wajib diisi.");
         return;
     }
-    if (!formData.date || !formData.place || !formData.round) { 
-        alert("Tanggal, Gelanggang, dan Babak wajib diisi.");
+    if (!formData.date || !formData.place || formData.place.trim() === "" || !formData.round) { 
+        alert("Tanggal, Gelanggang, dan Babak wajib diisi. Gelanggang tidak boleh kosong.");
         return;
     }
 
     const scheduleDataForFirestore = {
       ...formData,
-      date: Timestamp.fromDate(new Date(formData.date + "T00:00:00")), // Convert string date to Firestore Timestamp
+      date: Timestamp.fromDate(new Date(formData.date + "T00:00:00")),
     };
 
     try {
@@ -162,18 +158,20 @@ export default function ScheduleTGRPage() {
   const handleEdit = (id: string) => {
     const scheduleToEdit = schedules.find(s => s.id === id);
     if (scheduleToEdit) {
-      // scheduleToEdit.date is already guaranteed to be a YYYY-MM-DD string by the fetching logic
       setFormData({...scheduleToEdit });
       setIsEditing(id);
     }
   };
 
-  const handleDelete = async (id: string) => {
-     if (confirm('Apakah Anda yakin ingin menghapus jadwal TGR ini?')) {
+  const handleDelete = async (scheduleToDelete: ScheduleTGR) => {
+     if (confirm(`Apakah Anda yakin ingin menghapus jadwal TGR No. ${scheduleToDelete.lotNumber} (${scheduleToDelete.pesilatMerahName}) di ${scheduleToDelete.place}?`)) {
       try {
-        await deleteDoc(doc(db, SCHEDULE_TGR_COLLECTION, id));
-        if (id === activeTgrScheduleId) {
-          await setDoc(doc(db, ACTIVE_TGR_SCHEDULE_CONFIG_PATH), { activeScheduleId: null });
+        await deleteDoc(doc(db, SCHEDULE_TGR_COLLECTION, scheduleToDelete.id));
+        if (activeTgrSchedulesByGelanggang[scheduleToDelete.place] === scheduleToDelete.id) {
+            const venueMapRef = doc(db, ACTIVE_TGR_MATCHES_BY_GELANGGANG_PATH);
+            await updateDoc(venueMapRef, {
+                [scheduleToDelete.place]: deleteField() // Or set to null
+            });
         }
       } catch (error) {
         console.error("Error deleting TGR schedule: ", error);
@@ -183,17 +181,68 @@ export default function ScheduleTGRPage() {
   };
 
   const handleFileUpload = () => {
-    alert('Fungsi unggah XLS untuk TGR belum diimplementasikan.');
-    // fileInputRef.current?.click();
+    fileInputRef.current?.click();
   };
 
-  // const processUploadedFile = async (event: ChangeEvent<HTMLInputElement>) => { /* ... placeholder for XLS processing ... */ };
+  const processUploadedFile = async (event: ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = async (e) => {
+      try {
+        const data = e.target?.result;
+        if (!data) { alert('Gagal membaca file.'); return; }
+        const workbook = XLSX.read(data, { type: 'array' });
+        const sheetName = workbook.SheetNames[0];
+        const worksheet = workbook.Sheets[sheetName];
+        const jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1 }) as any[][];
+        if (jsonData.length < 2) { alert('File XLSX kosong atau tidak memiliki header.'); return; }
+        const headers = jsonData[0];
+        const expectedHeaders = ["Nomor Undian", "Tanggal (YYYY-MM-DD)", "Gelanggang", "Pool/Grup", "Babak Pertandingan", "Kategori (Tunggal/Ganda/Regu)", "Nama Peserta (Pisahkan dengan koma)", "Kontingen"];
+        if (headers.length !== expectedHeaders.length || !expectedHeaders.every((eh, i) => eh === headers[i])) { alert('Format header file XLSX jadwal TGR tidak sesuai template.'); return; }
+        const dataRows = jsonData.slice(1);
+        let successCount = 0; let errorCount = 0; const errorMessages: string[] = [];
+        for (let i = 0; i < dataRows.length; i++) {
+          const row = dataRows[i];
+          if (row.filter(cell => cell !== null && cell !== undefined && cell !== '').length === 0) continue;
+          if (row.length < expectedHeaders.length) { errorMessages.push(`Baris ${i + 2}: Data tidak lengkap.`); errorCount++; continue; }
+          const [lotNumStr, dateStr, place, poolGroup, round, category, participantNames, contingent] = row;
+          if (!place || String(place).trim() === "") { errorMessages.push(`Baris ${i + 2}: Gelanggang kosong.`); errorCount++; continue; }
+          const lotNumber = parseInt(String(lotNumStr));
+          if (isNaN(lotNumber)) { errorMessages.push(`Baris ${i + 2}: Nomor Undian tidak valid.`); errorCount++; continue; }
+          let parsedDate; let originalDateStrForForm: string;
+          if (typeof dateStr === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(dateStr)) { parsedDate = Timestamp.fromDate(new Date(dateStr + "T00:00:00")); originalDateStrForForm = dateStr; }
+          else if (typeof dateStr === 'number') { const excelEpoch = new Date(1899, 11, 30); const jsDate = new Date(excelEpoch.getTime() + dateStr * 24 * 60 * 60 * 1000); if (!isNaN(jsDate.getTime())) { parsedDate = Timestamp.fromDate(jsDate); originalDateStrForForm = jsDate.toISOString().split('T')[0]; } else { errorMessages.push(`Baris ${i + 2}: Format tanggal Excel tidak valid: ${dateStr}.`); errorCount++; continue; }}
+          else { errorMessages.push(`Baris ${i + 2}: Format tanggal tidak valid: ${dateStr}. Harap YYYY-MM-DD.`); errorCount++; continue; }
+          const names = String(participantNames).split(',').map(name => name.trim());
+          const pesilatMerahName = names[0] || '';
+          const pesilatBiruName = names[1] || ''; // Ganda might have a second name here
+
+          const newScheduleData: Omit<ScheduleTGR, 'id'> = { lotNumber, category: category as TGRCategoryType, date: originalDateStrForForm, place: String(place), round: String(round), pesilatMerahName, pesilatMerahContingent: String(contingent), pesilatBiruName, pesilatBiruContingent: pesilatBiruName ? String(contingent) : ''}; // Assume same contingent if biru name exists
+          const scheduleDataForFirestore = { ...newScheduleData, date: parsedDate };
+          try { const newScheduleId = `${Date.now()}-tgr-${i}-${Math.random().toString(36).substring(2, 9)}`; const newScheduleRef = doc(db, SCHEDULE_TGR_COLLECTION, newScheduleId); await setDoc(newScheduleRef, scheduleDataForFirestore); successCount++; }
+          catch (dbError) { console.error("Error writing TGR to Firestore: ", dbError); errorMessages.push(`Baris ${i + 2}: Gagal menyimpan. ${dbError instanceof Error ? dbError.message : ''}`); errorCount++; }
+        }
+        let summaryMessage = `${successCount} jadwal TGR berhasil diimpor.`; if (errorCount > 0) { summaryMessage += `\n${errorCount} jadwal TGR gagal.\nKesalahan:\n${errorMessages.slice(0, 5).join('\n')}`; if (errorMessages.length > 5) summaryMessage += `\n...dan ${errorMessages.length - 5} lainnya.`; } alert(summaryMessage);
+      } catch (err) { console.error("Error processing TGR file: ", err); alert(`Gagal memproses file TGR: ${err instanceof Error ? err.message : String(err)}`); }
+      finally { if (fileInputRef.current) fileInputRef.current.value = ''; }
+    };
+    reader.readAsArrayBuffer(file);
+  };
 
 
   const handleActivateTGRSchedule = async (schedule: ScheduleTGR) => {
+    if (!schedule.place || schedule.place.trim() === "") {
+      alert("Tidak dapat mengaktifkan jadwal TGR: Tempat Pertandingan (Gelanggang) kosong.");
+      return;
+    }
+    const venue = schedule.place;
+    const scheduleIdToActivate = schedule.id;
+
     try {
-      await setDoc(doc(db, ACTIVE_TGR_SCHEDULE_CONFIG_PATH), { activeScheduleId: schedule.id });
-      alert(`Jadwal TGR No. ${schedule.lotNumber} (${schedule.pesilatMerahName}) telah diaktifkan.`);
+      const venueMapRef = doc(db, ACTIVE_TGR_MATCHES_BY_GELANGGANG_PATH);
+      await setDoc(venueMapRef, { [venue]: scheduleIdToActivate }, { merge: true });
+      alert(`Jadwal TGR No. ${schedule.lotNumber} (${schedule.pesilatMerahName}) telah diaktifkan untuk Gelanggang: ${venue}.`);
     } catch (error) {
       console.error("Error activating TGR schedule: ", error);
       alert(`Gagal mengaktifkan jadwal TGR: ${error instanceof Error ? error.message : String(error)}`);
@@ -214,7 +263,8 @@ export default function ScheduleTGRPage() {
       <>
         <PageTitle title="Jadwal Pertandingan TGR" description="Memuat data jadwal TGR...">
           <div className="flex gap-2">
-            <Button variant="outline" disabled><Upload className="mr-2 h-4 w-4" /> Unggah XLS</Button>
+            <input type="file" accept=".xlsx" ref={fileInputRef} onChange={processUploadedFile} style={{ display: 'none' }} />
+            <Button onClick={handleFileUpload} variant="outline" disabled><Upload className="mr-2 h-4 w-4" /> Unggah XLS</Button>
             <PrintScheduleButton scheduleType="TGR" disabled />
           </div>
         </PageTitle>
@@ -229,9 +279,9 @@ export default function ScheduleTGRPage() {
     <>
       <PageTitle title="Jadwal Pertandingan TGR" description="Kelola jadwal pertandingan kategori Tunggal, Ganda, Regu, dan Jurus Tunggal Bebas.">
         <div className="flex gap-2">
-          {/* <input type="file" accept=".xlsx" ref={fileInputRef} onChange={processUploadedFile} style={{ display: 'none' }} /> */}
+          <input type="file" accept=".xlsx" ref={fileInputRef} onChange={processUploadedFile} style={{ display: 'none' }} />
           <Button onClick={handleFileUpload} variant="outline">
-            <Upload className="mr-2 h-4 w-4" /> Unggah XLS
+            <Upload className="mr-2 h-4 w-4" /> Unggah XLS TGR
           </Button>
           <PrintScheduleButton scheduleType="TGR" disabled={schedules.length === 0} />
         </div>
@@ -245,7 +295,7 @@ export default function ScheduleTGRPage() {
           <CardContent className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
             <FormField id="lotNumber" label="No. Partai/Undian" type="number" value={formData.lotNumber} onChange={handleChange} required />
             <FormField id="date" label="Tanggal" type="date" value={formData.date} onChange={handleChange} required />
-            <FormField id="place" label="Gelanggang" value={formData.place} onChange={handleChange} required />
+            <FormField id="place" label="Gelanggang" value={formData.place} onChange={handleChange} placeholder="cth: Gelanggang C" required />
             <FormField
               id="round"
               label="Babak"
@@ -306,18 +356,21 @@ export default function ScheduleTGRPage() {
                 <TableCell key={`biruCont-${s.id}`}>{s.pesilatBiruContingent || 'N/A'}</TableCell>,
             ]}
             onEdit={handleEdit}
-            onDelete={handleDelete}
+            onDelete={(id) => {
+                 const scheduleToDelete = schedules.find(s => s.id === id);
+                 if (scheduleToDelete) handleDelete(scheduleToDelete);
+            }}
             renderCustomActions={(schedule) => (
               <>
-                {schedule.id === activeTgrScheduleId ? (
+                {activeTgrSchedulesByGelanggang[schedule.place] === schedule.id ? (
                   <Button variant="default" size="sm" disabled className="bg-green-500 hover:bg-green-600">
                     <PlayCircle className="mr-1 h-4 w-4" />
-                    Jadwal Aktif
+                    Aktif di {schedule.place}
                   </Button>
                 ) : (
-                  <Button variant="outline" size="sm" onClick={() => handleActivateTGRSchedule(schedule)}>
+                  <Button variant="outline" size="sm" onClick={() => handleActivateTGRSchedule(schedule)} disabled={!schedule.place || schedule.place.trim() === ""}>
                     <PlayCircle className="mr-1 h-4 w-4" />
-                    Aktifkan Jadwal
+                    Aktifkan
                   </Button>
                 )}
               </>
