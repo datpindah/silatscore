@@ -25,7 +25,7 @@ const DEFAULT_ROUND_DURATION_SECONDS = 120;
 const TOTAL_ROUNDS = 3;
 const JURI_IDS = ['juri-1', 'juri-2', 'juri-3'] as const;
 const GRACE_PERIOD_FOR_STRIKE_DECISION = 5000;
-const JURI_INPUT_VALIDITY_WINDOW_MS = 2000;
+const JURI_INPUT_VALIDITY_WINDOW_MS = 2000; 
 
 interface PesilatInfo {
   name: string;
@@ -97,14 +97,14 @@ function DewanSatuPageComponent() {
     }
   }, [timerStatus.roundDuration]);
 
-  useEffect(() => { // Effect C: Listens to Firestore for active match config *based on gelanggang*
+  useEffect(() => { 
     if (!gelanggangName) {
       setError("Nama gelanggang tidak ditemukan di URL.");
-      setConfigMatchId(null); // No gelanggang, no match id
+      setConfigMatchId(null); 
       setIsLoading(false);
       return;
     }
-    setError(null); // Clear previous errors
+    setError(null); 
     setIsLoading(true);
 
     const unsubGelanggangMap = onSnapshot(doc(db, ACTIVE_TANDING_MATCHES_BY_GELANGGANG_PATH), (docSnap) => {
@@ -131,8 +131,7 @@ function DewanSatuPageComponent() {
   }, [gelanggangName]);
 
 
-  useEffect(() => { // Effect A: Main data loading and state synchronization logic
-    let unsubscribers: (() => void)[] = [];
+  useEffect(() => { 
     let mounted = true;
 
     const resetAllMatchData = (reason: string) => {
@@ -146,50 +145,62 @@ function DewanSatuPageComponent() {
       setAllContributingEntryKeys(new Set()); setPermanentlyStruckEntryKeys(new Set());
       setPrevSavedUnstruckKeys(new Set()); setPrevSavedStruckKeys(new Set());
       setActiveDisplayVerificationRequest(null); setIsDisplayVerificationModalOpen(false);
-      // Do not clear general error here if it's about gelanggang or map loading
       if (!error?.includes("gelanggang")) setError(null);
       setIsNavigatingNextMatch(false);
     };
 
-    if (configMatchId === undefined) { // Condition 1: configMatchId is still being fetched (or gelanggangName is missing)
-      // Loading state is managed by the gelanggangName effect or this one if configMatchId becomes undefined.
+    if (configMatchId === undefined) { 
       if (gelanggangName) setIsLoading(true);
-      else setIsLoading(false); // No gelanggang, no loading
+      else setIsLoading(false);
       return () => { mounted = false; };
     }
 
-    if (configMatchId === null) { // Condition 2: configMatchId is fetched and is null (no active match for this gelanggang)
+    if (configMatchId === null) { 
       if (activeScheduleId !== null) {
         resetAllMatchData("configMatchId became null");
         setActiveScheduleId(null);
       }
-      setIsLoading(false); // Stop loading as there's no match to load
-      // Error message about no active schedule for this gelanggang would have been set by the map listener.
-      return () => { mounted = false; unsubscribers.forEach(unsub => unsub()); };
+      setIsLoading(false);
+      return () => { mounted = false; /* unsubscribers handled by main data effect */ };
     }
 
     if (configMatchId !== activeScheduleId) {
       resetAllMatchData(`configMatchId changed from ${activeScheduleId} to ${configMatchId}`);
       setActiveScheduleId(configMatchId);
-      // Data loading for the new activeScheduleId will be triggered by this change.
-      // setIsLoading(true) will be set at the start of loadData if activeScheduleId is valid
-      return () => { mounted = false; unsubscribers.forEach(unsub => unsub()); };
+      // Data loading for the new activeScheduleId will be triggered by the data effect.
+      return () => { mounted = false; /* unsubscribers handled by main data effect */ };
     }
     
-    // If we reach here, configMatchId is valid, and activeScheduleId is in sync with it.
-    // This is where data loading for the *current* active match happens.
-    // setIsLoading(true) is now set before calling loadData if activeScheduleId is valid.
+    return () => { mounted = false; };
+  }, [configMatchId, activeScheduleId, gelanggangName, error]); 
+  
+  const updateTimerStatusInFirestore = useCallback(async (newStatusUpdates: Partial<TimerStatus>) => {
+    if (!activeScheduleId) return;
+    try {
+      const matchDocRef = doc(db, MATCHES_TANDING_COLLECTION, activeScheduleId);
+      const docSnap = await getDoc(matchDocRef);
+      const currentDBTimerStatus = docSnap.exists() && docSnap.data()?.timer_status ? docSnap.data()?.timer_status as TimerStatus : initialTimerStatus;
+      const newFullStatus: TimerStatus = { ...currentDBTimerStatus, ...newStatusUpdates, roundDuration: newStatusUpdates.roundDuration ?? currentDBTimerStatus.roundDuration ?? DEFAULT_ROUND_DURATION_SECONDS };
+      await setDoc(matchDocRef, { timer_status: newFullStatus }, { merge: true });
+    } catch (e) { console.error(`[Dewan-1] Error updating timer status in Firestore:`, e); setError("Gagal memperbarui status timer di server."); }
+  }, [activeScheduleId]); 
 
-    const loadData = async (currentMatchId: string) => {
-      if (!mounted || !currentMatchId) {
-        setIsLoading(false);
-        return;
-      }
-      setIsLoading(true); // Set loading true when starting to load data for a valid match ID
+  useEffect(() => { // Main data loading and synchronization logic
+    if (!activeScheduleId) {
+      setIsLoading(false); // No active match to load.
+      return;
+    }
+
+    setIsLoading(true);
+    let mounted = true;
+    const unsubscribers: (() => void)[] = [];
+
+    const loadData = async () => {
+      if (!mounted) return;
       setError(null); // Clear previous match-specific errors
 
       try {
-        const scheduleDocRef = doc(db, SCHEDULE_TANDING_COLLECTION, currentMatchId);
+        const scheduleDocRef = doc(db, SCHEDULE_TANDING_COLLECTION, activeScheduleId);
         const scheduleDocSnap = await getDoc(scheduleDocRef);
 
         if (!mounted) return;
@@ -200,14 +211,14 @@ function DewanSatuPageComponent() {
           setPesilatBiruInfo({ name: data.pesilatBiruName, contingent: data.pesilatBiruContingent });
           setMatchDetailsLoaded(true);
         } else {
-          setError(`Detail jadwal untuk ID ${currentMatchId} tidak ditemukan.`);
-          resetAllMatchData(`Schedule doc ${currentMatchId} not found`);
+          setError(`Detail jadwal untuk ID ${activeScheduleId} tidak ditemukan.`);
+          setMatchDetails(null); setPesilatMerahInfo(null); setPesilatBiruInfo(null);
           setMatchDetailsLoaded(false);
           setIsLoading(false);
           return;
         }
 
-        const matchDocRef = doc(db, MATCHES_TANDING_COLLECTION, currentMatchId);
+        const matchDocRef = doc(db, MATCHES_TANDING_COLLECTION, activeScheduleId);
         unsubscribers.push(onSnapshot(matchDocRef, async (docSnap) => {
           if (!mounted) return;
           if (docSnap.exists()) {
@@ -237,7 +248,7 @@ function DewanSatuPageComponent() {
         
         const juriSetters = [setJuri1Scores, setJuri2Scores, setJuri3Scores];
         JURI_IDS.forEach((juriId, index) => {
-          const juriDocRef = doc(db, MATCHES_TANDING_COLLECTION, currentMatchId, 'juri_scores', juriId);
+          const juriDocRef = doc(db, MATCHES_TANDING_COLLECTION, activeScheduleId, 'juri_scores', juriId);
           unsubscribers.push(onSnapshot(juriDocRef, (docSnap) => {
             if (!mounted) return;
             if (docSnap.exists()) juriSetters[index]({ ...(docSnap.data() as JuriMatchData), juriId });
@@ -245,46 +256,65 @@ function DewanSatuPageComponent() {
           }, (err) => { if (mounted) { console.error(`[Dewan-1] Error fetching scores for ${juriId}:`, err); juriSetters[index](null); }}));
         });
 
-        const ketuaActionsQuery = query(collection(db, MATCHES_TANDING_COLLECTION, currentMatchId, OFFICIAL_ACTIONS_SUBCOLLECTION), orderBy("timestamp", "asc"));
+        const ketuaActionsQuery = query(collection(db, MATCHES_TANDING_COLLECTION, activeScheduleId, OFFICIAL_ACTIONS_SUBCOLLECTION), orderBy("timestamp", "asc"));
         unsubscribers.push(onSnapshot(ketuaActionsQuery, (querySnapshot) => {
             if (!mounted) return;
             const actions: KetuaActionLogEntry[] = querySnapshot.docs.map(d => ({ id: d.id, ...d.data(), timestamp: d.data().timestamp } as KetuaActionLogEntry));
             setKetuaActionsLog(actions);
         }, (err) => { if (mounted) { console.error(`[Dewan-1] Error fetching official actions:`, err); setKetuaActionsLog([]); }}));
         
-        const verificationQuery = query(collection(db, MATCHES_TANDING_COLLECTION, currentMatchId, VERIFICATIONS_SUBCOLLECTION), orderBy('timestamp', 'desc'), limit(1));
+        const verificationQuery = query(collection(db, MATCHES_TANDING_COLLECTION, activeScheduleId, VERIFICATIONS_SUBCOLLECTION), orderBy('timestamp', 'desc'), limit(1));
         unsubscribers.push(onSnapshot(verificationQuery, (snapshot) => {
           if (!mounted) return;
           if (!snapshot.empty) {
             const latestVerification = { id: snapshot.docs[0].id, ...snapshot.docs[0].data() } as VerificationRequest;
-            if (latestVerification.status === 'pending') { setActiveDisplayVerificationRequest(latestVerification); setIsDisplayVerificationModalOpen(true); }
-            else { setActiveDisplayVerificationRequest(null); setIsDisplayVerificationModalOpen(false); }
-          } else { setActiveDisplayVerificationRequest(null); setIsDisplayVerificationModalOpen(false); }
+            if (latestVerification.status === 'pending') {
+              setActiveDisplayVerificationRequest(latestVerification);
+              setIsDisplayVerificationModalOpen(true);
+              if (timerStatus.isTimerRunning || !timerStatus.matchStatus.startsWith('PausedForVerificationRound')) {
+                 updateTimerStatusInFirestore({
+                    isTimerRunning: false,
+                    matchStatus: `PausedForVerificationRound${timerStatus.currentRound}` as TimerMatchStatus
+                 });
+              }
+            } else { 
+              setActiveDisplayVerificationRequest(null);
+              setIsDisplayVerificationModalOpen(false);
+              if (timerStatus.matchStatus.startsWith('PausedForVerificationRound')) {
+                updateTimerStatusInFirestore({
+                  isTimerRunning: false,
+                  matchStatus: 'Pending', 
+                  timerSeconds: timerStatus.roundDuration,
+                });
+              }
+            }
+          } else { 
+            setActiveDisplayVerificationRequest(null);
+            setIsDisplayVerificationModalOpen(false);
+            if (timerStatus.matchStatus.startsWith('PausedForVerificationRound')) {
+              updateTimerStatusInFirestore({
+                isTimerRunning: false,
+                matchStatus: 'Pending',
+                timerSeconds: timerStatus.roundDuration,
+              });
+            }
+          }
         }, (err) => { if (mounted) { console.error(`[Dewan-1] Error fetching verification for display:`, err); setActiveDisplayVerificationRequest(null); setIsDisplayVerificationModalOpen(false); }}));
 
       } catch (err) {
         if (mounted) { console.error("[Dewan-1] Error in loadData function:", err); setError("Gagal memuat data pertandingan."); }
       } finally {
-        if (mounted) setIsLoading(false); // Stop loading once all data attempts are made for this matchId
+        if (mounted) setIsLoading(false); 
       }
     };
+    loadData();
+    return () => { mounted = false; unsubscribers.forEach(unsub => unsub()); };
+  }, [activeScheduleId, updateTimerStatusInFirestore]); // Added updateTimerStatusInFirestore
 
-    if (activeScheduleId) {
-      loadData(activeScheduleId);
-    } else {
-      // If activeScheduleId is null but configMatchId was not (e.g. it just became null), stop loading
-      setIsLoading(false);
-    }
-
-    return () => {
-      mounted = false;
-      unsubscribers.forEach(unsub => unsub());
-    };
-  }, [configMatchId, activeScheduleId]); // Removed gelanggangName, loading state managed by other effects
 
   // Effect B: Score calculation
   useEffect(() => {
-    if (isLoading) return; // Don't proceed with calculations if still loading
+    if (isLoading) return; 
     
     const allJuriDataInput = [juri1Scores, juri2Scores, juri3Scores].filter(Boolean) as JuriMatchDataWithId[];
     if (allJuriDataInput.length === 0 && prevSavedUnstruckKeys.size === 0 && prevSavedStruckKeys.size === 0 && ketuaActionsLog.length === 0 && activeScheduleId) {
@@ -418,7 +448,7 @@ function DewanSatuPageComponent() {
                     setTimerStatus(prev => ({ ...prev, isTimerRunning: false, ...(currentDBTimerStatus && { timerSeconds: currentDBTimerStatus.timerSeconds, matchStatus: currentDBTimerStatus.matchStatus, currentRound: currentDBTimerStatus.currentRound, roundDuration: currentDBTimerStatus.roundDuration, })}));
                     if(interval) clearInterval(interval); return;
                 }
-                if (!timerStatus.isTimerRunning) { if (interval) clearInterval(interval); return; } // Double check against local state drift
+                if (!timerStatus.isTimerRunning) { if (interval) clearInterval(interval); return; } 
 
                 const newSeconds = Math.max(0, currentDBTimerStatus.timerSeconds - 1);
                 let newMatchStatus: TimerMatchStatus = currentDBTimerStatus.matchStatus;
@@ -438,17 +468,6 @@ function DewanSatuPageComponent() {
     return () => { if (interval) clearInterval(interval); };
   }, [timerStatus.isTimerRunning, timerStatus.timerSeconds, activeScheduleId]);
 
-
-  const updateTimerStatusInFirestore = useCallback(async (newStatusUpdates: Partial<TimerStatus>) => {
-    if (!activeScheduleId) return;
-    try {
-      const matchDocRef = doc(db, MATCHES_TANDING_COLLECTION, activeScheduleId);
-      const docSnap = await getDoc(matchDocRef);
-      const currentDBTimerStatus = docSnap.exists() && docSnap.data()?.timer_status ? docSnap.data()?.timer_status as TimerStatus : timerStatus;
-      const newFullStatus: TimerStatus = { ...currentDBTimerStatus, ...newStatusUpdates, roundDuration: newStatusUpdates.roundDuration ?? currentDBTimerStatus.roundDuration ?? DEFAULT_ROUND_DURATION_SECONDS };
-      await setDoc(matchDocRef, { timer_status: newFullStatus }, { merge: true });
-    } catch (e) { console.error(`[Dewan-1] Error updating timer status in Firestore:`, e); setError("Gagal memperbarui status timer di server."); }
-  }, [activeScheduleId, timerStatus]); 
 
   const handleTimerControl = (action: 'start' | 'pause') => {
     if (!activeScheduleId || !timerStatus || timerStatus.matchStatus === 'MatchFinished' || isLoading) return;
