@@ -1,7 +1,7 @@
 
 "use client";
 
-import { useState, useEffect, useCallback, Suspense, use } from 'react'; // Added 'use'
+import { useState, useEffect, useCallback, Suspense, use } from 'react'; 
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
 import { Header } from '@/components/layout/Header';
@@ -427,7 +427,7 @@ function JuriPageComponent({ juriId, gelanggangName }: { juriId: string; gelangg
                 <h1 className="text-xl font-semibold text-destructive">Gelanggang Diperlukan</h1>
                 <p className="text-muted-foreground mt-2">Parameter 'gelanggang' tidak ditemukan di URL. Halaman Juri tidak dapat memuat data pertandingan tanpa nama gelanggang.</p>
                 <Button asChild className="mt-6">
-                    <Link href={`/login?redirect=/scoring/tanding/juri/${juriId}`}><ArrowLeft className="mr-2 h-4 w-4"/> Kembali ke Halaman Login</Link>
+                    <Link href="/login"><ArrowLeft className="mr-2 h-4 w-4"/> Kembali ke Halaman Login</Link>
                 </Button>
             </main>
         </div>
@@ -453,7 +453,7 @@ function JuriPageComponent({ juriId, gelanggangName }: { juriId: string; gelangg
                 {getStatusText()}
             </span>
             <Button variant="outline" asChild>
-              <Link href={`/login?redirect=/scoring/tanding/juri/${juriId}&gelanggang=${gelanggangName || ''}`}><ArrowLeft className="mr-2 h-4 w-4" /> Kembali</Link>
+              <Link href="/login"><ArrowLeft className="mr-2 h-4 w-4" /> Kembali</Link>
             </Button>
           </div>
         </PageTitle>
@@ -572,7 +572,6 @@ function JuriPageComponent({ juriId, gelanggangName }: { juriId: string; gelangg
 
 
 export default function DynamicJuriPageWithSuspense({ params: paramsProp }: { params: { juriId: string } }) {
-  // Use React.use to unwrap params if it's a Promise-like structure, as hinted by Next.js
   const params = use(paramsProp); 
   const juriId = params.juriId;
 
@@ -593,5 +592,3 @@ export default function DynamicJuriPageWithSuspense({ params: paramsProp }: { pa
   );
 }
 
-
-    
