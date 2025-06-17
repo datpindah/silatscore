@@ -1,20 +1,20 @@
 
 "use client";
 
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback, useRef, Suspense } from 'react';
 import Link from 'next/link';
+import { useSearchParams } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle as RadixDialogTitle, DialogDescription as DialogVerificationDescription } from "@/components/ui/dialog";
 import { ArrowLeft, Eye, Loader2, RadioTower, AlertTriangle, Sun, Moon, ChevronsRight } from 'lucide-react';
 import type { ScheduleTanding, TimerStatus, VerificationRequest, JuriVoteValue, KetuaActionLogEntry, PesilatColorIdentity, KetuaActionType, TimerMatchStatus } from '@/lib/types';
 import type { ScoreEntry as LibScoreEntryType, RoundScores as LibRoundScoresType } from '@/lib/types';
 import { db } from '@/lib/firebase';
-import { doc, onSnapshot, getDoc, collection, query, orderBy, limit, Timestamp, setDoc, where, getDocs } from 'firebase/firestore';
+import { doc, onSnapshot, getDoc, collection, query, orderBy, limit, Timestamp, setDoc, where, getDocs, updateDoc } from 'firebase/firestore';
 import { cn } from '@/lib/utils';
 import { Skeleton } from '@/components/ui/skeleton';
 
-
-const ACTIVE_TANDING_SCHEDULE_CONFIG_PATH = 'app_settings/active_match_tanding';
+const ACTIVE_TANDING_MATCHES_BY_GELANGGANG_PATH = 'app_settings/active_tanding_matches_by_gelanggang';
 const SCHEDULE_TANDING_COLLECTION = 'schedules_tanding';
 const MATCHES_TANDING_COLLECTION = 'matches_tanding';
 const VERIFICATIONS_SUBCOLLECTION = 'verifications';
@@ -46,8 +46,7 @@ interface CombinedScoreEntry extends ScoreEntry {
   color: 'merah' | 'biru';
 }
 
-
-export default function MonitoringSkorPage() {
+function MonitoringSkorPageComponent({ gelanggangName }: { gelanggangName: string | null }) {
   const [pageTheme, setPageTheme] = useState<'light' | 'dark'>('light');
   const [configMatchId, setConfigMatchId] = useState<string | null | undefined>(undefined);
   const [activeScheduleId, setActiveScheduleId] = useState<string | null>(null);
@@ -100,34 +99,52 @@ export default function MonitoringSkorPage() {
     setIsNavigatingNextMatch(false);
   }, []);
 
-  useEffect(() => {
-    const unsubConfig = onSnapshot(doc(db, ACTIVE_TANDING_SCHEDULE_CONFIG_PATH), (docSnap) => {
-      const newDbConfigId = docSnap.exists() ? docSnap.data()?.activeScheduleId : null;
+ useEffect(() => {
+    if (!gelanggangName) {
+      setError("Nama gelanggang tidak ditemukan di URL.");
+      setConfigMatchId(null);
+      setIsLoading(false);
+      return;
+    }
+    setError(null);
+    setIsLoading(true);
+
+    const unsubGelanggangMap = onSnapshot(doc(db, ACTIVE_TANDING_MATCHES_BY_GELANGGANG_PATH), (docSnap) => {
+      let newDbConfigId: string | null = null;
+      if (docSnap.exists()) {
+        newDbConfigId = docSnap.data()?.[gelanggangName] || null;
+      }
       setConfigMatchId(prevId => (prevId === newDbConfigId ? prevId : newDbConfigId));
+      if (!newDbConfigId) {
+         setError(`Tidak ada jadwal Tanding aktif untuk Gelanggang: ${gelanggangName}.`);
+      }
     }, (err) => {
-      console.error("[MonitoringSkor] Error fetching active schedule config:", err);
-      setError("Gagal memuat konfigurasi jadwal aktif.");
+      console.error(`[MonitorSkor] Error fetching active matches by gelanggang map:`, err);
+      setError("Gagal memuat peta jadwal aktif per gelanggang.");
       setConfigMatchId(null);
     });
-    return () => unsubConfig();
-  }, []);
+    return () => unsubGelanggangMap();
+  }, [gelanggangName]);
+
 
   useEffect(() => {
     if (configMatchId === undefined) { setIsLoading(true); return; }
     if (configMatchId === null) {
       if (activeScheduleId !== null) { resetMatchDisplayData(); setActiveScheduleId(null); }
-      setIsLoading(false); setError("Tidak ada jadwal pertandingan yang aktif."); return;
+      setIsLoading(false); 
+      if (!error && gelanggangName) setError(`Tidak ada jadwal Tanding aktif untuk Gelanggang: ${gelanggangName}.`);
+      return;
     }
     if (configMatchId !== activeScheduleId) {
         resetMatchDisplayData();
         setActiveScheduleId(configMatchId);
     }
-  }, [configMatchId, activeScheduleId, resetMatchDisplayData]);
+  }, [configMatchId, activeScheduleId, resetMatchDisplayData, gelanggangName, error]);
 
   useEffect(() => {
     if (!activeScheduleId) {
         setIsLoading(false);
-        if (!error?.includes("konfigurasi")) setError(null);
+        if (!error?.includes("konfigurasi") && !error?.includes("Tidak ada jadwal")) setError(null);
         return;
     }
 
@@ -225,7 +242,7 @@ export default function MonitoringSkorPage() {
 
     loadData(activeScheduleId);
     return () => { mounted = false; unsubscribers.forEach(unsub => unsub()); };
-  }, [activeScheduleId, matchDetailsLoaded]); 
+  }, [activeScheduleId, matchDetailsLoaded, resetMatchDisplayData]); 
 
   useEffect(() => {
     if (isLoading && (matchDetailsLoaded || activeScheduleId === null)) {
@@ -444,8 +461,8 @@ export default function MonitoringSkorPage() {
   };
 
   const handleNextMatchNavigation = async () => {
-    if (!activeScheduleId || !matchDetails || timerStatus.matchStatus !== 'MatchFinished') {
-        alert("Pertandingan saat ini belum selesai atau detail tidak tersedia.");
+    if (!activeScheduleId || !matchDetails || timerStatus.matchStatus !== 'MatchFinished' || !gelanggangName) {
+        alert("Pertandingan saat ini belum selesai atau detail/gelanggang tidak tersedia.");
         return;
     }
     setIsNavigatingNextMatch(true);
@@ -454,6 +471,7 @@ export default function MonitoringSkorPage() {
         const schedulesRef = collection(db, SCHEDULE_TANDING_COLLECTION);
         const q = query(
             schedulesRef,
+            where('place', '==', gelanggangName), // Filter by current gelanggang
             where('matchNumber', '>', currentMatchNumber),
             orderBy('matchNumber', 'asc'),
             limit(1)
@@ -461,12 +479,12 @@ export default function MonitoringSkorPage() {
         const querySnapshot = await getDocs(q);
 
         if (querySnapshot.empty) {
-            alert("Ini adalah partai terakhir. Tidak ada partai berikutnya.");
+            alert(`Ini adalah partai terakhir untuk Gelanggang: ${gelanggangName}. Tidak ada partai berikutnya.`);
         } else {
             const nextMatchDoc = querySnapshot.docs[0];
-            await setDoc(doc(db, ACTIVE_TANDING_SCHEDULE_CONFIG_PATH), { activeScheduleId: nextMatchDoc.id });
-            // alert(`Berpindah ke Partai No. ${nextMatchDoc.data().matchNumber}: ${nextMatchDoc.data().pesilatMerahName} vs ${nextMatchDoc.data().pesilatBiruName}`);
-            // The page will reset due to onSnapshot listening to ACTIVE_TANDING_SCHEDULE_CONFIG_PATH
+            const venueMapRef = doc(db, ACTIVE_TANDING_MATCHES_BY_GELANGGANG_PATH);
+            await updateDoc(venueMapRef, { [gelanggangName]: nextMatchDoc.id });
+            // alert(`Berpindah ke Partai No. ${nextMatchDoc.data().matchNumber}: ${nextMatchDoc.data().pesilatMerahName} vs ${nextMatchDoc.data().pesilatBiruName} di ${gelanggangName}`);
         }
     } catch (err) {
         console.error("Error navigating to next match:", err);
@@ -476,12 +494,24 @@ export default function MonitoringSkorPage() {
     }
   };
 
+  if (!gelanggangName && !isLoading) {
+    return (
+      <div className={cn("flex flex-col min-h-screen items-center justify-center", pageTheme === 'light' ? 'monitoring-theme-light' : 'monitoring-theme-dark', "bg-[var(--monitor-bg)] text-[var(--monitor-text)]")}>
+        <AlertTriangle className="h-16 w-16 text-[var(--monitor-overlay-accent-text)] mb-4" />
+        <p className="text-xl text-center text-[var(--monitor-overlay-text-primary)] mb-2">Gelanggang Tidak Ditemukan</p>
+        <p className="text-sm text-center text-[var(--monitor-overlay-text-secondary)] mb-6">Parameter 'gelanggang' tidak ada di URL. Halaman monitor tidak bisa memuat data.</p>
+        <Button variant="outline" asChild className="bg-[var(--monitor-overlay-button-bg)] border-[var(--monitor-overlay-button-border)] hover:bg-[var(--monitor-overlay-button-hover-bg)] text-[var(--monitor-overlay-button-text)]">
+          <Link href={`/login?redirect=/scoring/tanding/monitoring-skor`}><ArrowLeft className="mr-2 h-4 w-4" /> Kembali ke Login</Link>
+        </Button>
+      </div>
+    );
+  }
 
   if (isLoading && configMatchId === undefined) {
     return (
         <div className={cn("flex flex-col min-h-screen items-center justify-center", pageTheme === 'light' ? 'monitoring-theme-light' : 'monitoring-theme-dark', "bg-[var(--monitor-bg)] text-[var(--monitor-text)]")}>
             <Loader2 className="h-16 w-16 animate-spin text-[var(--monitor-overlay-accent-text)] mb-4" />
-            <p className="text-xl">Memuat Konfigurasi Monitor...</p>
+            <p className="text-xl">Memuat Konfigurasi Monitor untuk Gelanggang: {gelanggangName || '...'}</p>
         </div>
     );
   }
@@ -537,7 +567,7 @@ export default function MonitoringSkorPage() {
               </div>
               {/* Score Box Biru */}
               <div className="flex-grow h-full bg-[var(--monitor-skor-biru-bg)] flex items-center justify-center text-5xl md:text-8xl font-bold rounded-md text-[var(--monitor-skor-text)]">
-                  {confirmedScoreBiru}
+                  {isLoading && !matchDetailsLoaded ? <Skeleton className="h-16 w-20 bg-blue-400" /> : confirmedScoreBiru}
               </div>
             </div>
           </div>
@@ -545,7 +575,7 @@ export default function MonitoringSkorPage() {
           {/* Kolom Tengah Atas (Timer, Babak, Status) */}
           <div className="flex flex-col items-center justify-start space-y-2 md:space-y-3 pt-1 md:pt-2">
              <div className="text-5xl md:text-7xl font-mono font-bold text-[var(--monitor-timer-text)] mb-2 md:mb-4">
-              {formatTime(timerStatus.timerSeconds)}
+              {isLoading && !matchDetailsLoaded ? <Skeleton className="h-16 w-48 bg-[var(--monitor-skeleton-bg)]" /> : formatTime(timerStatus.timerSeconds)}
             </div>
             <div className="space-y-1 md:space-y-2 w-full max-w-[180px]">
               {[1, 2, 3].map(b => (
@@ -563,7 +593,7 @@ export default function MonitoringSkorPage() {
               ))}
             </div>
             <div className="text-xs md:text-sm text-[var(--monitor-status-text)] mt-1 md:mt-2 text-center">
-              {getMatchStatusTextForMonitor()}
+              {isLoading && !matchDetailsLoaded ? <Skeleton className="h-4 w-40 bg-[var(--monitor-skeleton-bg)]" /> : getMatchStatusTextForMonitor()}
             </div>
           </div>
 
@@ -576,7 +606,7 @@ export default function MonitoringSkorPage() {
             <div className="flex w-full items-stretch gap-1 md:gap-2 mb-1 md:mb-2 h-56 md:h-72">
               {/* Score Box Merah */}
               <div className="flex-grow h-full bg-[var(--monitor-skor-merah-bg)] flex items-center justify-center text-5xl md:text-8xl font-bold rounded-md text-[var(--monitor-skor-text)]">
-                  {confirmedScoreMerah}
+                  {isLoading && !matchDetailsLoaded ? <Skeleton className="h-16 w-20 bg-red-400" /> : confirmedScoreMerah}
               </div>
               {/* Foul Boxes Merah */}
               <div className="flex flex-col gap-2 p-0.5 w-20 md:w-24 h-full">
@@ -685,21 +715,21 @@ export default function MonitoringSkorPage() {
       {isLoading && activeScheduleId && !matchDetailsLoaded && (
          <div className="absolute inset-0 bg-[var(--monitor-overlay-bg)] flex flex-col items-center justify-center z-50">
             <Loader2 className="h-12 w-12 animate-spin text-[var(--monitor-overlay-accent-text)] mb-4" />
-            <p className="text-lg text-[var(--monitor-overlay-text-primary)]">Memuat Data Monitor...</p>
+            <p className="text-lg text-[var(--monitor-overlay-text-primary)]">Memuat Data Monitor untuk Gelanggang: {gelanggangName || '...'}</p>
          </div>
       )}
-       {!activeScheduleId && !isLoading && (
+       {!activeScheduleId && !isLoading && gelanggangName && (
          <div className="absolute inset-0 bg-[var(--monitor-overlay-bg)] flex flex-col items-center justify-center z-50 p-4">
             <AlertTriangle className="h-16 w-16 text-[var(--monitor-overlay-accent-text)] mb-4" />
-            <p className="text-xl text-center text-[var(--monitor-overlay-text-primary)] mb-2">{error || "Tidak ada pertandingan yang aktif untuk dimonitor."}</p>
+            <p className="text-xl text-center text-[var(--monitor-overlay-text-primary)] mb-2">{error || `Tidak ada pertandingan yang aktif untuk dimonitor di Gelanggang: ${gelanggangName}.`}</p>
             <p className="text-sm text-center text-[var(--monitor-overlay-text-secondary)] mb-6">Silakan aktifkan jadwal di panel admin atau tunggu pertandingan dimulai.</p>
             <Button variant="outline" asChild className="bg-[var(--monitor-overlay-button-bg)] border-[var(--monitor-overlay-button-border)] hover:bg-[var(--monitor-overlay-button-hover-bg)] text-[var(--monitor-overlay-button-text)]">
-              <Link href="/login"><ArrowLeft className="mr-2 h-4 w-4" /> Kembali ke Login</Link>
+              <Link href={`/login?redirect=/scoring/tanding/monitoring-skor&gelanggang=${gelanggangName || ''}`}><ArrowLeft className="mr-2 h-4 w-4" /> Kembali ke Login</Link>
             </Button>
          </div>
       )}
 
-        {timerStatus.matchStatus === 'MatchFinished' && (
+        {timerStatus.matchStatus === 'MatchFinished' && gelanggangName && (
             <Button
                 onClick={handleNextMatchNavigation}
                 disabled={isNavigatingNextMatch || isLoading}
@@ -718,4 +748,23 @@ export default function MonitoringSkorPage() {
   );
 }
 
+
+export default function MonitoringSkorPageSuspended() {
+  return (
+    <Suspense fallback={
+      <div className={cn("flex flex-col min-h-screen items-center justify-center monitoring-theme-light bg-[var(--monitor-bg)] text-[var(--monitor-text)]")}>
+        <Loader2 className="h-16 w-16 animate-spin text-[var(--monitor-overlay-accent-text)] mb-4" />
+        <p className="text-xl">Memuat Halaman Monitor Skor...</p>
+      </div>
+    }>
+      <PageWithSearchParams />
+    </Suspense>
+  );
+}
+
+function PageWithSearchParams() {
+  const searchParams = useSearchParams();
+  const gelanggangName = searchParams.get('gelanggang');
+  return <MonitoringSkorPageComponent gelanggangName={gelanggangName} />;
+}
 
