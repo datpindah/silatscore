@@ -127,6 +127,7 @@ function KetuaPertandinganTGRPageComponent({ gelanggangNameParam }: { gelanggang
 
   const [isWinnerModalOpen, setIsWinnerModalOpen] = useState(false);
   const [winnerData, setWinnerData] = useState<TGRMatchResult | null>(null);
+  const [isProcessingWinner, setIsProcessingWinner] = useState(false);
   
   // Added isLoading state for overall page loading indication
   const [isLoadingPage, setIsLoadingPage] = useState(true);
@@ -145,6 +146,7 @@ function KetuaPertandinganTGRPageComponent({ gelanggangNameParam }: { gelanggang
     setStandardDeviations(initialSideScores);
     setIsWinnerModalOpen(false);
     setWinnerData(null);
+    setIsProcessingWinner(false);
   }, []);
   
   // Effect to set gelanggangName from prop
@@ -260,10 +262,12 @@ function KetuaPertandinganTGRPageComponent({ gelanggangNameParam }: { gelanggang
                   setIsWinnerModalOpen(true);
                 } else {
                   setWinnerData(null);
+                  setIsWinnerModalOpen(false);
                 }
               } else {
                 setTgrTimerStatus(initialGlobalTgrTimerStatus);
                 setWinnerData(null);
+                setIsWinnerModalOpen(false);
               }
             }));
 
@@ -360,19 +364,16 @@ function KetuaPertandinganTGRPageComponent({ gelanggangNameParam }: { gelanggang
   const waktuTampilMerah = formatWaktuPenampilan(tgrTimerStatus.performanceDurationMerah);
 
   const handleTentukanPemenang = async () => {
-    if (!scheduleDetails || !activeMatchId) return;
+    if (isProcessingWinner || !scheduleDetails || !activeMatchId) return;
     if (
       tgrTimerStatus.matchStatus !== 'Finished' ||
-      !(
-        tgrTimerStatus.currentPerformingSide === null ||
-        tgrTimerStatus.currentPerformingSide === 'merah' ||
-        (tgrTimerStatus.currentPerformingSide === 'biru' && !scheduleDetails.pesilatMerahName)
-      )
+      tgrTimerStatus.currentPerformingSide !== null
     ) {
-        alert("Pertandingan belum selesai sesuai kriteria untuk menentukan pemenang, atau sisi yang tampil belum selesai.");
+        alert("Pertandingan belum selesai atau sisi yang tampil belum selesai. Pastikan Timer Kontrol telah menyelesaikan semua penampilan.");
         return;
     }
 
+    setIsProcessingWinner(true);
     let winner: 'biru' | 'merah' | 'seri';
     
     const hasBiru = !!scheduleDetails.pesilatBiruName;
@@ -384,6 +385,7 @@ function KetuaPertandinganTGRPageComponent({ gelanggangNameParam }: { gelanggang
         winner = 'merah';
     } else if (!hasBiru && !hasMerah) {
         alert("Tidak ada peserta yang terdaftar untuk pertandingan ini.");
+        setIsProcessingWinner(false);
         return;
     } else { // Both Biru and Merah exist
         if (finalScores.biru > finalScores.merah) {
@@ -431,15 +433,19 @@ function KetuaPertandinganTGRPageComponent({ gelanggangNameParam }: { gelanggang
         };
     }
     
-    setWinnerData(resultData);
-    setIsWinnerModalOpen(true);
+    setWinnerData(resultData); // Set for modal display
+    setIsWinnerModalOpen(true); // Open modal
 
     try {
         const matchDocRef = doc(db, MATCHES_TGR_COLLECTION, activeMatchId);
         await updateDoc(matchDocRef, { matchResult: resultData });
+        alert(`Pemenang telah ditentukan: ${winner === 'seri' ? 'SERI' : winner.toUpperCase()}. Hasil tersimpan.`);
     } catch (e) {
         console.error("Gagal menyimpan hasil pertandingan ke Firestore:", e);
         setError("Gagal menyimpan hasil pertandingan.");
+        setIsWinnerModalOpen(false); // Close modal on error too or let user close
+    } finally {
+        setIsProcessingWinner(false);
     }
   };
 
@@ -646,14 +652,11 @@ function KetuaPertandinganTGRPageComponent({ gelanggangNameParam }: { gelanggang
   };
 
   const isDetermineWinnerDisabled = derivedIsLoading ||
+    isProcessingWinner ||
     !scheduleDetails ||
     (!scheduleDetails.pesilatBiruName && !scheduleDetails.pesilatMerahName) ||
     tgrTimerStatus.matchStatus !== 'Finished' ||
-    !( 
-        tgrTimerStatus.currentPerformingSide === null ||
-        tgrTimerStatus.currentPerformingSide === 'merah' ||
-        (tgrTimerStatus.currentPerformingSide === 'biru' && !scheduleDetails.pesilatMerahName)
-    );
+    tgrTimerStatus.currentPerformingSide !== null;
 
 
   return (
@@ -669,7 +672,7 @@ function KetuaPertandinganTGRPageComponent({ gelanggangNameParam }: { gelanggang
             disabled={isDetermineWinnerDisabled}
             className="bg-green-600 hover:bg-green-700 text-white py-3 px-6 text-lg"
           >
-            <Trophy className="mr-2 h-5 w-5"/>
+            {isProcessingWinner ? <Loader2 className="mr-2 h-5 w-5 animate-spin"/> : <Trophy className="mr-2 h-5 w-5"/>}
             Tentukan Pemenang
           </Button>
           <Button variant="outline" asChild>
