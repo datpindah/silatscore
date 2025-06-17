@@ -1,3 +1,4 @@
+
 "use client";
 
 import { useState, useEffect, useCallback, Suspense } from 'react';
@@ -523,7 +524,7 @@ function KetuaPertandinganPageComponent({ gelanggangName }: { gelanggangName: st
             <h1 className="text-xl font-semibold text-destructive">Nama Gelanggang Diperlukan</h1>
             <p className="text-muted-foreground mt-2">Parameter 'gelanggang' tidak ditemukan di URL. Halaman ini tidak dapat memuat data pertandingan tanpa nama gelanggang.</p>
             <Button asChild className="mt-6">
-                <Link href={`/login?redirect=/scoring/tanding/ketua-pertandingan`}><ArrowLeft className="mr-2 h-4 w-4"/> Kembali ke Halaman Login</Link>
+                <Link href="/login"><ArrowLeft className="mr-2 h-4 w-4"/> Kembali ke Halaman Login</Link>
             </Button>
         </main>
       </div>
@@ -553,7 +554,7 @@ function KetuaPertandinganPageComponent({ gelanggangName }: { gelanggangName: st
            <h1 className="text-2xl font-bold text-primary mb-2">Ketua Pertandingan (Gel: {gelanggangName || 'N/A'})</h1>
            <div className="text-muted-foreground mb-4">{error || `Tidak ada pertandingan yang aktif untuk Gelanggang: ${gelanggangName}.`}</div>
            <Button variant="outline" asChild>
-            <Link href={`/login?redirect=/scoring/tanding/ketua-pertandingan&gelanggang=${gelanggangName || ''}`}>
+            <Link href="/login">
                 <ArrowLeft className="mr-2 h-4 w-4" /> Kembali ke Login
             </Link>
            </Button>
@@ -833,7 +834,7 @@ function KetuaPertandinganPageComponent({ gelanggangName }: { gelanggangName: st
         </Dialog>
         <div className="mt-8 text-center">
             <Button variant="outline" asChild>
-                <Link href={`/login?redirect=/scoring/tanding/ketua-pertandingan&gelanggang=${gelanggangName || ''}`}><ArrowLeft className="mr-2 h-4 w-4"/> Kembali ke Login</Link>
+                <Link href="/login"><ArrowLeft className="mr-2 h-4 w-4"/> Kembali ke Login</Link>
             </Button>
         </div>
       </main>
