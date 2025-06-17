@@ -1,9 +1,9 @@
 
 "use client";
 
-import { useState, useEffect, useCallback, useRef, Suspense } from 'react';
+import { useState, useEffect, useCallback, useRef, Suspense, type PointerEvent } from 'react';
 import Link from 'next/link';
-import { useSearchParams } from 'next/navigation'; // Ditambahkan
+import { useSearchParams } from 'next/navigation'; 
 import { Button } from '@/components/ui/button';
 // import { Header } from '@/components/layout/Header'; // Header global tidak lagi di-render di halaman ini
 import { ArrowLeft, Eye, Loader2, RadioTower, AlertTriangle, Sun, Moon, ChevronsRight } from 'lucide-react';
@@ -13,7 +13,7 @@ import { db } from '@/lib/firebase';
 import { doc, onSnapshot, getDoc, collection, query, orderBy, limit, Timestamp, setDoc, where, getDocs, updateDoc, deleteField } from 'firebase/firestore';
 import { cn } from '@/lib/utils';
 import { Skeleton } from '@/components/ui/skeleton';
-import { Dialog, DialogContent, DialogHeader, DialogTitle as RadixDialogTitle } from "@/components/ui/dialog"; // Added Dialog components
+import { Dialog, DialogContent, DialogHeader, DialogTitle as RadixDialogTitle } from "@/components/ui/dialog"; 
 import { Card, CardContent } from '@/components/ui/card';
 
 
@@ -25,6 +25,7 @@ const OFFICIAL_ACTIONS_SUBCOLLECTION = 'official_actions';
 const JURI_SCORES_SUBCOLLECTION = 'juri_scores';
 const JURI_IDS = ['juri-1', 'juri-2', 'juri-3'] as const;
 const JURI_INPUT_VALIDITY_WINDOW_MS = 2000;
+const ACTIVATION_THRESHOLD_PX = 60;
 
 
 interface PesilatDisplayInfo {
@@ -80,6 +81,50 @@ function MonitoringSkorPageComponent({ gelanggangName }: { gelanggangName: strin
   const [activeDisplayVerificationRequest, setActiveDisplayVerificationRequest] = useState<VerificationRequest | null>(null);
   const [isDisplayVerificationModalOpen, setIsDisplayVerificationModalOpen] = useState(false);
   const [isNavigatingNextMatch, setIsNavigatingNextMatch] = useState(false);
+
+  const [isHeaderVisible, setIsHeaderVisible] = useState(true);
+  const [isMouseOverPageHeader, setIsMouseOverPageHeader] = useState(false);
+
+
+  useEffect(() => {
+    const handleMouseMove = (event: MouseEvent) => {
+      if (event.clientY < ACTIVATION_THRESHOLD_PX) {
+        setIsHeaderVisible(true);
+      } else {
+        if (!isMouseOverPageHeader) {
+          setIsHeaderVisible(false);
+        }
+      }
+    };
+
+    const handleDocumentMouseLeave = () => {
+      if (!isMouseOverPageHeader) {
+        setIsHeaderVisible(false);
+      }
+    };
+
+    document.addEventListener('mousemove', handleMouseMove);
+    document.documentElement.addEventListener('mouseleave', handleDocumentMouseLeave);
+
+    return () => {
+      document.removeEventListener('mousemove', handleMouseMove);
+      document.documentElement.removeEventListener('mouseleave', handleDocumentMouseLeave);
+    };
+  }, [isMouseOverPageHeader]);
+
+  const handlePageHeaderMouseEnter = () => {
+    setIsMouseOverPageHeader(true);
+    setIsHeaderVisible(true);
+  };
+
+  const handlePageHeaderMouseLeave = (event: PointerEvent<HTMLElement>) => {
+    setIsMouseOverPageHeader(false);
+    // Check if the mouse is still near the top, otherwise hide
+    if (event.clientY >= ACTIVATION_THRESHOLD_PX) {
+      setIsHeaderVisible(false);
+    }
+  };
+
 
   const resetMatchDisplayData = useCallback(() => {
     setMatchDetails(null);
@@ -474,7 +519,7 @@ function MonitoringSkorPageComponent({ gelanggangName }: { gelanggangName: strin
         const schedulesRef = collection(db, SCHEDULE_TANDING_COLLECTION);
         const q = query(
             schedulesRef,
-            where('place', '==', gelanggangName), // Filter by current gelanggang
+            where('place', '==', gelanggangName), 
             where('matchNumber', '>', currentMatchNumber),
             orderBy('matchNumber', 'asc'),
             limit(1)
@@ -521,12 +566,11 @@ function MonitoringSkorPageComponent({ gelanggangName }: { gelanggangName: strin
 
   return (
     <>
-      {/* Global Header tidak lagi di-render di sini */}
       <div
         className={cn(
-          "flex flex-col min-h-screen font-sans overflow-hidden relative",
+          "flex flex-col min-h-screen font-sans bg-gray-100 dark:bg-gray-900", // Removed overflow-hidden
           pageTheme === 'light' ? 'monitoring-theme-light' : 'monitoring-theme-dark',
-          "bg-gray-100 dark:bg-gray-900 text-[var(--monitor-text)]"
+          "text-[var(--monitor-text)]"
         )}
       >
         <Button
@@ -543,8 +587,16 @@ function MonitoringSkorPageComponent({ gelanggangName }: { gelanggangName: strin
           )}
         </Button>
         
-        {/* Page-specific header card */}
-        <Card className="mb-2 md:mb-4 shadow-xl bg-gradient-to-r from-primary to-red-700 text-primary-foreground mx-1 md:mx-2 mt-1 md:mt-2">
+        <Card 
+            className={cn(
+                "sticky top-0 z-40 w-full",
+                "mb-2 md:mb-4 shadow-xl bg-gradient-to-r from-primary to-red-700 text-primary-foreground mx-1 md:mx-2 mt-1 md:mt-2",
+                "transition-transform duration-300 ease-in-out",
+                !isHeaderVisible && "-translate-y-full"
+            )}
+            onMouseEnter={handlePageHeaderMouseEnter}
+            onMouseLeave={handlePageHeaderMouseLeave}
+        >
           <CardContent className="p-3 md:p-4 text-center">
             <h1 className="text-xl md:text-2xl font-bold font-headline">
               GELANGGANG: {gelanggangName || <Skeleton className="h-6 w-20 inline-block bg-red-400" />}
@@ -567,17 +619,14 @@ function MonitoringSkorPageComponent({ gelanggangName }: { gelanggangName: strin
           </CardContent>
         </Card>
 
-        {/* Baris Atas Grid (Info Pesilat, Skor, Fouls, Timer, Babak) */}
         <div className="flex-grow flex flex-col p-1 md:p-2">
           <div className="grid grid-cols-[minmax(0,_1fr)_minmax(0,_0.6fr)_minmax(0,_1fr)] gap-1 items-stretch mb-2 md:mb-4">
-            {/* Kolom Kiri Atas (Pesilat Biru - Info, Score, Fouls) */}
             <div className="flex flex-col items-center flex-1">
               <div className="text-center mb-1 md:mb-2 w-full">
                 <div className="font-bold text-sm md:text-xl text-[var(--monitor-pesilat-biru-name-text)]">{pesilatBiruInfo?.name || <Skeleton className="h-6 w-32 bg-[var(--monitor-skeleton-bg)]" />}</div>
                 <div className="text-xs md:text-base text-[var(--monitor-pesilat-biru-contingent-text)]">{pesilatBiruInfo?.contingent || <Skeleton className="h-4 w-24 bg-[var(--monitor-skeleton-bg)] mt-1" />}</div>
               </div>
               <div className="flex w-full items-stretch gap-1 md:gap-2 mb-1 md:mb-2 h-56 md:h-72">
-                {/* Foul Boxes Biru */}
                 <div className="flex flex-col gap-2 p-0.5 w-20 md:w-24 h-full">
                     <div className="grid grid-cols-2 gap-1 flex-1">
                         <FoulBox label="B1" isActive={getFoulStatus('biru', 'Binaan', 1)} />
@@ -593,14 +642,12 @@ function MonitoringSkorPageComponent({ gelanggangName }: { gelanggangName: strin
                         <FoulBox label="P3" isActive={getFoulStatus('biru', 'Peringatan', 3)} />
                     </div>
                 </div>
-                {/* Score Box Biru */}
                 <div className="flex-grow h-full bg-[var(--monitor-skor-biru-bg)] flex items-center justify-center text-5xl md:text-8xl font-bold rounded-md text-[var(--monitor-skor-text)]">
                     {isLoading && !matchDetailsLoaded ? <Skeleton className="h-16 w-20 bg-blue-400" /> : confirmedScoreBiru}
                 </div>
               </div>
             </div>
 
-            {/* Kolom Tengah Atas (Timer, Babak, Status) */}
             <div className="flex flex-col items-center justify-start space-y-2 md:space-y-3 pt-1 md:pt-2">
                <div className="text-5xl md:text-7xl font-mono font-bold text-[var(--monitor-timer-text)] mb-2 md:mb-4">
                 {isLoading && !matchDetailsLoaded ? <Skeleton className="h-16 w-48 bg-[var(--monitor-skeleton-bg)]" /> : formatTime(timerStatus.timerSeconds)}
@@ -625,18 +672,15 @@ function MonitoringSkorPageComponent({ gelanggangName }: { gelanggangName: strin
               </div>
             </div>
 
-            {/* Kolom Kanan Atas (Pesilat Merah - Info, Score, Fouls) */}
             <div className="flex flex-col items-center flex-1">
               <div className="text-center mb-1 md:mb-2 w-full">
                 <div className="font-bold text-sm md:text-xl text-[var(--monitor-pesilat-merah-name-text)]">{pesilatMerahInfo?.name || <Skeleton className="h-6 w-32 bg-[var(--monitor-skeleton-bg)]" />}</div>
                 <div className="text-xs md:text-base text-[var(--monitor-pesilat-merah-contingent-text)]">{pesilatMerahInfo?.contingent || <Skeleton className="h-4 w-24 bg-[var(--monitor-skeleton-bg)] mt-1" />}</div>
               </div>
               <div className="flex w-full items-stretch gap-1 md:gap-2 mb-1 md:mb-2 h-56 md:h-72">
-                {/* Score Box Merah */}
                 <div className="flex-grow h-full bg-[var(--monitor-skor-merah-bg)] flex items-center justify-center text-5xl md:text-8xl font-bold rounded-md text-[var(--monitor-skor-text)]">
                     {isLoading && !matchDetailsLoaded ? <Skeleton className="h-16 w-20 bg-red-400" /> : confirmedScoreMerah}
                 </div>
-                {/* Foul Boxes Merah */}
                 <div className="flex flex-col gap-2 p-0.5 w-20 md:w-24 h-full">
                     <div className="grid grid-cols-2 gap-1 flex-1">
                         <FoulBox label="B1" isActive={getFoulStatus('merah', 'Binaan', 1)} />
@@ -656,9 +700,7 @@ function MonitoringSkorPageComponent({ gelanggangName }: { gelanggangName: strin
             </div>
           </div>
 
-          {/* Baris Bawah Grid (Juri Indicators & Info Boxes) */}
           <div className="grid grid-cols-[minmax(0,_1fr)_minmax(0,_0.6fr)_minmax(0,_1fr)] gap-1 items-start">
-            {/* Kolom Kiri Bawah (Juri Indicators Biru) */}
             <div className="flex flex-col items-center flex-1">
               <div className="flex flex-col gap-0.5 md:gap-1 w-full">
                 <div className="flex gap-0.5 md:gap-1">
@@ -670,7 +712,6 @@ function MonitoringSkorPageComponent({ gelanggangName }: { gelanggangName: strin
               </div>
             </div>
 
-            {/* Kolom Tengah Bawah (Info Boxes "Pukulan" / "Tendangan") */}
             <div className="flex flex-col items-center justify-start w-full">
               <div className="w-full max-w-[180px] flex flex-col space-y-1 md:space-y-2">
                   <div className="py-1 md:py-2 border border-[var(--monitor-border)] rounded-md flex items-center justify-center text-xs md:text-sm text-[var(--monitor-text)] bg-[var(--monitor-babak-indicator-inactive-bg)] shadow-sm">
@@ -682,7 +723,6 @@ function MonitoringSkorPageComponent({ gelanggangName }: { gelanggangName: strin
               </div>
             </div>
 
-            {/* Kolom Kanan Bawah (Juri Indicators Merah) */}
             <div className="flex flex-col items-center flex-1">
               <div className="flex flex-col gap-0.5 md:gap-1 w-full">
                 <div className="flex gap-0.5 md:gap-1">
