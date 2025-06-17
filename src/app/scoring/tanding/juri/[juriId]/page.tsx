@@ -1,9 +1,9 @@
 
 "use client";
 
-import { useState, useEffect, useCallback, use, Suspense } from 'react';
+import { useState, useEffect, useCallback, Suspense, use } from 'react'; // Added 'use'
 import Link from 'next/link';
-import { useSearchParams } from 'next/navigation'; // Ditambahkan
+import { useSearchParams } from 'next/navigation';
 import { Header } from '@/components/layout/Header';
 import { PageTitle } from '@/components/shared/PageTitle';
 import { Button } from '@/components/ui/button';
@@ -16,7 +16,7 @@ import { doc, onSnapshot, getDoc, Timestamp, setDoc, updateDoc, collection, quer
 import { cn } from '@/lib/utils';
 import { Skeleton } from '@/components/ui/skeleton';
 
-const ACTIVE_TANDING_MATCHES_BY_GELANGGANG_PATH = 'app_settings/active_tanding_matches_by_gelanggang'; // Path baru
+const ACTIVE_TANDING_MATCHES_BY_GELANGGANG_PATH = 'app_settings/active_tanding_matches_by_gelanggang'; 
 const SCHEDULE_TANDING_COLLECTION = 'schedules_tanding';
 const MATCHES_TANDING_COLLECTION = 'matches_tanding';
 const VERIFICATIONS_SUBCOLLECTION = 'verifications';
@@ -52,8 +52,8 @@ const initialJuriMatchData = (): JuriMatchData => ({
 function JuriPageComponent({ juriId, gelanggangName }: { juriId: string; gelanggangName: string | null }) {
   const juriDisplayName = `Juri ${juriId?.split('-')[1] || 'Tidak Dikenal'}`;
 
-  const [configMatchId, setConfigMatchId] = useState<string | null | undefined>(undefined); // ID dari peta gelanggang
-  const [activeMatchId, setActiveMatchId] = useState<string | null>(null); // ID yang sedang diproses
+  const [configMatchId, setConfigMatchId] = useState<string | null | undefined>(undefined); 
+  const [activeMatchId, setActiveMatchId] = useState<string | null>(null); 
 
   const [pesilatMerah, setPesilatMerah] = useState<PesilatInfo | null>(null);
   const [pesilatBiru, setPesilatBiru] = useState<PesilatInfo | null>(null);
@@ -85,10 +85,8 @@ function JuriPageComponent({ juriId, gelanggangName }: { juriId: string; gelangg
     setActiveVerification(null);
     setIsVerificationModalOpen(false);
     setError(null);
-    // matchDetailsLoaded will be reset by its own logic
   }, []);
 
-  // Effect untuk memantau perubahan pada peta gelanggang
   useEffect(() => {
     if (!gelanggangName) {
       setError("Nama gelanggang tidak ditemukan di URL.");
@@ -121,41 +119,35 @@ function JuriPageComponent({ juriId, gelanggangName }: { juriId: string; gelangg
     return () => unsubGelanggangMap();
   }, [gelanggangName, juriId]);
 
-  // Effect untuk sinkronisasi activeMatchId dengan configMatchId dan mereset data
   useEffect(() => {
     if (configMatchId === undefined) {
-      // Masih menunggu data dari peta gelanggang
-      // setIsLoading(true) sudah ditangani di effect sebelumnya atau effect berikutnya
       return;
     }
     if (configMatchId !== activeMatchId) {
       resetAllMatchData();
       setActiveMatchId(configMatchId);
-      setMatchDetailsLoaded(false); // Penting untuk mereset ini agar data detail dimuat ulang
+      setMatchDetailsLoaded(false); 
     }
   }, [configMatchId, activeMatchId, resetAllMatchData]);
 
 
-  // Effect utama untuk memuat data pertandingan dan skor
   useEffect(() => {
     let mounted = true;
     
     if (!activeMatchId) {
-      // Jika tidak ada activeMatchId (misalnya, configMatchId null atau belum dimuat)
-      if (!gelanggangName) { // Jika gelanggangName juga tidak ada, ini sudah ditangani
+      if (!gelanggangName) { 
         setIsLoading(false);
-      } else if (configMatchId === null) { // Jika configMatchId sudah null (tidak ada jadwal untuk gelanggang ini)
+      } else if (configMatchId === null) { 
         setIsLoading(false);
-      } else if (configMatchId === undefined) { // Jika configMatchId masih loading
+      } else if (configMatchId === undefined) { 
         setIsLoading(true);
       }
-      setMatchDetailsLoaded(false); // Pastikan ini false jika tidak ada match
+      setMatchDetailsLoaded(false); 
       return;
     }
 
-    // Jika ada activeMatchId, mulai memuat
     setIsLoading(true);
-    setError(null); // Clear error sebelumnya jika ada
+    setError(null); 
 
     let unsubMatchDoc: (() => void) | null = null;
     let unsubJuriScores: (() => void) | null = null;
@@ -167,7 +159,6 @@ function JuriPageComponent({ juriId, gelanggangName }: { juriId: string; gelangg
     let verificationListenerReady = false;
 
     const tryStopLoading = () => {
-      // Hanya set isLoading false jika semua data yang diharapkan sudah "siap" (dimuat atau listener aktif)
       if (mounted && detailsFetched && matchListenerReady && juriListenerReady && verificationListenerReady) {
         setIsLoading(false);
       }
@@ -258,9 +249,7 @@ function JuriPageComponent({ juriId, gelanggangName }: { juriId: string; gelangg
           setIsVerificationModalOpen(true);
         } else {
            if (activeVerification && activeVerification.id === verificationData.id) {
-             // Juri ini sudah vote untuk verifikasi ini, biarkan modal tertutup
            } else {
-             // Verifikasi baru atau verifikasi lama sudah selesai, reset
              setActiveVerification(null);
              setIsVerificationModalOpen(false);
            }
@@ -372,7 +361,6 @@ function JuriPageComponent({ juriId, gelanggangName }: { juriId: string; gelangg
       }
 
       const entryKey = `${juriId}_${entryTimestampMillis}_${entry.points}`;
-      const isUnstruckByDewan = confirmedUnstruckKeysFromDewan.has(entryKey);
       const isPermanentlyStruckByDewan = confirmedStruckKeysFromDewan.has(entryKey);
       
       const shouldDisplayAsStruck = isPermanentlyStruckByDewan; 
@@ -583,7 +571,11 @@ function JuriPageComponent({ juriId, gelanggangName }: { juriId: string; gelangg
 }
 
 
-export default function DynamicJuriPageWithSuspense({ params }: { params: { juriId: string } }) {
+export default function DynamicJuriPageWithSuspense({ params: paramsProp }: { params: { juriId: string } }) {
+  // Use React.use to unwrap params if it's a Promise-like structure, as hinted by Next.js
+  const params = use(paramsProp); 
+  const juriId = params.juriId;
+
   const searchParams = useSearchParams();
   const gelanggangName = searchParams.get('gelanggang');
   
@@ -592,11 +584,14 @@ export default function DynamicJuriPageWithSuspense({ params }: { params: { juri
       <div className="flex flex-col min-h-screen"> <Header />
         <main className="flex-1 container mx-auto p-4 md:p-8 flex flex-col items-center justify-center">
           <Loader2 className="h-12 w-12 animate-spin text-primary mb-4" />
-          <p className="text-lg text-muted-foreground">Memuat halaman Juri ({params.juriId}) untuk gelanggang...</p>
+          <p className="text-lg text-muted-foreground">Memuat halaman Juri ({juriId}) untuk gelanggang...</p>
         </main>
       </div>
     }>
-      <JuriPageComponent juriId={params.juriId} gelanggangName={gelanggangName} />
+      <JuriPageComponent juriId={juriId} gelanggangName={gelanggangName} />
     </Suspense>
   );
 }
+
+
+    
