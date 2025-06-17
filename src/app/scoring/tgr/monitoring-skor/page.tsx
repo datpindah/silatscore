@@ -458,7 +458,7 @@ function MonitoringSkorTGRPageComponent({ gelanggangName }: { gelanggangName: st
 };
 
   const JuriLabelCell = ({ label }: { label: string }) => (
-    <div className="w-full py-2 border border-[var(--monitor-border)] flex items-center justify-center text-sm md:text-base font-medium bg-[var(--monitor-header-section-bg)] text-[var(--monitor-text)] rounded-sm">
+    <div className="w-full py-2 border border-[var(--monitor-border)] flex items-center justify-center text-sm md:text-base font-medium bg-[var(--monitor-header-section-bg)] text-[var(--monitor-header-section-text)] rounded-sm">
       {label}
     </div>
   );
@@ -536,7 +536,7 @@ function MonitoringSkorTGRPageComponent({ gelanggangName }: { gelanggangName: st
         )}
       >
         {/* Top Bar Info Pertandingan */}
-        <div className="bg-[var(--monitor-header-section-bg)] p-3 md:p-4 text-center text-sm md:text-base font-semibold text-[var(--monitor-text)]">
+        <div className="bg-[var(--monitor-header-section-bg)] p-3 md:p-4 text-center text-sm md:text-base font-semibold text-[var(--monitor-header-section-text)]">
           <div className="flex justify-between items-center">
             <div className="flex-1 grid grid-cols-2 sm:grid-cols-4 gap-1 items-center">
               <div>Gelanggang: {gelanggangName || <Skeleton className="h-5 w-16 inline-block bg-[var(--monitor-skeleton-bg)]" />}</div>
@@ -548,7 +548,7 @@ function MonitoringSkorTGRPageComponent({ gelanggangName }: { gelanggangName: st
               variant="ghost"
               size="icon"
               onClick={() => setPageTheme(prev => prev === 'light' ? 'dark' : 'light')}
-              className="ml-2 text-[var(--monitor-text)] hover:bg-black/10 dark:hover:bg-white/10"
+              className="ml-2 text-[var(--monitor-header-section-text)] hover:bg-black/10 dark:hover:bg-white/10"
               aria-label={pageTheme === "dark" ? "Ganti ke mode terang" : "Ganti ke mode gelap"}
             >
               {pageTheme === 'dark' ? (

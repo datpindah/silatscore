@@ -228,13 +228,13 @@ body {
     --monitor-overlay-button-hover-bg: theme('colors.gray.600');
   }
 
-  /* Monitoring Page Specific Theme Variables (TGR - can be same as tanding for now) */
+  /* Monitoring Page Specific Theme Variables (TGR) */
   .tgr-monitoring-theme-light {
     --monitor-bg: hsl(var(--background));
     --monitor-text: hsl(var(--foreground));
     --monitor-text-muted: hsl(var(--muted-foreground));
-    --monitor-header-section-bg: hsl(var(--primary)); 
-    --monitor-header-section-text: hsl(var(--primary-foreground));
+    --monitor-header-section-bg: 223 78% 48%; /* Blue similar to Tailwind blue-700 */
+    --monitor-header-section-text: 0 0% 100%; /* White text for blue header */
     
     --monitor-skeleton-bg: hsl(var(--muted));
 
@@ -296,8 +296,8 @@ body {
     --monitor-bg: theme('colors.gray.800'); 
     --monitor-text: theme('colors.gray.100');
     --monitor-text-muted: theme('colors.gray.400');
-    --monitor-header-section-bg: hsl(var(--primary)); 
-    --monitor-header-section-text: hsl(var(--primary-foreground));
+    --monitor-header-section-bg: 223 78% 48%; /* Blue similar to Tailwind blue-700 */
+    --monitor-header-section-text: 0 0% 100%; /* White text for blue header */
 
     --monitor-skeleton-bg: theme('colors.gray.700');
 
