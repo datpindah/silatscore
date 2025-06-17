@@ -1,56 +1,92 @@
+
 "use client";
 
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow, TableCaption } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
-import type { Match } from "@/lib/types"; // Assuming Match type is defined
+import type { ScheduleTanding, ScheduleTGR, AgeCategory } from "@/lib/types";
+import { cn } from "@/lib/utils";
 
-// Placeholder data - replace with actual data fetching
-const mockMatches: Partial<Match>[] = [
-  { id: 'match1', matchNumber: 1, class: 'Kelas A Putra', pesilatMerah: { pesilatInfo: { name: 'Atlet Merah 1', contingent: 'Kontingen X' } } as any, pesilatBiru: { pesilatInfo: { name: 'Atlet Biru 1', contingent: 'Kontingen Y' } } as any, status: 'Finished', date: new Date() },
-  { id: 'match2', matchNumber: 2, class: 'Kelas B Putri', pesilatMerah: { pesilatInfo: { name: 'Atlet Merah 2', contingent: 'Kontingen Z' } } as any, pesilatBiru: { pesilatInfo: { name: 'Atlet Biru 2', contingent: 'Kontingen W' } } as any, status: 'Ongoing', date: new Date() },
-  { id: 'match3', matchNumber: 3, class: 'Kelas C Putra', pesilatMerah: { pesilatInfo: { name: 'Atlet Merah 3', contingent: 'Kontingen P' } } as any, pesilatBiru: { pesilatInfo: { name: 'Atlet Biru 3', contingent: 'Kontingen Q' } } as any, status: 'Pending', date: new Date() },
-];
+export interface RecapMatchItem {
+  id: string;
+  type: 'Tanding' | 'TGR';
+  identifier: string; // Match Number or Lot Number
+  categoryDisplay: string; // Kelas Tanding or Kategori TGR
+  ageCategoryDerived?: AgeCategory | string; // For filtering, derived from class/category
+  participantsDisplay: string; // Pesilat Merah vs Biru or Nama Peserta TGR
+  status: 'Selesai' | 'Berlangsung' | 'Berlangsung (Verifikasi)' | 'Berlangsung (Jeda)' | `Selesai (${'biru' | 'merah'})` | 'Akan Datang' | 'Menunggu Data';
+  date: string; // Formatted date
+  gelanggang: string;
+  originalData: ScheduleTanding | ScheduleTGR; // Keep original for potential detailed view
+  matchSpecificData?: any; // Store timer_status or matchResult
+}
 
-export function DataRecapTable() {
-  // In a real app, you'd fetch data, e.g., using React Query
-  const matches = mockMatches;
+interface DataRecapTableProps {
+  matches: RecapMatchItem[];
+}
+
+export function DataRecapTable({ matches }: DataRecapTableProps) {
+
+  const getStatusBadgeVariant = (status: RecapMatchItem['status']) => {
+    if (status === 'Selesai' || status.startsWith('Selesai (')) return 'default';
+    if (status.startsWith('Berlangsung')) return 'secondary';
+    if (status === 'Akan Datang') return 'outline';
+    return 'destructive'; // For 'Menunggu Data'
+  };
+
+  const getStatusBadgeClass = (status: RecapMatchItem['status']) => {
+     if (status === 'Selesai' || status.startsWith('Selesai (')) return 'bg-green-500 text-white';
+     if (status.startsWith('Berlangsung')) return 'bg-yellow-500 text-black';
+     if (status === 'Akan Datang') return 'border-blue-500 text-blue-600'; // More distinct than default outline
+     return 'bg-gray-400 text-white'; // Menunggu Data
+  };
+
 
   return (
     <Table>
-      <TableCaption>Rekapitulasi Pertandingan</TableCaption>
+      <TableCaption>Rekapitulasi Pertandingan Terdaftar</TableCaption>
       <TableHeader>
         <TableRow>
-          <TableHead>No. Match</TableHead>
-          <TableHead>Kelas</TableHead>
-          <TableHead>Pesilat Merah</TableHead>
-          <TableHead>Pesilat Biru</TableHead>
-          <TableHead>Status</TableHead>
-          <TableHead>Tanggal</TableHead>
+          <TableHead className="w-[80px]">Jenis</TableHead>
+          <TableHead className="w-[100px]">No.</TableHead>
+          <TableHead>Kategori/Kelas</TableHead>
+          <TableHead>Peserta</TableHead>
+          <TableHead className="w-[150px]">Status</TableHead>
+          <TableHead className="w-[150px]">Tanggal</TableHead>
+          <TableHead className="w-[150px]">Gelanggang</TableHead>
         </TableRow>
       </TableHeader>
       <TableBody>
-        {matches.map((match) => (
-          <TableRow key={match.id}>
-            <TableCell>{match.matchNumber}</TableCell>
-            <TableCell>{match.class}</TableCell>
-            <TableCell>{match.pesilatMerah?.pesilatInfo.name} ({match.pesilatMerah?.pesilatInfo.contingent})</TableCell>
-            <TableCell>{match.pesilatBiru?.pesilatInfo.name} ({match.pesilatBiru?.pesilatInfo.contingent})</TableCell>
-            <TableCell>
-              <Badge variant={
-                match.status === 'Finished' ? 'default' :
-                match.status === 'Ongoing' ? 'secondary' : // You might want a specific variant for 'Ongoing'
-                'outline' 
-              } className={
-                match.status === 'Finished' ? 'bg-green-500 text-white' :
-                match.status === 'Ongoing' ? 'bg-yellow-500 text-black' :
-                ''
-              }>
-                {match.status}
-              </Badge>
+        {matches.length === 0 ? (
+          <TableRow>
+            <TableCell colSpan={7} className="text-center h-24">
+              Tidak ada data pertandingan yang cocok dengan filter.
             </TableCell>
-            <TableCell>{match.date?.toLocaleDateString()}</TableCell>
           </TableRow>
-        ))}
+        ) : (
+          matches.map((match) => (
+            <TableRow key={match.id}>
+              <TableCell>
+                <Badge variant={match.type === 'Tanding' ? "default" : "secondary"} 
+                       className={cn(match.type === 'Tanding' ? "bg-primary/80" : "bg-accent/80 text-accent-foreground")}>
+                  {match.type}
+                </Badge>
+              </TableCell>
+              <TableCell>{match.identifier}</TableCell>
+              <TableCell>{match.categoryDisplay}</TableCell>
+              <TableCell>{match.participantsDisplay}</TableCell>
+              <TableCell>
+                <Badge 
+                    variant={getStatusBadgeVariant(match.status)} 
+                    className={getStatusBadgeClass(match.status)}
+                >
+                  {match.status}
+                </Badge>
+              </TableCell>
+              <TableCell>{match.date}</TableCell>
+              <TableCell>{match.gelanggang}</TableCell>
+            </TableRow>
+          ))
+        )}
       </TableBody>
     </Table>
   );
