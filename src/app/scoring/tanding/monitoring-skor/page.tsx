@@ -5,14 +5,15 @@ import { useState, useEffect, useCallback, useRef, Suspense } from 'react';
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
 import { Button } from '@/components/ui/button';
-import { Dialog, DialogContent, DialogHeader, DialogTitle as RadixDialogTitle, DialogDescription as DialogVerificationDescription } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle as RadixDialogTitle } from "@/components/ui/dialog";
 import { ArrowLeft, Eye, Loader2, RadioTower, AlertTriangle, Sun, Moon, ChevronsRight } from 'lucide-react';
-import type { ScheduleTanding, TimerStatus, VerificationRequest, JuriVoteValue, KetuaActionLogEntry, PesilatColorIdentity, KetuaActionType, TimerMatchStatus } from '@/lib/types';
+import type { ScheduleTanding, TimerStatus, VerificationRequest, JuriVoteValue, KetuaActionLogEntry, PesilatColorIdentity, KetuaActionType } from '@/lib/types';
 import type { ScoreEntry as LibScoreEntryType, RoundScores as LibRoundScoresType } from '@/lib/types';
 import { db } from '@/lib/firebase';
-import { doc, onSnapshot, getDoc, collection, query, orderBy, limit, Timestamp, setDoc, where, getDocs, updateDoc } from 'firebase/firestore';
+import { doc, onSnapshot, getDoc, collection, query, orderBy, limit, Timestamp, setDoc, where, getDocs, updateDoc, deleteField } from 'firebase/firestore';
 import { cn } from '@/lib/utils';
 import { Skeleton } from '@/components/ui/skeleton';
+import { Header } from '@/components/layout/Header'; // Pastikan Header diimpor
 
 const ACTIVE_TANDING_MATCHES_BY_GELANGGANG_PATH = 'app_settings/active_tanding_matches_by_gelanggang';
 const SCHEDULE_TANDING_COLLECTION = 'schedules_tanding';
@@ -477,12 +478,13 @@ function MonitoringSkorPageComponent({ gelanggangName }: { gelanggangName: strin
             limit(1)
         );
         const querySnapshot = await getDocs(q);
+        const venueMapRef = doc(db, ACTIVE_TANDING_MATCHES_BY_GELANGGANG_PATH);
 
         if (querySnapshot.empty) {
             alert(`Ini adalah partai terakhir untuk Gelanggang: ${gelanggangName}. Tidak ada partai berikutnya.`);
+             await updateDoc(venueMapRef, { [gelanggangName]: deleteField() });
         } else {
             const nextMatchDoc = querySnapshot.docs[0];
-            const venueMapRef = doc(db, ACTIVE_TANDING_MATCHES_BY_GELANGGANG_PATH);
             await updateDoc(venueMapRef, { [gelanggangName]: nextMatchDoc.id });
         }
     } catch (err) {
@@ -516,234 +518,237 @@ function MonitoringSkorPageComponent({ gelanggangName }: { gelanggangName: strin
   }
 
   return (
-    <div className={cn("flex flex-col min-h-screen font-sans overflow-hidden relative", pageTheme === 'light' ? 'monitoring-theme-light' : 'monitoring-theme-dark', "bg-[var(--monitor-bg)] text-[var(--monitor-text)]")}>
-      <Button
-        variant="outline"
-        size="icon"
-        onClick={() => setPageTheme(prev => prev === 'light' ? 'dark' : 'light')}
-        className="absolute top-2 right-2 z-[100] bg-[var(--monitor-dialog-bg)] text-[var(--monitor-header-section-text)] border-[var(--monitor-border)] hover:bg-[var(--monitor-neutral-bg)]"
-        aria-label={pageTheme === "dark" ? "Ganti ke mode terang" : "Ganti ke mode gelap"}
-      >
-        {pageTheme === 'dark' ? (
-          <Sun className="h-[1.2rem] w-[1.2rem]" />
-        ) : (
-          <Moon className="h-[1.2rem] w-[1.2rem]" />
-        )}
-      </Button>
-      <div className="bg-[var(--monitor-header-section-bg)] p-5 md:p-6 text-center text-[var(--monitor-header-section-text)]">
-        <div className="grid grid-cols-3 gap-1 md:gap-2 text-base md:text-lg font-semibold">
-          <div>{matchDetails?.place || <Skeleton className="h-5 w-24 md:h-6 md:w-32 inline-block bg-[var(--monitor-skeleton-bg)]" />}</div>
-          <div>{matchDetails?.round || <Skeleton className="h-5 w-24 md:h-6 md:w-32 inline-block bg-[var(--monitor-skeleton-bg)]" />}</div>
-          <div>{matchDetails?.class || <Skeleton className="h-5 w-32 md:h-6 md:w-40 inline-block bg-[var(--monitor-skeleton-bg)]" />}</div>
-        </div>
-      </div>
-
-      {/* Baris Atas Grid (Info Pesilat, Skor, Fouls, Timer, Babak) */}
-      <div className="flex-grow flex flex-col p-1 md:p-2">
-        <div className="grid grid-cols-[minmax(0,_1fr)_minmax(0,_0.6fr)_minmax(0,_1fr)] gap-1 items-stretch mb-2 md:mb-4">
-          {/* Kolom Kiri Atas (Pesilat Biru - Info, Score, Fouls) */}
-          <div className="flex flex-col items-center flex-1">
-            <div className="text-center mb-1 md:mb-2 w-full">
-              <div className="font-bold text-sm md:text-xl text-[var(--monitor-pesilat-biru-name-text)]">{pesilatBiruInfo?.name || <Skeleton className="h-6 w-32 bg-[var(--monitor-skeleton-bg)]" />}</div>
-              <div className="text-xs md:text-base text-[var(--monitor-pesilat-biru-contingent-text)]">{pesilatBiruInfo?.contingent || <Skeleton className="h-4 w-24 bg-[var(--monitor-skeleton-bg)] mt-1" />}</div>
-            </div>
-            <div className="flex w-full items-stretch gap-1 md:gap-2 mb-1 md:mb-2 h-56 md:h-72">
-              {/* Foul Boxes Biru */}
-              <div className="flex flex-col gap-2 p-0.5 w-20 md:w-24 h-full">
-                  <div className="grid grid-cols-2 gap-1 flex-1">
-                      <FoulBox label="B1" isActive={getFoulStatus('biru', 'Binaan', 1)} />
-                      <FoulBox label="B2" isActive={getFoulStatus('biru', 'Binaan', 2)} />
-                  </div>
-                  <div className="grid grid-cols-2 gap-1 flex-1">
-                      <FoulBox label="T1" isActive={getFoulStatus('biru', 'Teguran', 1)} />
-                      <FoulBox label="T2" isActive={getFoulStatus('biru', 'Teguran', 2)} />
-                  </div>
-                  <div className="grid grid-cols-3 gap-1 flex-1">
-                      <FoulBox label="P1" isActive={getFoulStatus('biru', 'Peringatan', 1)} />
-                      <FoulBox label="P2" isActive={getFoulStatus('biru', 'Peringatan', 2)} />
-                      <FoulBox label="P3" isActive={getFoulStatus('biru', 'Peringatan', 3)} />
-                  </div>
-              </div>
-              {/* Score Box Biru */}
-              <div className="flex-grow h-full bg-[var(--monitor-skor-biru-bg)] flex items-center justify-center text-5xl md:text-8xl font-bold rounded-md text-[var(--monitor-skor-text)]">
-                  {isLoading && !matchDetailsLoaded ? <Skeleton className="h-16 w-20 bg-blue-400" /> : confirmedScoreBiru}
-              </div>
-            </div>
-          </div>
-
-          {/* Kolom Tengah Atas (Timer, Babak, Status) */}
-          <div className="flex flex-col items-center justify-start space-y-2 md:space-y-3 pt-1 md:pt-2">
-             <div className="text-5xl md:text-7xl font-mono font-bold text-[var(--monitor-timer-text)] mb-2 md:mb-4">
-              {isLoading && !matchDetailsLoaded ? <Skeleton className="h-16 w-48 bg-[var(--monitor-skeleton-bg)]" /> : formatTime(timerStatus.timerSeconds)}
-            </div>
-            <div className="space-y-1 md:space-y-2 w-full max-w-[180px]">
-              {[1, 2, 3].map(b => (
-                <div
-                  key={`babak-indicator-${b}`}
-                  className={cn(
-                    "w-full py-1.5 md:py-2 border-2 flex items-center justify-center text-xs md:text-sm font-semibold rounded-md",
-                    timerStatus.currentRound === b
-                      ? "bg-[var(--monitor-babak-indicator-active-bg)] text-[var(--monitor-babak-indicator-active-text)] border-[var(--monitor-babak-indicator-active-border)]"
-                      : "bg-[var(--monitor-babak-indicator-inactive-bg)] text-[var(--monitor-babak-indicator-inactive-text)] border-[var(--monitor-babak-indicator-inactive-border)]"
-                  )}
-                >
-                  {b === 1 ? 'I' : b === 2 ? 'II' : 'III'}
-                </div>
-              ))}
-            </div>
-            <div className="text-xs md:text-sm text-[var(--monitor-status-text)] mt-1 md:mt-2 text-center">
-              {isLoading && !matchDetailsLoaded ? <Skeleton className="h-4 w-40 bg-[var(--monitor-skeleton-bg)]" /> : getMatchStatusTextForMonitor()}
-            </div>
-          </div>
-
-          {/* Kolom Kanan Atas (Pesilat Merah - Info, Score, Fouls) */}
-          <div className="flex flex-col items-center flex-1">
-            <div className="text-center mb-1 md:mb-2 w-full">
-              <div className="font-bold text-sm md:text-xl text-[var(--monitor-pesilat-merah-name-text)]">{pesilatMerahInfo?.name || <Skeleton className="h-6 w-32 bg-[var(--monitor-skeleton-bg)]" />}</div>
-              <div className="text-xs md:text-base text-[var(--monitor-pesilat-merah-contingent-text)]">{pesilatMerahInfo?.contingent || <Skeleton className="h-4 w-24 bg-[var(--monitor-skeleton-bg)] mt-1" />}</div>
-            </div>
-            <div className="flex w-full items-stretch gap-1 md:gap-2 mb-1 md:mb-2 h-56 md:h-72">
-              {/* Score Box Merah */}
-              <div className="flex-grow h-full bg-[var(--monitor-skor-merah-bg)] flex items-center justify-center text-5xl md:text-8xl font-bold rounded-md text-[var(--monitor-skor-text)]">
-                  {isLoading && !matchDetailsLoaded ? <Skeleton className="h-16 w-20 bg-red-400" /> : confirmedScoreMerah}
-              </div>
-              {/* Foul Boxes Merah */}
-              <div className="flex flex-col gap-2 p-0.5 w-20 md:w-24 h-full">
-                  <div className="grid grid-cols-2 gap-1 flex-1">
-                      <FoulBox label="B1" isActive={getFoulStatus('merah', 'Binaan', 1)} />
-                      <FoulBox label="B2" isActive={getFoulStatus('merah', 'Binaan', 2)} />
-                  </div>
-                  <div className="grid grid-cols-2 gap-1 flex-1">
-                      <FoulBox label="T1" isActive={getFoulStatus('merah', 'Teguran', 1)} />
-                      <FoulBox label="T2" isActive={getFoulStatus('merah', 'Teguran', 2)} />
-                  </div>
-                  <div className="grid grid-cols-3 gap-1 flex-1">
-                      <FoulBox label="P1" isActive={getFoulStatus('merah', 'Peringatan', 1)} />
-                      <FoulBox label="P2" isActive={getFoulStatus('merah', 'Peringatan', 2)} />
-                      <FoulBox label="P3" isActive={getFoulStatus('merah', 'Peringatan', 3)} />
-                  </div>
-              </div>
-            </div>
+    <>
+      <Header />
+      <div className={cn("flex flex-col min-h-screen font-sans overflow-hidden relative", pageTheme === 'light' ? 'monitoring-theme-light' : 'monitoring-theme-dark', "bg-[var(--monitor-bg)] text-[var(--monitor-text)]")}>
+        <Button
+          variant="outline"
+          size="icon"
+          onClick={() => setPageTheme(prev => prev === 'light' ? 'dark' : 'light')}
+          className="absolute top-2 right-2 z-[100] bg-[var(--monitor-dialog-bg)] text-[var(--monitor-header-section-text)] border-[var(--monitor-border)] hover:bg-[var(--monitor-neutral-bg)]"
+          aria-label={pageTheme === "dark" ? "Ganti ke mode terang" : "Ganti ke mode gelap"}
+        >
+          {pageTheme === 'dark' ? (
+            <Sun className="h-[1.2rem] w-[1.2rem]" />
+          ) : (
+            <Moon className="h-[1.2rem] w-[1.2rem]" />
+          )}
+        </Button>
+        <div className="bg-[var(--monitor-header-section-bg)] p-5 md:p-6 text-center text-[var(--monitor-header-section-text)]">
+          <div className="grid grid-cols-3 gap-1 md:gap-2 text-base md:text-lg font-semibold">
+            <div>{matchDetails?.place || <Skeleton className="h-5 w-24 md:h-6 md:w-32 inline-block bg-[var(--monitor-skeleton-bg)]" />}</div>
+            <div>{matchDetails?.round || <Skeleton className="h-5 w-24 md:h-6 md:w-32 inline-block bg-[var(--monitor-skeleton-bg)]" />}</div>
+            <div>{matchDetails?.class || <Skeleton className="h-5 w-32 md:h-6 md:w-40 inline-block bg-[var(--monitor-skeleton-bg)]" />}</div>
           </div>
         </div>
 
-        {/* Baris Bawah Grid (Juri Indicators & Info Boxes) */}
-        <div className="grid grid-cols-[minmax(0,_1fr)_minmax(0,_0.6fr)_minmax(0,_1fr)] gap-1 items-start">
-          {/* Kolom Kiri Bawah (Juri Indicators Biru) */}
-          <div className="flex flex-col items-center flex-1">
-            <div className="flex flex-col gap-0.5 md:gap-1 w-full">
-              <div className="flex gap-0.5 md:gap-1">
-                {JURI_IDS.map(id => <JuriInputIndicator key={`biru-pukulan-${id}`} juri={id} type="pukulan" pesilatColor="biru" />)}
+        {/* Baris Atas Grid (Info Pesilat, Skor, Fouls, Timer, Babak) */}
+        <div className="flex-grow flex flex-col p-1 md:p-2">
+          <div className="grid grid-cols-[minmax(0,_1fr)_minmax(0,_0.6fr)_minmax(0,_1fr)] gap-1 items-stretch mb-2 md:mb-4">
+            {/* Kolom Kiri Atas (Pesilat Biru - Info, Score, Fouls) */}
+            <div className="flex flex-col items-center flex-1">
+              <div className="text-center mb-1 md:mb-2 w-full">
+                <div className="font-bold text-sm md:text-xl text-[var(--monitor-pesilat-biru-name-text)]">{pesilatBiruInfo?.name || <Skeleton className="h-6 w-32 bg-[var(--monitor-skeleton-bg)]" />}</div>
+                <div className="text-xs md:text-base text-[var(--monitor-pesilat-biru-contingent-text)]">{pesilatBiruInfo?.contingent || <Skeleton className="h-4 w-24 bg-[var(--monitor-skeleton-bg)] mt-1" />}</div>
               </div>
-              <div className="flex gap-0.5 md:gap-1">
-                {JURI_IDS.map(id => <JuriInputIndicator key={`biru-tendangan-${id}`} juri={id} type="tendangan" pesilatColor="biru" />)}
-              </div>
-            </div>
-          </div>
-
-          {/* Kolom Tengah Bawah (Info Boxes "Pukulan" / "Tendangan") */}
-          <div className="flex flex-col items-center justify-start w-full">
-            <div className="w-full max-w-[180px] flex flex-col space-y-1 md:space-y-2">
-                <div className="py-1 md:py-2 border border-[var(--monitor-border)] rounded-md flex items-center justify-center text-xs md:text-sm text-[var(--monitor-text-muted)] bg-[var(--monitor-header-section-bg)] text-[var(--monitor-header-section-text)] shadow-sm">
-                    Pukulan
-                </div>
-                <div className="py-1 md:py-2 border border-[var(--monitor-border)] rounded-md flex items-center justify-center text-xs md:text-sm text-[var(--monitor-text-muted)] bg-[var(--monitor-header-section-bg)] text-[var(--monitor-header-section-text)] shadow-sm">
-                    Tendangan
-                </div>
-            </div>
-          </div>
-
-          {/* Kolom Kanan Bawah (Juri Indicators Merah) */}
-          <div className="flex flex-col items-center flex-1">
-            <div className="flex flex-col gap-0.5 md:gap-1 w-full">
-              <div className="flex gap-0.5 md:gap-1">
-                {JURI_IDS.map(id => <JuriInputIndicator key={`merah-pukulan-${id}`} juri={id} type="pukulan" pesilatColor="merah" />)}
-              </div>
-              <div className="flex gap-0.5 md:gap-1">
-                {JURI_IDS.map(id => <JuriInputIndicator key={`merah-tendangan-${id}`} juri={id} type="tendangan" pesilatColor="merah" />)}
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-
-
-      <Dialog open={isDisplayVerificationModalOpen} onOpenChange={(isOpen) => {
-          if (!isOpen && activeDisplayVerificationRequest?.status === 'pending') return;
-          setIsDisplayVerificationModalOpen(isOpen);
-      }}>
-         <DialogContent
-            className={cn("sm:max-w-lg md:max-w-xl bg-[var(--monitor-dialog-bg)] border-[var(--monitor-dialog-border)] text-[var(--monitor-dialog-text)]", pageTheme === 'light' ? 'monitoring-theme-light' : 'monitoring-theme-dark')}
-            onPointerDownOutside={(e) => {if (activeDisplayVerificationRequest?.status === 'pending') e.preventDefault();}}
-            onEscapeKeyDown={(e) => {if (activeDisplayVerificationRequest?.status === 'pending') e.preventDefault();}}
-          >
-            <RadixDialogTitle className="sr-only">Konfirmasi Verifikasi Juri</RadixDialogTitle>
-            <DialogHeader className="text-center">
-              <div className="text-2xl md:text-3xl font-bold font-headline text-[var(--monitor-dialog-title-text)]">
-                Verifikasi Juri
-              </div>
-            </DialogHeader>
-            <div className="py-4 px-2 md:px-6">
-                <div className="text-center mt-2">
-                  <div className="text-lg font-semibold">
-                    {activeDisplayVerificationRequest?.type === 'jatuhan' ? 'Verifikasi Jatuhan' : 'Verifikasi Pelanggaran'}
-                  </div>
-                  <div className="text-sm text-[var(--monitor-text-muted)]">Babak {activeDisplayVerificationRequest?.round}</div>
-                </div>
-              <div className="mt-6 grid grid-cols-3 gap-3 md:gap-4 items-start justify-items-center text-center">
-                {JURI_IDS.map((juriKey, index) => {
-                  const vote = activeDisplayVerificationRequest?.votes[juriKey] || null;
-                  let voteText = 'Belum Vote';
-                  let voteBoxColorClass = getJuriVoteDisplayBoxClass(vote);
-                  if (vote === 'merah') { voteText = 'MERAH'; }
-                  else if (vote === 'biru') { voteText = 'BIRU'; }
-                  else if (vote === 'invalid') { voteText = 'INVALID';}
-                  return (
-                    <div key={`vote-display-monitor-${juriKey}`} className="flex flex-col items-center space-y-1 w-full">
-                      <p className="text-base md:text-lg font-bold">J{index + 1}</p>
-                      <div className={cn("w-full h-12 md:h-16 rounded-md flex items-center justify-center text-[10px] md:text-xs font-bold p-1 shadow-md", voteBoxColorClass)}>
-                        {voteText}
-                      </div>
+              <div className="flex w-full items-stretch gap-1 md:gap-2 mb-1 md:mb-2 h-56 md:h-72">
+                {/* Foul Boxes Biru */}
+                <div className="flex flex-col gap-2 p-0.5 w-20 md:w-24 h-full">
+                    <div className="grid grid-cols-2 gap-1 flex-1">
+                        <FoulBox label="B1" isActive={getFoulStatus('biru', 'Binaan', 1)} />
+                        <FoulBox label="B2" isActive={getFoulStatus('biru', 'Binaan', 2)} />
                     </div>
-                  );
-                })}
+                    <div className="grid grid-cols-2 gap-1 flex-1">
+                        <FoulBox label="T1" isActive={getFoulStatus('biru', 'Teguran', 1)} />
+                        <FoulBox label="T2" isActive={getFoulStatus('biru', 'Teguran', 2)} />
+                    </div>
+                    <div className="grid grid-cols-3 gap-1 flex-1">
+                        <FoulBox label="P1" isActive={getFoulStatus('biru', 'Peringatan', 1)} />
+                        <FoulBox label="P2" isActive={getFoulStatus('biru', 'Peringatan', 2)} />
+                        <FoulBox label="P3" isActive={getFoulStatus('biru', 'Peringatan', 3)} />
+                    </div>
+                </div>
+                {/* Score Box Biru */}
+                <div className="flex-grow h-full bg-[var(--monitor-skor-biru-bg)] flex items-center justify-center text-5xl md:text-8xl font-bold rounded-md text-[var(--monitor-skor-text)]">
+                    {isLoading && !matchDetailsLoaded ? <Skeleton className="h-16 w-20 bg-blue-400" /> : confirmedScoreBiru}
+                </div>
               </div>
             </div>
-          </DialogContent>
-      </Dialog>
-      {isLoading && activeScheduleId && !matchDetailsLoaded && (
-         <div className="absolute inset-0 bg-[var(--monitor-overlay-bg)] flex flex-col items-center justify-center z-50">
-            <Loader2 className="h-12 w-12 animate-spin text-[var(--monitor-overlay-accent-text)] mb-4" />
-            <p className="text-lg text-[var(--monitor-overlay-text-primary)]">Memuat Data Monitor untuk Gelanggang: {gelanggangName || '...'}</p>
-         </div>
-      )}
-       {!activeScheduleId && !isLoading && gelanggangName && (
-         <div className="absolute inset-0 bg-[var(--monitor-overlay-bg)] flex flex-col items-center justify-center z-50 p-4">
-            <AlertTriangle className="h-16 w-16 text-[var(--monitor-overlay-accent-text)] mb-4" />
-            <p className="text-xl text-center text-[var(--monitor-overlay-text-primary)] mb-2">{error || `Tidak ada pertandingan yang aktif untuk dimonitor di Gelanggang: ${gelanggangName}.`}</p>
-            <p className="text-sm text-center text-[var(--monitor-overlay-text-secondary)] mb-6">Silakan aktifkan jadwal di panel admin atau tunggu pertandingan dimulai.</p>
-            <Button variant="outline" asChild className="bg-[var(--monitor-overlay-button-bg)] border-[var(--monitor-overlay-button-border)] hover:bg-[var(--monitor-overlay-button-hover-bg)] text-[var(--monitor-overlay-button-text)]">
-              <Link href={`/login?redirect=/scoring/tanding/monitoring-skor&gelanggang=${gelanggangName || ''}`}><ArrowLeft className="mr-2 h-4 w-4" /> Kembali ke Login</Link>
-            </Button>
-         </div>
-      )}
 
-        {timerStatus.matchStatus === 'MatchFinished' && gelanggangName && (
-            <Button
-                onClick={handleNextMatchNavigation}
-                disabled={isNavigatingNextMatch || isLoading}
-                className="fixed bottom-6 right-6 z-50 shadow-lg bg-green-600 hover:bg-green-700 text-white py-3 px-4 text-sm md:text-base rounded-full"
-                title="Lanjut ke Partai Berikutnya"
+            {/* Kolom Tengah Atas (Timer, Babak, Status) */}
+            <div className="flex flex-col items-center justify-start space-y-2 md:space-y-3 pt-1 md:pt-2">
+               <div className="text-5xl md:text-7xl font-mono font-bold text-[var(--monitor-timer-text)] mb-2 md:mb-4">
+                {isLoading && !matchDetailsLoaded ? <Skeleton className="h-16 w-48 bg-[var(--monitor-skeleton-bg)]" /> : formatTime(timerStatus.timerSeconds)}
+              </div>
+              <div className="space-y-1 md:space-y-2 w-full max-w-[180px]">
+                {[1, 2, 3].map(b => (
+                  <div
+                    key={`babak-indicator-${b}`}
+                    className={cn(
+                      "w-full py-1.5 md:py-2 border-2 flex items-center justify-center text-xs md:text-sm font-semibold rounded-md",
+                      timerStatus.currentRound === b
+                        ? "bg-[var(--monitor-babak-indicator-active-bg)] text-[var(--monitor-babak-indicator-active-text)] border-[var(--monitor-babak-indicator-active-border)]"
+                        : "bg-[var(--monitor-babak-indicator-inactive-bg)] text-[var(--monitor-babak-indicator-inactive-text)] border-[var(--monitor-babak-indicator-inactive-border)]"
+                    )}
+                  >
+                    {b === 1 ? 'I' : b === 2 ? 'II' : 'III'}
+                  </div>
+                ))}
+              </div>
+              <div className="text-xs md:text-sm text-[var(--monitor-status-text)] mt-1 md:mt-2 text-center">
+                {isLoading && !matchDetailsLoaded ? <Skeleton className="h-4 w-40 bg-[var(--monitor-skeleton-bg)]" /> : getMatchStatusTextForMonitor()}
+              </div>
+            </div>
+
+            {/* Kolom Kanan Atas (Pesilat Merah - Info, Score, Fouls) */}
+            <div className="flex flex-col items-center flex-1">
+              <div className="text-center mb-1 md:mb-2 w-full">
+                <div className="font-bold text-sm md:text-xl text-[var(--monitor-pesilat-merah-name-text)]">{pesilatMerahInfo?.name || <Skeleton className="h-6 w-32 bg-[var(--monitor-skeleton-bg)]" />}</div>
+                <div className="text-xs md:text-base text-[var(--monitor-pesilat-merah-contingent-text)]">{pesilatMerahInfo?.contingent || <Skeleton className="h-4 w-24 bg-[var(--monitor-skeleton-bg)] mt-1" />}</div>
+              </div>
+              <div className="flex w-full items-stretch gap-1 md:gap-2 mb-1 md:mb-2 h-56 md:h-72">
+                {/* Score Box Merah */}
+                <div className="flex-grow h-full bg-[var(--monitor-skor-merah-bg)] flex items-center justify-center text-5xl md:text-8xl font-bold rounded-md text-[var(--monitor-skor-text)]">
+                    {isLoading && !matchDetailsLoaded ? <Skeleton className="h-16 w-20 bg-red-400" /> : confirmedScoreMerah}
+                </div>
+                {/* Foul Boxes Merah */}
+                <div className="flex flex-col gap-2 p-0.5 w-20 md:w-24 h-full">
+                    <div className="grid grid-cols-2 gap-1 flex-1">
+                        <FoulBox label="B1" isActive={getFoulStatus('merah', 'Binaan', 1)} />
+                        <FoulBox label="B2" isActive={getFoulStatus('merah', 'Binaan', 2)} />
+                    </div>
+                    <div className="grid grid-cols-2 gap-1 flex-1">
+                        <FoulBox label="T1" isActive={getFoulStatus('merah', 'Teguran', 1)} />
+                        <FoulBox label="T2" isActive={getFoulStatus('merah', 'Teguran', 2)} />
+                    </div>
+                    <div className="grid grid-cols-3 gap-1 flex-1">
+                        <FoulBox label="P1" isActive={getFoulStatus('merah', 'Peringatan', 1)} />
+                        <FoulBox label="P2" isActive={getFoulStatus('merah', 'Peringatan', 2)} />
+                        <FoulBox label="P3" isActive={getFoulStatus('merah', 'Peringatan', 3)} />
+                    </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Baris Bawah Grid (Juri Indicators & Info Boxes) */}
+          <div className="grid grid-cols-[minmax(0,_1fr)_minmax(0,_0.6fr)_minmax(0,_1fr)] gap-1 items-start">
+            {/* Kolom Kiri Bawah (Juri Indicators Biru) */}
+            <div className="flex flex-col items-center flex-1">
+              <div className="flex flex-col gap-0.5 md:gap-1 w-full">
+                <div className="flex gap-0.5 md:gap-1">
+                  {JURI_IDS.map(id => <JuriInputIndicator key={`biru-pukulan-${id}`} juri={id} type="pukulan" pesilatColor="biru" />)}
+                </div>
+                <div className="flex gap-0.5 md:gap-1">
+                  {JURI_IDS.map(id => <JuriInputIndicator key={`biru-tendangan-${id}`} juri={id} type="tendangan" pesilatColor="biru" />)}
+                </div>
+              </div>
+            </div>
+
+            {/* Kolom Tengah Bawah (Info Boxes "Pukulan" / "Tendangan") */}
+            <div className="flex flex-col items-center justify-start w-full">
+              <div className="w-full max-w-[180px] flex flex-col space-y-1 md:space-y-2">
+                  <div className="py-1 md:py-2 border border-[var(--monitor-juri-indicator-inactive-border)] rounded-md flex items-center justify-center text-xs md:text-sm text-[var(--monitor-juri-indicator-inactive-text)] bg-[var(--monitor-juri-indicator-inactive-bg)] shadow-sm">
+                      Pukulan
+                  </div>
+                  <div className="py-1 md:py-2 border border-[var(--monitor-juri-indicator-inactive-border)] rounded-md flex items-center justify-center text-xs md:text-sm text-[var(--monitor-juri-indicator-inactive-text)] bg-[var(--monitor-juri-indicator-inactive-bg)] shadow-sm">
+                      Tendangan
+                  </div>
+              </div>
+            </div>
+
+            {/* Kolom Kanan Bawah (Juri Indicators Merah) */}
+            <div className="flex flex-col items-center flex-1">
+              <div className="flex flex-col gap-0.5 md:gap-1 w-full">
+                <div className="flex gap-0.5 md:gap-1">
+                  {JURI_IDS.map(id => <JuriInputIndicator key={`merah-pukulan-${id}`} juri={id} type="pukulan" pesilatColor="merah" />)}
+                </div>
+                <div className="flex gap-0.5 md:gap-1">
+                  {JURI_IDS.map(id => <JuriInputIndicator key={`merah-tendangan-${id}`} juri={id} type="tendangan" pesilatColor="merah" />)}
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+
+        <Dialog open={isDisplayVerificationModalOpen} onOpenChange={(isOpen) => {
+            if (!isOpen && activeDisplayVerificationRequest?.status === 'pending') return;
+            setIsDisplayVerificationModalOpen(isOpen);
+        }}>
+           <DialogContent
+              className={cn("sm:max-w-lg md:max-w-xl bg-[var(--monitor-dialog-bg)] border-[var(--monitor-dialog-border)] text-[var(--monitor-dialog-text)]", pageTheme === 'light' ? 'monitoring-theme-light' : 'monitoring-theme-dark')}
+              onPointerDownOutside={(e) => {if (activeDisplayVerificationRequest?.status === 'pending') e.preventDefault();}}
+              onEscapeKeyDown={(e) => {if (activeDisplayVerificationRequest?.status === 'pending') e.preventDefault();}}
             >
-                {isNavigatingNextMatch ? (
-                    <Loader2 className="mr-2 h-5 w-5 animate-spin" />
-                ) : (
-                    <ChevronsRight className="mr-2 h-5 w-5" />
-                )}
-                Partai Berikutnya
-            </Button>
+              <RadixDialogTitle className="sr-only">Konfirmasi Verifikasi Juri</RadixDialogTitle>
+              <DialogHeader className="text-center">
+                <div className="text-2xl md:text-3xl font-bold font-headline text-[var(--monitor-dialog-title-text)]">
+                  Verifikasi Juri
+                </div>
+              </DialogHeader>
+              <div className="py-4 px-2 md:px-6">
+                  <div className="text-center mt-2">
+                    <div className="text-lg font-semibold">
+                      {activeDisplayVerificationRequest?.type === 'jatuhan' ? 'Verifikasi Jatuhan' : 'Verifikasi Pelanggaran'}
+                    </div>
+                    <div className="text-sm text-[var(--monitor-text-muted)]">Babak {activeDisplayVerificationRequest?.round}</div>
+                  </div>
+                <div className="mt-6 grid grid-cols-3 gap-3 md:gap-4 items-start justify-items-center text-center">
+                  {JURI_IDS.map((juriKey, index) => {
+                    const vote = activeDisplayVerificationRequest?.votes[juriKey] || null;
+                    let voteText = 'Belum Vote';
+                    let voteBoxColorClass = getJuriVoteDisplayBoxClass(vote);
+                    if (vote === 'merah') { voteText = 'MERAH'; }
+                    else if (vote === 'biru') { voteText = 'BIRU'; }
+                    else if (vote === 'invalid') { voteText = 'INVALID';}
+                    return (
+                      <div key={`vote-display-monitor-${juriKey}`} className="flex flex-col items-center space-y-1 w-full">
+                        <p className="text-base md:text-lg font-bold">J{index + 1}</p>
+                        <div className={cn("w-full h-12 md:h-16 rounded-md flex items-center justify-center text-[10px] md:text-xs font-bold p-1 shadow-md", voteBoxColorClass)}>
+                          {voteText}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            </DialogContent>
+        </Dialog>
+        {isLoading && activeScheduleId && !matchDetailsLoaded && (
+           <div className="absolute inset-0 bg-[var(--monitor-overlay-bg)] flex flex-col items-center justify-center z-50">
+              <Loader2 className="h-12 w-12 animate-spin text-[var(--monitor-overlay-accent-text)] mb-4" />
+              <p className="text-lg text-[var(--monitor-overlay-text-primary)]">Memuat Data Monitor untuk Gelanggang: {gelanggangName || '...'}</p>
+           </div>
         )}
-    </div>
+         {!activeScheduleId && !isLoading && gelanggangName && (
+           <div className="absolute inset-0 bg-[var(--monitor-overlay-bg)] flex flex-col items-center justify-center z-50 p-4">
+              <AlertTriangle className="h-16 w-16 text-[var(--monitor-overlay-accent-text)] mb-4" />
+              <p className="text-xl text-center text-[var(--monitor-overlay-text-primary)] mb-2">{error || `Tidak ada pertandingan yang aktif untuk dimonitor di Gelanggang: ${gelanggangName}.`}</p>
+              <p className="text-sm text-center text-[var(--monitor-overlay-text-secondary)] mb-6">Silakan aktifkan jadwal di panel admin atau tunggu pertandingan dimulai.</p>
+              <Button variant="outline" asChild className="bg-[var(--monitor-overlay-button-bg)] border-[var(--monitor-overlay-button-border)] hover:bg-[var(--monitor-overlay-button-hover-bg)] text-[var(--monitor-overlay-button-text)]">
+                <Link href={`/login?redirect=/scoring/tanding/monitoring-skor&gelanggang=${gelanggangName || ''}`}><ArrowLeft className="mr-2 h-4 w-4" /> Kembali ke Login</Link>
+              </Button>
+           </div>
+        )}
+
+          {timerStatus.matchStatus === 'MatchFinished' && gelanggangName && (
+              <Button
+                  onClick={handleNextMatchNavigation}
+                  disabled={isNavigatingNextMatch || isLoading}
+                  className="fixed bottom-6 right-6 z-50 shadow-lg bg-green-600 hover:bg-green-700 text-white py-3 px-4 text-sm md:text-base rounded-full"
+                  title="Lanjut ke Partai Berikutnya"
+              >
+                  {isNavigatingNextMatch ? (
+                      <Loader2 className="mr-2 h-5 w-5 animate-spin" />
+                  ) : (
+                      <ChevronsRight className="mr-2 h-5 w-5" />
+                  )}
+                  Partai Berikutnya
+              </Button>
+          )}
+      </div>
+    </>
   );
 }
 
@@ -766,4 +771,3 @@ function PageWithSearchParams() {
   const gelanggangName = searchParams.get('gelanggang');
   return <MonitoringSkorPageComponent gelanggangName={gelanggangName} />;
 }
-
