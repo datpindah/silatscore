@@ -521,12 +521,12 @@ function MonitoringSkorPageComponent({ gelanggangName }: { gelanggangName: strin
 
   return (
     <>
-      <Header />
+      <Header overrideBackgroundClass="bg-gray-100 dark:bg-gray-900" />
       <div
         className={cn(
           "flex flex-col min-h-screen font-sans overflow-hidden relative",
           pageTheme === 'light' ? 'monitoring-theme-light' : 'monitoring-theme-dark',
-          "bg-gray-100 dark:bg-gray-900 text-[var(--monitor-text)]" // Use direct Tailwind classes for page background
+          "bg-gray-100 dark:bg-gray-900 text-[var(--monitor-text)]"
         )}
       >
         <Button
@@ -548,20 +548,20 @@ function MonitoringSkorPageComponent({ gelanggangName }: { gelanggangName: strin
             <h1 className="text-xl md:text-2xl font-bold font-headline">
               GELANGGANG: {gelanggangName || <Skeleton className="h-6 w-20 inline-block bg-red-400" />}
             </h1>
-            {matchDetails && (
-              <div className="text-xs md:text-sm"> {/* Changed p to div */}
+            {matchDetails && matchDetailsLoaded && (
+              <div className="text-xs md:text-sm">
                 Partai No. {matchDetails.matchNumber} | {matchDetails.round} | {matchDetails.class}
               </div>
             )}
             {isLoading && !matchDetailsLoaded && activeScheduleId && (
-              <div className="text-xs md:text-sm"> {/* Changed from p to div */}
+              <div className="text-xs md:text-sm">
                 <Skeleton className="h-4 w-16 inline-block bg-red-400" /> | <Skeleton className="h-4 w-12 inline-block bg-red-400" /> | <Skeleton className="h-4 w-20 inline-block bg-red-400" />
               </div>
             )}
              {error && !isLoading && !matchDetailsLoaded && (
-              <p className="text-xs md:text-sm text-yellow-300 mt-1">
+              <div className="text-xs md:text-sm text-yellow-300 mt-1">
                 Gagal memuat detail pertandingan. {error}
-              </p>
+              </div>
             )}
           </CardContent>
         </Card>
