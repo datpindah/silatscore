@@ -1,21 +1,22 @@
 
 "use client";
 
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback, useRef, Suspense } from 'react';
 import Link from 'next/link';
+import { useSearchParams } from 'next/navigation'; // Ditambahkan
 import { Button } from '@/components/ui/button';
 import { Header } from '@/components/layout/Header';
 import { ArrowLeft, Loader2, Sun, Moon, ChevronsRight, AlertTriangle } from 'lucide-react';
 import type { ScheduleTGR, TGRTimerStatus, TGRJuriScore, SideSpecificTGRScore, TGRDewanPenalty, TGRMatchResult, TGRMatchResultDetail } from '@/lib/types';
 import { db } from '@/lib/firebase';
-import { doc, onSnapshot, getDoc, collection, query, orderBy, Timestamp, where, limit, setDoc } from 'firebase/firestore';
+import { doc, onSnapshot, getDoc, collection, query, orderBy, Timestamp, where, limit, setDoc, updateDoc, deleteField } from 'firebase/firestore';
 import { cn } from '@/lib/utils';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 
 
-const ACTIVE_TGR_SCHEDULE_CONFIG_PATH = 'app_settings/active_match_tgr';
+const ACTIVE_TGR_MATCHES_BY_GELANGGANG_PATH = 'app_settings/active_tgr_matches_by_gelanggang'; // Path baru
 const SCHEDULE_TGR_COLLECTION = 'schedules_tgr';
 const MATCHES_TGR_COLLECTION = 'matches_tgr';
 const JURI_SCORES_TGR_SUBCOLLECTION = 'juri_scores_tgr';
@@ -156,7 +157,7 @@ const TGRSideSummaryTable: React.FC<TGRSideSummaryTableProps> = ({
 };
 
 
-export default function MonitoringSkorTGRPage() {
+function MonitoringSkorTGRPageComponent({ gelanggangName }: { gelanggangName: string | null }) {
   const [pageTheme, setPageTheme] = useState<'light' | 'dark'>('light');
   const [configMatchId, setConfigMatchId] = useState<string | null | undefined>(undefined);
   const [activeScheduleId, setActiveScheduleId] = useState<string | null>(null);
@@ -193,34 +194,52 @@ export default function MonitoringSkorTGRPage() {
   }, []);
 
   useEffect(() => {
-    const unsubConfig = onSnapshot(doc(db, ACTIVE_TGR_SCHEDULE_CONFIG_PATH), (docSnap) => {
-      const newDbConfigId = docSnap.exists() ? docSnap.data()?.activeScheduleId : null;
+    if (!gelanggangName) {
+      setError("Nama gelanggang tidak ditemukan di URL.");
+      setConfigMatchId(null);
+      setIsLoading(false);
+      return;
+    }
+    setError(null);
+    setIsLoading(true);
+
+    const unsubGelanggangMap = onSnapshot(doc(db, ACTIVE_TGR_MATCHES_BY_GELANGGANG_PATH), (docSnap) => {
+      let newDbConfigId: string | null = null;
+      if (docSnap.exists()) {
+        newDbConfigId = docSnap.data()?.[gelanggangName] || null;
+      }
       setConfigMatchId(prevId => (prevId === newDbConfigId ? prevId : newDbConfigId));
+      if (!newDbConfigId) {
+         setError(`Tidak ada jadwal TGR aktif untuk Gelanggang: ${gelanggangName}.`);
+      }
     }, (err) => {
-      console.error("[MonitorTGR] Error fetching active schedule config:", err);
-      setError("Gagal memuat konfigurasi jadwal aktif TGR.");
+      console.error(`[MonitorTGR] Error fetching active TGR matches by gelanggang map:`, err);
+      setError("Gagal memuat peta jadwal aktif TGR per gelanggang.");
       setConfigMatchId(null);
     });
-    return () => unsubConfig();
-  }, []);
+    return () => unsubGelanggangMap();
+  }, [gelanggangName]);
+
 
   useEffect(() => {
     if (configMatchId === undefined) { setIsLoading(true); return; }
     if (configMatchId === null) {
       if (activeScheduleId !== null) { resetPageData(); setActiveScheduleId(null); }
-      setIsLoading(false); setError("Tidak ada jadwal TGR yang aktif."); return;
+      setIsLoading(false); 
+      if (!error && gelanggangName) setError(`Tidak ada jadwal TGR aktif untuk Gelanggang: ${gelanggangName}.`);
+      return;
     }
     if (configMatchId !== activeScheduleId) {
-      resetPageData();
-      setActiveScheduleId(configMatchId);
+        resetPageData();
+        setActiveScheduleId(configMatchId);
     }
-  }, [configMatchId, activeScheduleId, resetPageData]);
+  }, [configMatchId, activeScheduleId, resetPageData, gelanggangName, error]);
 
   useEffect(() => {
     if (!activeScheduleId) {
-      setIsLoading(false);
-      if (!error?.includes("konfigurasi")) setError(null);
-      return;
+        setIsLoading(false);
+        if (!error?.includes("konfigurasi") && !error?.includes("Tidak ada jadwal")) setError(null);
+        return;
     }
 
     setIsLoading(true);
@@ -233,17 +252,16 @@ export default function MonitoringSkorTGRPage() {
         const scheduleDocRef = doc(db, SCHEDULE_TGR_COLLECTION, currentMatchId);
         const scheduleDocSnap = await getDoc(scheduleDocRef);
         if (!mounted) return;
-
         if (scheduleDocSnap.exists()) {
           const data = scheduleDocSnap.data() as ScheduleTGR;
           setScheduleDetails(data);
           setMatchDetailsLoaded(true);
         } else {
-          setError(`Detail jadwal TGR ID ${currentMatchId} tidak ditemukan.`);
-          setScheduleDetails(null);
-          setMatchDetailsLoaded(false);
-          setIsLoading(false);
-          return;
+            setError(`Detail jadwal TGR ID ${currentMatchId} tidak ditemukan.`);
+            setScheduleDetails(null);
+            setMatchDetailsLoaded(false);
+            setIsLoading(false);
+            return;
         }
 
         const matchDataDocRef = doc(db, MATCHES_TGR_COLLECTION, currentMatchId);
@@ -292,7 +310,7 @@ export default function MonitoringSkorTGRPage() {
 
     loadData(activeScheduleId);
     return () => { mounted = false; unsubscribers.forEach(unsub => unsub()); };
-  }, [activeScheduleId]);
+  }, [activeScheduleId]); 
 
  useEffect(() => {
     if (isLoading && (matchDetailsLoaded || activeScheduleId === null)) {
@@ -361,8 +379,8 @@ export default function MonitoringSkorTGRPage() {
   };
 
   const handleNextMatchNavigation = async () => {
-    if (!activeScheduleId || !scheduleDetails || !(tgrTimerStatus.matchStatus === 'Finished' && tgrTimerStatus.currentPerformingSide === null)) {
-        alert("Pertandingan TGR saat ini belum selesai atau detail tidak tersedia.");
+    if (!activeScheduleId || !scheduleDetails || !(tgrTimerStatus.matchStatus === 'Finished' && tgrTimerStatus.currentPerformingSide === null) || !gelanggangName) {
+        alert("Pertandingan TGR saat ini belum selesai, detail tidak tersedia, atau nama gelanggang tidak valid.");
         return;
     }
     setIsNavigatingNextMatch(true);
@@ -371,17 +389,21 @@ export default function MonitoringSkorTGRPage() {
         const schedulesRef = collection(db, SCHEDULE_TGR_COLLECTION);
         const q = query(
             schedulesRef,
+            where('place', '==', gelanggangName), // Filter by current gelanggang
             where('lotNumber', '>', currentLotNumber),
             orderBy('lotNumber', 'asc'),
             limit(1)
         );
         const querySnapshot = await getDocs(q);
+        const venueMapRef = doc(db, ACTIVE_TGR_MATCHES_BY_GELANGGANG_PATH);
 
         if (querySnapshot.empty) {
-            alert("Ini adalah partai TGR terakhir. Tidak ada partai berikutnya.");
+            alert(`Ini adalah partai TGR terakhir untuk Gelanggang: ${gelanggangName}. Tidak ada partai berikutnya.`);
+            await updateDoc(venueMapRef, { [gelanggangName]: deleteField() }); // Clear the active match for this venue
         } else {
             const nextMatchDoc = querySnapshot.docs[0];
-            await setDoc(doc(db, ACTIVE_TGR_SCHEDULE_CONFIG_PATH), { activeScheduleId: nextMatchDoc.id });
+            await updateDoc(venueMapRef, { [gelanggangName]: nextMatchDoc.id });
+            // alert(`Berpindah ke Partai TGR No. ${nextMatchDoc.data().lotNumber} di Gelanggang: ${gelanggangName}`);
         }
     } catch (err) {
         console.error("Error navigating to next TGR match:", err);
@@ -494,11 +516,11 @@ export default function MonitoringSkorTGRPage() {
 
   const { name: participantName, contingent: participantContingent, textColorClass: participantTextColorClass } = getParticipantDetails();
 
-  if (isLoading && configMatchId === undefined) {
+  if (isLoading && (configMatchId === undefined || !gelanggangName)) {
     return (
         <div className={cn("flex flex-col min-h-screen items-center justify-center", pageTheme === 'light' ? 'tgr-monitoring-theme-light' : 'tgr-monitoring-theme-dark', "bg-[var(--monitor-bg)] text-[var(--monitor-text)]")}>
             <Loader2 className="h-16 w-16 animate-spin text-[var(--monitor-overlay-accent-text)] mb-4" />
-            <p className="text-xl">Memuat Konfigurasi Monitor...</p>
+            <p className="text-xl">Memuat Konfigurasi Monitor TGR {gelanggangName ? `untuk Gel. ${gelanggangName}` : '...'}</p>
         </div>
     );
   }
@@ -517,7 +539,7 @@ export default function MonitoringSkorTGRPage() {
         <div className="bg-[var(--monitor-header-section-bg)] p-3 md:p-4 text-center text-sm md:text-base font-semibold text-[var(--monitor-text)]">
           <div className="flex justify-between items-center">
             <div className="flex-1 grid grid-cols-2 sm:grid-cols-4 gap-1 items-center">
-              <div>Gelanggang: {scheduleDetails?.place || <Skeleton className="h-5 w-16 inline-block bg-[var(--monitor-skeleton-bg)]" />}</div>
+              <div>Gelanggang: {gelanggangName || <Skeleton className="h-5 w-16 inline-block bg-[var(--monitor-skeleton-bg)]" />}</div>
               <div>Partai: {scheduleDetails?.lotNumber || <Skeleton className="h-5 w-10 inline-block bg-[var(--monitor-skeleton-bg)]" />}</div>
               <div>Babak: {scheduleDetails?.round || <Skeleton className="h-5 w-16 inline-block bg-[var(--monitor-skeleton-bg)]" />}</div>
               <div>Kategori: {scheduleDetails?.category || <Skeleton className="h-5 w-20 inline-block bg-[var(--monitor-skeleton-bg)]" />}</div>
@@ -605,16 +627,16 @@ export default function MonitoringSkorTGRPage() {
         {isLoading && activeScheduleId && !matchDetailsLoaded && (
           <div className="absolute inset-0 bg-[var(--monitor-overlay-bg)] flex flex-col items-center justify-center z-50">
               <Loader2 className="h-12 w-12 animate-spin text-[var(--monitor-overlay-accent-text)] mb-4" />
-              <p className="text-lg text-[var(--monitor-overlay-text-primary)]">Memuat Data Monitor TGR...</p>
+              <p className="text-lg text-[var(--monitor-overlay-text-primary)]">Memuat Data Monitor TGR untuk Gel. {gelanggangName || '...'}</p>
           </div>
         )}
-        {!activeScheduleId && !isLoading && (
+        {!activeScheduleId && !isLoading && gelanggangName && (
           <div className="absolute inset-0 bg-[var(--monitor-overlay-bg)] flex flex-col items-center justify-center z-50 p-4">
               <AlertTriangle className="h-16 w-16 text-[var(--monitor-overlay-accent-text)] mb-4" />
-              <p className="text-xl text-center text-[var(--monitor-overlay-text-primary)] mb-2">{error || "Tidak ada pertandingan TGR yang aktif untuk dimonitor."}</p>
+              <p className="text-xl text-center text-[var(--monitor-overlay-text-primary)] mb-2">{error || `Tidak ada pertandingan TGR yang aktif untuk dimonitor di Gel. ${gelanggangName}.`}</p>
               <p className="text-sm text-center text-[var(--monitor-overlay-text-secondary)] mb-6">Silakan aktifkan jadwal TGR di panel admin atau tunggu pertandingan dimulai.</p>
               <Button variant="outline" asChild className="bg-[var(--monitor-overlay-button-bg)] border-[var(--monitor-overlay-button-border)] hover:bg-[var(--monitor-overlay-button-hover-bg)] text-[var(--monitor-overlay-button-text)]">
-                <Link href="/scoring/tgr/login"><ArrowLeft className="mr-2 h-4 w-4" /> Kembali</Link>
+                <Link href={`/scoring/tgr/login?gelanggang=${gelanggangName || ''}`}><ArrowLeft className="mr-2 h-4 w-4" /> Kembali</Link>
               </Button>
           </div>
         )}
@@ -713,7 +735,7 @@ export default function MonitoringSkorTGRPage() {
         )}
 
 
-        {(tgrTimerStatus.matchStatus === 'Finished' && tgrTimerStatus.currentPerformingSide === null && !isLoading && activeScheduleId) && (
+        {(tgrTimerStatus.matchStatus === 'Finished' && tgrTimerStatus.currentPerformingSide === null && !isLoading && activeScheduleId && gelanggangName) && (
             <Button
                 onClick={handleNextMatchNavigation}
                 disabled={isNavigatingNextMatch}
@@ -733,3 +755,21 @@ export default function MonitoringSkorTGRPage() {
   );
 }
 
+function MonitoringSkorTGRPageWithSearchParams() {
+  const searchParams = useSearchParams();
+  const gelanggangName = searchParams.get('gelanggang');
+  return <MonitoringSkorTGRPageComponent gelanggangName={gelanggangName} />;
+}
+
+export default function MonitoringSkorTGRPageSuspended() {
+  return (
+    <Suspense fallback={
+      <div className={cn("flex flex-col min-h-screen items-center justify-center tgr-monitoring-theme-light bg-[var(--monitor-bg)] text-[var(--monitor-text)]")}>
+        <Loader2 className="h-16 w-16 animate-spin text-[var(--monitor-overlay-accent-text)] mb-4" />
+        <p className="text-xl">Memuat Halaman Monitor Skor TGR...</p>
+      </div>
+    }>
+      <MonitoringSkorTGRPageWithSearchParams />
+    </Suspense>
+  );
+}
