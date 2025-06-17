@@ -106,8 +106,8 @@ body {
     --monitor-bg: hsl(var(--background));
     --monitor-text: hsl(var(--foreground));
     --monitor-text-muted: hsl(var(--muted-foreground));
-    --monitor-header-section-bg: 229 76% 50%; /* New Blue Color */
-    --monitor-header-section-text: 0 0% 98%; /* White text */
+    --monitor-header-section-bg: hsl(var(--primary)); 
+    --monitor-header-section-text: hsl(var(--primary-foreground)); 
     
     --monitor-skeleton-bg: hsl(var(--muted));
 
@@ -169,8 +169,8 @@ body {
     --monitor-bg: theme('colors.gray.700');
     --monitor-text: theme('colors.white');
     --monitor-text-muted: theme('colors.gray.400');
-    --monitor-header-section-bg: 229 76% 50%; /* New Blue Color */
-    --monitor-header-section-text: 0 0% 98%; /* White text */
+    --monitor-header-section-bg: hsl(var(--primary)); 
+    --monitor-header-section-text: hsl(var(--primary-foreground)); 
 
     --monitor-skeleton-bg: theme('colors.gray.600');
 
@@ -233,15 +233,15 @@ body {
     --monitor-bg: hsl(var(--background));
     --monitor-text: hsl(var(--foreground));
     --monitor-text-muted: hsl(var(--muted-foreground));
-    --monitor-header-section-bg: 223 78% 48%; /* Blue similar to Tailwind blue-700 */
-    --monitor-header-section-text: 0 0% 100%; /* White text for blue header */
+    --monitor-header-section-bg: 223 78% 48%; /* Blue */
+    --monitor-header-section-text: 0 0% 100%; /* White text */
     
     --monitor-skeleton-bg: hsl(var(--muted));
 
-    --monitor-pesilat-biru-name-text: theme('colors.teal.700'); 
-    --monitor-pesilat-biru-contingent-text: theme('colors.teal.500');
-    --monitor-pesilat-merah-name-text: theme('colors.orange.700'); 
-    --monitor-pesilat-merah-contingent-text: theme('colors.orange.500');
+    --monitor-pesilat-biru-name-text: theme('colors.blue.700'); 
+    --monitor-pesilat-biru-contingent-text: theme('colors.blue.500');
+    --monitor-pesilat-merah-name-text: theme('colors.red.700'); 
+    --monitor-pesilat-merah-contingent-text: theme('colors.red.500');
 
     --monitor-foulbox-inactive-bg: theme('colors.gray.200');
     --monitor-foulbox-inactive-text: theme('colors.gray.700');
@@ -250,8 +250,8 @@ body {
     --monitor-foulbox-active-text: theme('colors.black');
     --monitor-foulbox-active-border: theme('colors.amber.500');
 
-    --monitor-skor-biru-bg: theme('colors.teal.500');
-    --monitor-skor-merah-bg: theme('colors.orange.500');
+    --monitor-skor-biru-bg: theme('colors.blue.500');
+    --monitor-skor-merah-bg: theme('colors.red.500');
     --monitor-skor-text: theme('colors.white');
     
     --monitor-juri-indicator-inactive-bg: theme('colors.gray.200');
@@ -273,9 +273,9 @@ body {
     --monitor-dialog-text: hsl(var(--popover-foreground));
     --monitor-dialog-border: hsl(var(--border));
     --monitor-dialog-title-text: theme('colors.green.600'); 
-    --monitor-dialog-vote-merah-bg: theme('colors.orange.500');
+    --monitor-dialog-vote-merah-bg: theme('colors.red.500');
     --monitor-dialog-vote-merah-text: theme('colors.white');
-    --monitor-dialog-vote-biru-bg: theme('colors.teal.500');
+    --monitor-dialog-vote-biru-bg: theme('colors.blue.500');
     --monitor-dialog-vote-biru-text: theme('colors.white');
     --monitor-dialog-vote-invalid-bg: theme('colors.amber.400');
     --monitor-dialog-vote-invalid-text: theme('colors.black');
@@ -296,15 +296,15 @@ body {
     --monitor-bg: theme('colors.gray.800'); 
     --monitor-text: theme('colors.gray.100');
     --monitor-text-muted: theme('colors.gray.400');
-    --monitor-header-section-bg: 223 78% 48%; /* Blue similar to Tailwind blue-700 */
-    --monitor-header-section-text: 0 0% 100%; /* White text for blue header */
+    --monitor-header-section-bg: 223 78% 48%; /* Blue */
+    --monitor-header-section-text: 0 0% 100%; /* White text */
 
     --monitor-skeleton-bg: theme('colors.gray.700');
 
-    --monitor-pesilat-biru-name-text: theme('colors.teal.300');
-    --monitor-pesilat-biru-contingent-text: theme('colors.teal.400');
-    --monitor-pesilat-merah-name-text: theme('colors.orange.300');
-    --monitor-pesilat-merah-contingent-text: theme('colors.orange.400');
+    --monitor-pesilat-biru-name-text: theme('colors.blue.300');
+    --monitor-pesilat-biru-contingent-text: theme('colors.blue.400');
+    --monitor-pesilat-merah-name-text: theme('colors.red.300');
+    --monitor-pesilat-merah-contingent-text: theme('colors.red.400');
 
     --monitor-foulbox-inactive-bg: theme('colors.gray.700');
     --monitor-foulbox-inactive-text: theme('colors.gray.200');
@@ -313,8 +313,8 @@ body {
     --monitor-foulbox-active-text: theme('colors.black');
     --monitor-foulbox-active-border: theme('colors.amber.500');
 
-    --monitor-skor-biru-bg: theme('colors.teal.600');
-    --monitor-skor-merah-bg: theme('colors.orange.600');
+    --monitor-skor-biru-bg: theme('colors.blue.600');
+    --monitor-skor-merah-bg: theme('colors.red.600');
     --monitor-skor-text: theme('colors.white');
     
     --monitor-juri-indicator-inactive-bg: theme('colors.gray.700');
@@ -336,9 +336,9 @@ body {
     --monitor-dialog-text: theme('colors.gray.100');
     --monitor-dialog-border: theme('colors.gray.700');
     --monitor-dialog-title-text: theme('colors.green.300');
-    --monitor-dialog-vote-merah-bg: theme('colors.orange.600');
+    --monitor-dialog-vote-merah-bg: theme('colors.red.600');
     --monitor-dialog-vote-merah-text: theme('colors.white');
-    --monitor-dialog-vote-biru-bg: theme('colors.teal.600');
+    --monitor-dialog-vote-biru-bg: theme('colors.blue.600');
     --monitor-dialog-vote-biru-text: theme('colors.white');
     --monitor-dialog-vote-invalid-bg: theme('colors.amber.400');
     --monitor-dialog-vote-invalid-text: theme('colors.black');
