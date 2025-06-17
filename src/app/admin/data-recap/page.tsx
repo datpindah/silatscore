@@ -113,15 +113,7 @@ export default function DataRecapPage() {
             <Table>
               <TableCaption>Contoh Struktur Template Jadwal Tanding</TableCaption>
               <TableHeader>
-                <TableRow>
-                  <TableHead>Nomor Pertandingan</TableHead>
-                  <TableHead>Tanggal</TableHead>
-                  <TableHead>Tempat</TableHead>
-                  <TableHead>Pesilat Merah</TableHead>
-                  <TableHead>Pesilat Biru</TableHead>
-                  <TableHead>Babak</TableHead>
-                  <TableHead>Kelas</TableHead>
-                </TableRow>
+                <TableRow><TableHead>Nomor Pertandingan</TableHead><TableHead>Tanggal</TableHead><TableHead>Tempat</TableHead><TableHead>Pesilat Merah</TableHead><TableHead>Pesilat Biru</TableHead><TableHead>Babak</TableHead><TableHead>Kelas</TableHead></TableRow>
               </TableHeader>
               <TableBody>
                 <TableRow>
@@ -182,18 +174,11 @@ export default function DataRecapPage() {
             <Table>
               <TableCaption>Contoh Struktur Template Jadwal TGR</TableCaption>
               <TableHeader>
-                <TableRow>
-                  <TableHead>No. Undian</TableHead>
-                  <TableHead>Pool/Grup</TableHead>
-                  <TableHead>Babak</TableHead> {/* Added Babak Header */}
-                  <TableHead>Kategori</TableHead>
-                  <TableHead>Nama Peserta/Tim</TableHead>
-                  <TableHead>Kontingen</TableHead>
-                </TableRow>
+                <TableRow><TableHead>No. Undian</TableHead><TableHead>Pool/Grup</TableHead><TableHead>Babak</TableHead><TableHead>Kategori</TableHead><TableHead>Nama Peserta/Tim</TableHead><TableHead>Kontingen</TableHead></TableRow>
               </TableHeader>
               <TableBody>
                 <TableRow>
-                  <TableCell colSpan={6} className="text-center text-muted-foreground py-4"> {/* Colspan updated */}
+                  <TableCell colSpan={6} className="text-center text-muted-foreground py-4">
                     Template akan berisi header: Nomor Undian, Pool/Grup, Babak Pertandingan, Kategori, Nama Peserta, Kontingen.
                   </TableCell>
                 </TableRow>
