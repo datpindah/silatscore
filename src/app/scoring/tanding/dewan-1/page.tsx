@@ -180,7 +180,6 @@ function DewanSatuPageComponent() {
       const docSnap = await getDoc(matchDocRef);
       const currentDBTimerStatus = docSnap.exists() && docSnap.data()?.timer_status ? docSnap.data()?.timer_status as TimerStatus : initialTimerStatus;
       
-      // Avoid unnecessary writes if the relevant parts of the status are already what we want to set
       let needsUpdate = false;
       for (const key in newStatusUpdates) {
           if (newStatusUpdates.hasOwnProperty(key)) {
@@ -191,7 +190,7 @@ function DewanSatuPageComponent() {
           }
       }
       if (!needsUpdate && newStatusUpdates.roundDuration && currentDBTimerStatus.roundDuration !== newStatusUpdates.roundDuration) {
-          needsUpdate = true; // Special case for roundDuration if it's the only change
+          needsUpdate = true; 
       }
 
 
@@ -210,12 +209,13 @@ function DewanSatuPageComponent() {
   // useEffect for handling display of verification requests from Ketua
   useEffect(() => {
     if (!activeScheduleId) {
-      setIsDisplayVerificationModalOpen(false); // Ensure modal is closed if no active match
+      setIsDisplayVerificationModalOpen(false);
       setActiveDisplayVerificationRequest(null);
       return;
     }
 
     const verificationsCollectionRef = collection(db, MATCHES_TANDING_COLLECTION, activeScheduleId, VERIFICATIONS_SUBCOLLECTION);
+    // Listen to the latest verification document by timestamp, regardless of status
     const q = query(verificationsCollectionRef, orderBy('timestamp', 'desc'), limit(1));
 
     const unsubscribe = onSnapshot(q, async (snapshot) => {
@@ -224,15 +224,16 @@ function DewanSatuPageComponent() {
       const currentFirestoreTimerStatus = matchDocSnap.exists() ? matchDocSnap.data()?.timer_status as TimerStatus | undefined : undefined;
 
       if (snapshot.empty) {
-        // No verifications at all for this match, or all deleted
+        // No verifications at all for this match
         setIsDisplayVerificationModalOpen(false);
         setActiveDisplayVerificationRequest(null);
 
         if (currentFirestoreTimerStatus && currentFirestoreTimerStatus.matchStatus.startsWith('PausedForVerificationRound')) {
+             const roundNumber = currentFirestoreTimerStatus.currentRound;
              updateTimerStatusInFirestore({
                 isTimerRunning: false,
-                matchStatus: 'Pending',
-                timerSeconds: currentFirestoreTimerStatus.roundDuration,
+                matchStatus: `PausedRound${roundNumber}` as TimerMatchStatus, 
+                // timerSeconds is NOT reset, it keeps its value
              });
         }
       } else {
@@ -247,6 +248,7 @@ function DewanSatuPageComponent() {
             updateTimerStatusInFirestore({
               isTimerRunning: false,
               matchStatus: expectedPausedStatus,
+              // timerSeconds is NOT changed here, it uses the value from currentFirestoreTimerStatus
             });
           }
         } else {
@@ -255,10 +257,11 @@ function DewanSatuPageComponent() {
           setActiveDisplayVerificationRequest(null);
 
           if (currentFirestoreTimerStatus && currentFirestoreTimerStatus.matchStatus.startsWith('PausedForVerificationRound')) {
+             const roundNumber = currentFirestoreTimerStatus.currentRound;
              updateTimerStatusInFirestore({
                 isTimerRunning: false,
-                matchStatus: 'Pending',
-                timerSeconds: currentFirestoreTimerStatus.roundDuration,
+                matchStatus: `PausedRound${roundNumber}` as TimerMatchStatus,
+                // timerSeconds is NOT reset, it keeps its value
              });
           }
         }
@@ -270,14 +273,15 @@ function DewanSatuPageComponent() {
       
       // Attempt to reset timer status if it was stuck, after fetching current Firestore state
       if (activeScheduleId) {
-        getDoc(doc(db, MATCHES_TANDING_COLLECTION, activeScheduleId)).then(matchDocSnap => {
-          if (matchDocSnap.exists()) {
-            const currentFirestoreTimerStatusOnError = matchDocSnap.data()?.timer_status as TimerStatus | undefined;
+        getDoc(doc(db, MATCHES_TANDING_COLLECTION, activeScheduleId)).then(matchDocSnapOnError => {
+          if (matchDocSnapOnError.exists()) {
+            const currentFirestoreTimerStatusOnError = matchDocSnapOnError.data()?.timer_status as TimerStatus | undefined;
             if (currentFirestoreTimerStatusOnError && currentFirestoreTimerStatusOnError.matchStatus.startsWith('PausedForVerificationRound')) {
+               const roundNumber = currentFirestoreTimerStatusOnError.currentRound;
                updateTimerStatusInFirestore({
                   isTimerRunning: false,
-                  matchStatus: 'Pending',
-                  timerSeconds: currentFirestoreTimerStatusOnError.roundDuration,
+                  matchStatus: `PausedRound${roundNumber}` as TimerMatchStatus,
+                  // timerSeconds is NOT reset
                });
             }
           }
@@ -329,7 +333,7 @@ function DewanSatuPageComponent() {
             const data = docSnap.data();
             if (data?.timer_status) {
               const newTimerStatus = data.timer_status as TimerStatus;
-              setTimerStatus(newTimerStatus); // This updates local timerStatus
+              setTimerStatus(newTimerStatus); 
               setInputRoundDurationMinutes((newTimerStatus.roundDuration / 60).toString());
             }
             const firestoreUnstruckKeys = new Set(data?.confirmed_unstruck_keys_log as string[] || []);
@@ -342,7 +346,7 @@ function DewanSatuPageComponent() {
             const initialDataForMatch = { timer_status: initialTimerStatus, confirmed_unstruck_keys_log: [], confirmed_struck_keys_log: [] };
             try {
               await setDoc(matchDocRef, initialDataForMatch, { merge: true });
-              setTimerStatus(initialTimerStatus); // Update local timerStatus
+              setTimerStatus(initialTimerStatus); 
               setInputRoundDurationMinutes((initialTimerStatus.roundDuration / 60).toString());
               setPrevSavedUnstruckKeys(new Set()); setAllContributingEntryKeys(new Set());
               setPrevSavedStruckKeys(new Set()); setPermanentlyStruckEntryKeys(new Set());
@@ -502,18 +506,17 @@ function DewanSatuPageComponent() {
     let interval: NodeJS.Timeout | null = null;
     if (timerStatus.isTimerRunning && timerStatus.timerSeconds > 0 && activeScheduleId) {
       interval = setInterval(async () => {
-        if (activeScheduleId) { // Check activeScheduleId again inside interval, in case it becomes null
+        if (activeScheduleId) { 
             try {
                 const matchDocRef = doc(db, MATCHES_TANDING_COLLECTION, activeScheduleId);
                 const currentDBDoc = await getDoc(matchDocRef);
                 if (!currentDBDoc.exists()) { 
                     if(interval) clearInterval(interval); 
-                    setTimerStatus(prev => ({ ...prev, isTimerRunning: false })); // Stop local timer
+                    setTimerStatus(prev => ({ ...prev, isTimerRunning: false })); 
                     return; 
                 }
                 const currentDBTimerStatus = currentDBDoc.data()?.timer_status as TimerStatus | undefined;
                 if (!currentDBTimerStatus || !currentDBTimerStatus.isTimerRunning) {
-                    // Sync local state if Firestore timer stopped or data is missing
                     setTimerStatus(prev => ({ 
                         ...prev, 
                         isTimerRunning: false, 
@@ -527,9 +530,7 @@ function DewanSatuPageComponent() {
                     if(interval) clearInterval(interval); 
                     return;
                 }
-                // Only proceed if the local timerStatus still thinks it should be running.
-                // This acts as a safeguard against the interval trying to run after it should have stopped.
-                if (!timerStatus.isTimerRunning) { // Check local state again
+                if (!timerStatus.isTimerRunning) { 
                     if (interval) clearInterval(interval);
                     return;
                 }
@@ -552,21 +553,20 @@ function DewanSatuPageComponent() {
                     matchStatus: newMatchStatus,
                 };
                 await setDoc(matchDocRef, { timer_status: updatedStatusForFirestore }, { merge: true });
-                // Local timerStatus will be updated by the onSnapshot listener for this document.
             } catch (e) {
                 console.error(`[Dewan-1] Error updating timer in interval: `, e);
                 if(interval) clearInterval(interval);
-                setTimerStatus(prev => ({ ...prev, isTimerRunning: false })); // Stop local timer on error
+                setTimerStatus(prev => ({ ...prev, isTimerRunning: false })); 
             }
         } else {
-            if(interval) clearInterval(interval); // Clear interval if activeScheduleId becomes null
+            if(interval) clearInterval(interval); 
         }
       }, 1000);
     } else if (!timerStatus.isTimerRunning || timerStatus.timerSeconds === 0) {
       if(interval) clearInterval(interval);
     }
     return () => { if (interval) clearInterval(interval); };
-  }, [timerStatus.isTimerRunning, timerStatus.timerSeconds, activeScheduleId]); // Depends on local timerStatus to decide if interval should run
+  }, [timerStatus.isTimerRunning, timerStatus.timerSeconds, activeScheduleId]); 
 
 
   const handleTimerControl = (action: 'start' | 'pause') => {
@@ -610,7 +610,10 @@ function DewanSatuPageComponent() {
         updateTimerStatusInFirestore({ matchStatus: `FinishedRound${timerStatus.currentRound}` as TimerMatchStatus, timerSeconds: 0, isTimerRunning: false }); return; 
     }
     if (isPausedForVerification && timerStatus.currentRound <= TOTAL_ROUNDS) {
-        updateTimerStatusInFirestore({ isTimerRunning: false, matchStatus: 'Pending', timerSeconds: timerStatus.roundDuration }); return;
+        // If verification just finished, this button might be clicked.
+        // The verification listener should have already set it to PausedRoundX.
+        // If somehow clicked while still PausedForVerification, let's correct to PausedRoundX.
+        updateTimerStatusInFirestore({ isTimerRunning: false, matchStatus: `PausedRound${timerStatus.currentRound}` as TimerMatchStatus }); return;
     }
     if (timerStatus.currentRound < TOTAL_ROUNDS) {
         const nextRound = (timerStatus.currentRound + 1) as 1 | 2 | 3;
