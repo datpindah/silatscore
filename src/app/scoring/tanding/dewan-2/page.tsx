@@ -567,7 +567,7 @@ function DewanDuaPageComponent({ gelanggangName }: { gelanggangName: string | nu
         </div>
          <div className="mt-8 text-center">
             <Button variant="outline" asChild className="bg-white hover:bg-gray-100 text-gray-700 dark:bg-gray-700 dark:hover:bg-gray-600 dark:text-gray-200">
-                <Link href={`/login?redirect=/scoring/tanding/dewan-2${gelanggangName ? `&gelanggang=${encodeURIComponent(gelanggangName)}` : ''}`}><ArrowLeft className="mr-2 h-4 w-4"/> Kembali ke Login</Link>
+                <Link href={`/login?redirect=/scoring/tanding/dewan-2${(gelanggangName && gelanggangName.trim()) ? `&gelanggang=${encodeURIComponent(gelanggangName.trim())}` : ''}`}><ArrowLeft className="mr-2 h-4 w-4"/> Kembali ke Login</Link>
             </Button>
         </div>
       </div>
@@ -598,3 +598,4 @@ function PageWithSearchParams() {
     
 
     
+
