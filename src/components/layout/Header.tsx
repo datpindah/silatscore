@@ -4,12 +4,12 @@
 import Link from 'next/link';
 import { AppLogo } from './AppLogo';
 import { Button } from '@/components/ui/button';
-import { Sheet, SheetContent, SheetTrigger, SheetTitle, SheetClose } from '@/components/ui/sheet'; // SheetClose ditambahkan
+import { Sheet, SheetContent, SheetTrigger, SheetTitle, SheetClose } from '@/components/ui/sheet';
 import { Menu, LogOut, UserCircle } from 'lucide-react';
 import { ThemeToggle } from '@/components/shared/ThemeToggle';
 import { useState, useEffect, type PointerEvent } from 'react';
 import { cn } from '@/lib/utils';
-import { useAuth } from '@/contexts/AuthContext'; // Menggunakan AuthContext
+import { useAuth } from '@/contexts/AuthContext';
 
 const navItems = [
   { href: '/', label: 'Home' },
@@ -19,13 +19,11 @@ const navItems = [
 
 const ACTIVATION_THRESHOLD_PX = 50;
 
-// Ditambahkan prop overrideBackgroundClass
 export function Header({ overrideBackgroundClass }: { overrideBackgroundClass?: string }) {
-  const { user, signOut, loading: authLoading } = useAuth(); // Dari AuthContext
+  const { user, signOut, loading: authLoading } = useAuth();
   const [isVisible, setIsVisible] = useState(false);
   const [isMouseOverHeader, setIsMouseOverHeader] = useState(false);
   const [isSheetOpen, setIsSheetOpen] = useState(false);
-
 
   useEffect(() => {
     const handleMouseMove = (event: MouseEvent) => {
@@ -67,18 +65,20 @@ export function Header({ overrideBackgroundClass }: { overrideBackgroundClass?: 
 
   const handleSignOut = async () => {
     await signOut();
-    setIsSheetOpen(false); // Tutup sheet setelah logout
+    setIsSheetOpen(false);
   };
+
+  const baseClasses = "sticky top-0 z-50 w-full border-b border-border/40 transition-transform duration-300 ease-in-out";
+  const visibilityClass = !isVisible ? "-translate-y-full" : "";
+  const backgroundToApply = overrideBackgroundClass
+                            ? overrideBackgroundClass
+                            : "bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60";
+
+  const finalClassName = cn(baseClasses, visibilityClass, backgroundToApply);
 
   return (
     <header
-      className={cn(
-        "sticky top-0 z-50 w-full border-b border-border/40",
-        // Menggunakan overrideBackgroundClass jika ada, jika tidak gunakan default
-        overrideBackgroundClass || "bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60",
-        "transition-transform duration-300 ease-in-out",
-        !isVisible && "-translate-y-full"
-      )}
+      className={finalClassName}
       onMouseEnter={handleHeaderMouseEnter}
       onMouseLeave={handleHeaderMouseLeave}
     >
