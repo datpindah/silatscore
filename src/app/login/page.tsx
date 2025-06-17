@@ -1,8 +1,8 @@
 
 "use client";
 
-import { useState, type FormEvent, useEffect } from 'react';
-import { useRouter } from 'next/navigation';
+import { useState, type FormEvent, useEffect, Suspense } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { Header } from '@/components/layout/Header';
 import { PageTitle } from '@/components/shared/PageTitle';
 import { Button } from '@/components/ui/button';
@@ -11,19 +11,17 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import { LogIn, AlertCircle, Loader2 } from 'lucide-react';
+import { LogIn, AlertCircle, Loader2, Landmark } from 'lucide-react';
 import type { ScheduleTanding } from '@/lib/types';
 import { db } from '@/lib/firebase';
 import { doc, getDoc, onSnapshot } from 'firebase/firestore';
-import { useAuth } from '@/contexts/AuthContext'; // Menggunakan AuthContext
+import { useAuth } from '@/contexts/AuthContext';
 
-const ACTIVE_TANDING_SCHEDULE_CONFIG_PATH = 'app_settings/active_match_tanding';
+const ACTIVE_TANDING_MATCHES_BY_GELANGGANG_PATH = 'app_settings/active_tanding_matches_by_gelanggang';
 const SCHEDULE_TANDING_COLLECTION = 'schedules_tanding';
 const NO_ACTIVE_SCHEDULE_VALUE = "NO_ACTIVE_SCHEDULE_SELECTED";
 
-const defaultPartaiOptions = [
-  { value: NO_ACTIVE_SCHEDULE_VALUE, label: 'Tidak ada jadwal Tanding aktif' },
-];
+const defaultPartaiInfo = 'Masukkan nama gelanggang untuk melihat partai aktif';
 
 const halamanOptions = [
   { value: '/scoring/tanding/dewan-1', label: 'Dewan Juri 1 (Timer & Kontrol Tanding)' },
@@ -33,73 +31,101 @@ const halamanOptions = [
   { value: '/scoring/tanding/juri/juri-3', label: 'Juri 3 (Tanding)' },
   { value: '/scoring/tanding/ketua-pertandingan', label: 'Ketua Pertandingan (Tanding)' },
   { value: '/scoring/tanding/monitoring-skor', label: 'Monitoring Skor (Display Umum Tanding)' },
-  // Admin roles can be added here if needed, or handled separately
   { value: '/admin', label: 'Admin Panel' }
 ];
 
-export default function LoginPage() {
+function LoginPageContent() {
   const router = useRouter();
-  const { user, signIn, loading: authLoading, error: authError, setError: setAuthError } = useAuth(); // Dari AuthContext
+  const searchParams = useSearchParams();
+  const { user, signIn, loading: authLoading, error: authError, setError: setAuthError } = useAuth();
 
-  const [partaiOptions, setPartaiOptions] = useState<{value: string; label: string}[]>(defaultPartaiOptions);
-  const [selectedPartai, setSelectedPartai] = useState<string>(NO_ACTIVE_SCHEDULE_VALUE);
+  const [partaiInfo, setPartaiInfo] = useState<string>(defaultPartaiInfo);
+  const [selectedPartaiId, setSelectedPartaiId] = useState<string>(NO_ACTIVE_SCHEDULE_VALUE);
   const [selectedHalaman, setSelectedHalaman] = useState<string>('');
   const [email, setEmail] = useState<string>('');
   const [password, setPassword] = useState<string>('');
+  const [gelanggang, setGelanggang] = useState<string>(searchParams.get('gelanggang') || '');
   
   const [pageError, setPageError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
-  const [scheduleLoading, setScheduleLoading] = useState<boolean>(true);
+  const [scheduleLoading, setScheduleLoading] = useState<boolean>(false);
 
   useEffect(() => {
-    if (user && selectedHalaman) { // Jika sudah login dan halaman tujuan dipilih, redirect
+    // Jika pengguna sudah login dan halaman tujuan serta gelanggang (jika perlu) sudah dipilih, redirect
+    if (user) {
+      if (selectedHalaman.startsWith('/admin')) {
         router.push(selectedHalaman);
+      } else if (selectedHalaman && gelanggang.trim()) {
+        router.push(`${selectedHalaman}?gelanggang=${encodeURIComponent(gelanggang.trim())}`);
+      }
     }
-  }, [user, selectedHalaman, router]);
+  }, [user, selectedHalaman, gelanggang, router]);
   
   useEffect(() => {
-    setScheduleLoading(true);
-    const unsub = onSnapshot(doc(db, ACTIVE_TANDING_SCHEDULE_CONFIG_PATH), async (docSnap) => {
-      if (docSnap.exists() && docSnap.data()?.activeScheduleId) {
-        const activeScheduleId = docSnap.data().activeScheduleId;
-        if (activeScheduleId === null || activeScheduleId === "") {
-            setPartaiOptions(defaultPartaiOptions);
-            setSelectedPartai(NO_ACTIVE_SCHEDULE_VALUE);
-            setScheduleLoading(false);
-            return;
+    const redirectGelanggang = searchParams.get('gelanggang');
+    if (redirectGelanggang && !gelanggang) {
+      setGelanggang(redirectGelanggang);
+    }
+    const redirectPage = searchParams.get('redirect');
+     if (redirectPage && !selectedHalaman) {
+        // Ensure the redirect page is valid
+        const isValidRedirect = halamanOptions.some(opt => opt.value === redirectPage);
+        if (isValidRedirect) {
+            setSelectedHalaman(redirectPage);
         }
+    }
+
+  }, [searchParams, gelanggang, selectedHalaman]);
+
+
+  useEffect(() => {
+    if (!gelanggang.trim()) {
+      setPartaiInfo(defaultPartaiInfo);
+      setSelectedPartaiId(NO_ACTIVE_SCHEDULE_VALUE);
+      setScheduleLoading(false);
+      return;
+    }
+
+    setScheduleLoading(true);
+    const unsub = onSnapshot(doc(db, ACTIVE_TANDING_MATCHES_BY_GELANGGANG_PATH), async (docSnap) => {
+      let activeScheduleIdForGelanggang: string | null = null;
+      if (docSnap.exists()) {
+        activeScheduleIdForGelanggang = docSnap.data()?.[gelanggang.trim()] || null;
+      }
+
+      if (activeScheduleIdForGelanggang) {
         try {
-          const scheduleDocRef = doc(db, SCHEDULE_TANDING_COLLECTION, activeScheduleId);
+          const scheduleDocRef = doc(db, SCHEDULE_TANDING_COLLECTION, activeScheduleIdForGelanggang);
           const scheduleDoc = await getDoc(scheduleDocRef);
 
           if (scheduleDoc.exists()) {
             const activeScheduleData = scheduleDoc.data() as ScheduleTanding;
-            const formattedLabel = `Partai ${activeScheduleData.matchNumber}: ${activeScheduleData.pesilatMerahName} vs ${activeScheduleData.pesilatBiruName} (${activeScheduleData.class})`;
-            setPartaiOptions([{ value: activeScheduleId, label: formattedLabel }]);
-            setSelectedPartai(activeScheduleId);
+            const formattedLabel = `Partai ${activeScheduleData.matchNumber}: ${activeScheduleData.pesilatMerahName} vs ${activeScheduleData.pesilatBiruName} (${activeScheduleData.class}) di Gel. ${gelanggang.trim()}`;
+            setPartaiInfo(formattedLabel);
+            setSelectedPartaiId(activeScheduleIdForGelanggang);
           } else {
-            setPartaiOptions(defaultPartaiOptions);
-            setSelectedPartai(NO_ACTIVE_SCHEDULE_VALUE);
+            setPartaiInfo(`Tidak ada jadwal Tanding aktif untuk gelanggang: ${gelanggang.trim()}`);
+            setSelectedPartaiId(NO_ACTIVE_SCHEDULE_VALUE);
           }
         } catch (err) {
           console.error("Error fetching active Tanding schedule details:", err);
-          setPartaiOptions(defaultPartaiOptions);
-          setSelectedPartai(NO_ACTIVE_SCHEDULE_VALUE);
+          setPartaiInfo(`Error memuat jadwal untuk gelanggang: ${gelanggang.trim()}`);
+          setSelectedPartaiId(NO_ACTIVE_SCHEDULE_VALUE);
         }
       } else {
-        setPartaiOptions(defaultPartaiOptions);
-        setSelectedPartai(NO_ACTIVE_SCHEDULE_VALUE);
+        setPartaiInfo(`Tidak ada jadwal Tanding aktif untuk gelanggang: ${gelanggang.trim()}`);
+        setSelectedPartaiId(NO_ACTIVE_SCHEDULE_VALUE);
       }
       setScheduleLoading(false);
     }, (errorSub) => {
-      console.error("Error subscribing to active Tanding schedule config:", errorSub);
-      setPartaiOptions(defaultPartaiOptions);
-      setSelectedPartai(NO_ACTIVE_SCHEDULE_VALUE);
+      console.error("Error subscribing to active Tanding matches by gelanggang:", errorSub);
+      setPartaiInfo(`Error memuat peta jadwal gelanggang.`);
+      setSelectedPartaiId(NO_ACTIVE_SCHEDULE_VALUE);
       setScheduleLoading(false);
     });
 
     return () => unsub();
-  }, []);
+  }, [gelanggang]);
 
   useEffect(() => {
     if (authError) {
@@ -108,7 +134,7 @@ export default function LoginPage() {
       } else {
         setPageError(`Login gagal: ${authError.message}`);
       }
-      setAuthError(null); // Clear authError from context after displaying
+      setAuthError(null);
     }
   }, [authError, setAuthError]);
 
@@ -117,8 +143,14 @@ export default function LoginPage() {
     e.preventDefault();
     setPageError(null);
     
-    if (selectedPartai === NO_ACTIVE_SCHEDULE_VALUE && !selectedHalaman.startsWith('/admin')) {
-      setPageError('Tidak ada jadwal Tanding aktif yang bisa dipilih. Silakan aktifkan jadwal di halaman Admin.');
+    const targetGelanggang = gelanggang.trim();
+
+    if (!targetGelanggang && !selectedHalaman.startsWith('/admin')) {
+        setPageError('Nama gelanggang tidak boleh kosong untuk halaman scoring.');
+        return;
+    }
+    if (selectedPartaiId === NO_ACTIVE_SCHEDULE_VALUE && !selectedHalaman.startsWith('/admin')) {
+      setPageError(`Tidak ada jadwal Tanding aktif yang bisa dipilih untuk gelanggang: ${targetGelanggang}. Silakan aktifkan jadwal di halaman Admin atau periksa nama gelanggang.`);
       return;
     }
     if (!selectedHalaman) {
@@ -131,16 +163,22 @@ export default function LoginPage() {
     }
     
     setIsSubmitting(true);
-    const loggedInUser = await signIn(email, password);
-    setIsSubmitting(false);
-
-    if (loggedInUser) {
-      // User will be redirected by the useEffect hook monitoring `user` and `selectedHalaman`
-    } 
-    // If login failed, authError effect will set pageError
+    try {
+      const loggedInUser = await signIn(email, password);
+      if (loggedInUser) {
+        // Redirect is handled by the useEffect hook watching `user`, `selectedHalaman`, and `gelanggang`
+      }
+    } catch (submitError) {
+        // signIn function now handles setting authError, so this catch might be redundant
+        // unless signIn itself throws an error not caught internally.
+        console.error("Error during login handleSubmit calling signIn:", submitError);
+        setPageError("Terjadi kesalahan tak terduga saat mencoba login.");
+    } finally {
+        setIsSubmitting(false);
+    }
   };
 
-  const isLoading = authLoading || isSubmitting || scheduleLoading;
+  const isLoadingOverall = authLoading || isSubmitting || scheduleLoading;
 
   return (
     <div className="flex flex-col min-h-screen">
@@ -150,7 +188,7 @@ export default function LoginPage() {
           <CardHeader>
             <CardTitle className="text-3xl font-headline text-primary text-center">Login Panel SilatScore</CardTitle>
             <CardDescription className="text-center font-body">
-              Masukkan email dan password Anda. Pilih partai dan halaman tujuan jika relevan.
+              Masukkan email, password, dan nama gelanggang. Pilih partai dan halaman tujuan jika relevan.
             </CardDescription>
           </CardHeader>
           <form onSubmit={handleSubmit}>
@@ -171,7 +209,7 @@ export default function LoginPage() {
                   onChange={(e) => setEmail(e.target.value)}
                   placeholder="email@example.com"
                   required
-                  disabled={isLoading}
+                  disabled={isLoadingOverall}
                   className="bg-background/80"
                 />
               </div>
@@ -184,34 +222,35 @@ export default function LoginPage() {
                   onChange={(e) => setPassword(e.target.value)}
                   placeholder="Masukkan password Anda"
                   required
-                  disabled={isLoading}
+                  disabled={isLoadingOverall}
                   className="bg-background/80"
                 />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="partai" className="font-headline">Pilih Partai Tanding (Opsional untuk Admin)</Label>
-                <Select
-                  onValueChange={setSelectedPartai}
-                  value={selectedPartai}
-                  disabled={isLoading || (partaiOptions.length === 1 && partaiOptions[0]?.value === NO_ACTIVE_SCHEDULE_VALUE)}
-                >
-                  <SelectTrigger id="partai">
-                    <SelectValue placeholder="Pilih Partai Pertandingan Tanding" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {partaiOptions.map(option => (
-                      <SelectItem key={option.value} value={option.value} disabled={option.value === NO_ACTIVE_SCHEDULE_VALUE && option.label.includes('Tidak ada jadwal')}>
-                        {option.label}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                 {scheduleLoading && partaiOptions[0]?.value === NO_ACTIVE_SCHEDULE_VALUE && <p className="text-xs text-muted-foreground">Memuat jadwal Tanding aktif...</p>}
-                 {!scheduleLoading && partaiOptions[0]?.value === NO_ACTIVE_SCHEDULE_VALUE && <p className="text-xs text-destructive">Tidak ada jadwal Tanding aktif. Silakan atur di Admin.</p>}
+                <Label htmlFor="gelanggang" className="font-headline">
+                  <Landmark className="inline-block mr-1 h-4 w-4 text-primary" /> Nama Gelanggang
+                </Label>
+                <Input
+                  id="gelanggang"
+                  type="text"
+                  value={gelanggang}
+                  onChange={(e) => setGelanggang(e.target.value)}
+                  placeholder="cth: Gelanggang A"
+                  required={!selectedHalaman.startsWith('/admin')}
+                  disabled={isLoadingOverall}
+                  className="bg-background/80"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="partai-info" className="font-headline">Partai Tanding Aktif di Gelanggang Ini</Label>
+                 <div className="p-3 min-h-[3rem] rounded-md border border-input bg-muted/50 text-sm text-muted-foreground flex items-center">
+                    {scheduleLoading ? <Loader2 className="h-4 w-4 animate-spin mr-2"/> : null}
+                    {partaiInfo}
+                 </div>
               </div>
               <div className="space-y-2">
                 <Label htmlFor="halaman" className="font-headline">Pilih Halaman Tujuan</Label>
-                <Select onValueChange={setSelectedHalaman} value={selectedHalaman} disabled={isLoading}>
+                <Select onValueChange={setSelectedHalaman} value={selectedHalaman} disabled={isLoadingOverall}>
                   <SelectTrigger id="halaman">
                     <SelectValue placeholder="Pilih Halaman Tujuan" />
                   </SelectTrigger>
@@ -224,8 +263,8 @@ export default function LoginPage() {
               </div>
             </CardContent>
             <CardFooter>
-              <Button type="submit" className="w-full bg-primary hover:bg-primary/90 text-primary-foreground" disabled={isLoading}>
-                {isLoading ? ( 
+              <Button type="submit" className="w-full bg-primary hover:bg-primary/90 text-primary-foreground" disabled={isLoadingOverall}>
+                {isLoadingOverall ? ( 
                   <>
                     <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                     Memproses...
@@ -233,7 +272,7 @@ export default function LoginPage() {
                 ) : (
                   <>
                     <LogIn className="mr-2 h-4 w-4" />
-                    Login
+                    Login & Lanjutkan
                   </>
                 )}
               </Button>
@@ -244,3 +283,13 @@ export default function LoginPage() {
     </div>
   );
 }
+
+export default function LoginPage() {
+  // Wrap with Suspense because LoginPageContent uses useSearchParams
+  return (
+    <Suspense fallback={<div className="flex h-screen items-center justify-center"><Loader2 className="h-12 w-12 animate-spin text-primary" /> Memuat Halaman Login...</div>}>
+      <LoginPageContent />
+    </Suspense>
+  );
+}
+
