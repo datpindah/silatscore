@@ -179,10 +179,115 @@ function DewanSatuPageComponent() {
       const matchDocRef = doc(db, MATCHES_TANDING_COLLECTION, activeScheduleId);
       const docSnap = await getDoc(matchDocRef);
       const currentDBTimerStatus = docSnap.exists() && docSnap.data()?.timer_status ? docSnap.data()?.timer_status as TimerStatus : initialTimerStatus;
-      const newFullStatus: TimerStatus = { ...currentDBTimerStatus, ...newStatusUpdates, roundDuration: newStatusUpdates.roundDuration ?? currentDBTimerStatus.roundDuration ?? DEFAULT_ROUND_DURATION_SECONDS };
-      await setDoc(matchDocRef, { timer_status: newFullStatus }, { merge: true });
+      
+      // Avoid unnecessary writes if the relevant parts of the status are already what we want to set
+      let needsUpdate = false;
+      for (const key in newStatusUpdates) {
+          if (newStatusUpdates.hasOwnProperty(key)) {
+              if ((currentDBTimerStatus as any)[key] !== (newStatusUpdates as any)[key]) {
+                  needsUpdate = true;
+                  break;
+              }
+          }
+      }
+      if (!needsUpdate && newStatusUpdates.roundDuration && currentDBTimerStatus.roundDuration !== newStatusUpdates.roundDuration) {
+          needsUpdate = true; // Special case for roundDuration if it's the only change
+      }
+
+
+      if (needsUpdate) {
+        const newFullStatus: TimerStatus = { 
+            ...currentDBTimerStatus, 
+            ...newStatusUpdates, 
+            roundDuration: newStatusUpdates.roundDuration ?? currentDBTimerStatus.roundDuration ?? DEFAULT_ROUND_DURATION_SECONDS 
+        };
+        await setDoc(matchDocRef, { timer_status: newFullStatus }, { merge: true });
+      }
+
     } catch (e) { console.error(`[Dewan-1] Error updating timer status in Firestore:`, e); setError("Gagal memperbarui status timer di server."); }
   }, [activeScheduleId]); 
+
+  // useEffect for handling display of verification requests from Ketua
+  useEffect(() => {
+    if (!activeScheduleId) {
+      setIsDisplayVerificationModalOpen(false); // Ensure modal is closed if no active match
+      setActiveDisplayVerificationRequest(null);
+      return;
+    }
+
+    const verificationsCollectionRef = collection(db, MATCHES_TANDING_COLLECTION, activeScheduleId, VERIFICATIONS_SUBCOLLECTION);
+    const q = query(verificationsCollectionRef, orderBy('timestamp', 'desc'), limit(1));
+
+    const unsubscribe = onSnapshot(q, async (snapshot) => {
+      const matchDocRef = doc(db, MATCHES_TANDING_COLLECTION, activeScheduleId);
+      const matchDocSnap = await getDoc(matchDocRef);
+      const currentFirestoreTimerStatus = matchDocSnap.exists() ? matchDocSnap.data()?.timer_status as TimerStatus | undefined : undefined;
+
+      if (snapshot.empty) {
+        // No verifications at all for this match, or all deleted
+        setIsDisplayVerificationModalOpen(false);
+        setActiveDisplayVerificationRequest(null);
+
+        if (currentFirestoreTimerStatus && currentFirestoreTimerStatus.matchStatus.startsWith('PausedForVerificationRound')) {
+             updateTimerStatusInFirestore({
+                isTimerRunning: false,
+                matchStatus: 'Pending',
+                timerSeconds: currentFirestoreTimerStatus.roundDuration,
+             });
+        }
+      } else {
+        const latestVerification = { id: snapshot.docs[0].id, ...snapshot.docs[0].data() } as VerificationRequest;
+
+        if (latestVerification.status === 'pending') {
+          setActiveDisplayVerificationRequest(latestVerification);
+          setIsDisplayVerificationModalOpen(true);
+
+          const expectedPausedStatus: TimerMatchStatus = `PausedForVerificationRound${latestVerification.round}`;
+          if (currentFirestoreTimerStatus && (currentFirestoreTimerStatus.isTimerRunning || currentFirestoreTimerStatus.matchStatus !== expectedPausedStatus)) {
+            updateTimerStatusInFirestore({
+              isTimerRunning: false,
+              matchStatus: expectedPausedStatus,
+            });
+          }
+        } else {
+          // The latest verification is NOT 'pending' (e.g., completed, cancelled)
+          setIsDisplayVerificationModalOpen(false);
+          setActiveDisplayVerificationRequest(null);
+
+          if (currentFirestoreTimerStatus && currentFirestoreTimerStatus.matchStatus.startsWith('PausedForVerificationRound')) {
+             updateTimerStatusInFirestore({
+                isTimerRunning: false,
+                matchStatus: 'Pending',
+                timerSeconds: currentFirestoreTimerStatus.roundDuration,
+             });
+          }
+        }
+      }
+    }, (err) => {
+      console.error(`[Dewan-1] Error fetching verification for display:`, err);
+      setActiveDisplayVerificationRequest(null);
+      setIsDisplayVerificationModalOpen(false);
+      
+      // Attempt to reset timer status if it was stuck, after fetching current Firestore state
+      if (activeScheduleId) {
+        getDoc(doc(db, MATCHES_TANDING_COLLECTION, activeScheduleId)).then(matchDocSnap => {
+          if (matchDocSnap.exists()) {
+            const currentFirestoreTimerStatusOnError = matchDocSnap.data()?.timer_status as TimerStatus | undefined;
+            if (currentFirestoreTimerStatusOnError && currentFirestoreTimerStatusOnError.matchStatus.startsWith('PausedForVerificationRound')) {
+               updateTimerStatusInFirestore({
+                  isTimerRunning: false,
+                  matchStatus: 'Pending',
+                  timerSeconds: currentFirestoreTimerStatusOnError.roundDuration,
+               });
+            }
+          }
+        }).catch(e => console.error("Error fetching match doc on verification error:", e));
+      }
+    });
+
+    return () => unsubscribe();
+  }, [activeScheduleId, updateTimerStatusInFirestore]);
+
 
   useEffect(() => { 
     if (!activeScheduleId) {
@@ -224,7 +329,7 @@ function DewanSatuPageComponent() {
             const data = docSnap.data();
             if (data?.timer_status) {
               const newTimerStatus = data.timer_status as TimerStatus;
-              setTimerStatus(newTimerStatus);
+              setTimerStatus(newTimerStatus); // This updates local timerStatus
               setInputRoundDurationMinutes((newTimerStatus.roundDuration / 60).toString());
             }
             const firestoreUnstruckKeys = new Set(data?.confirmed_unstruck_keys_log as string[] || []);
@@ -237,7 +342,7 @@ function DewanSatuPageComponent() {
             const initialDataForMatch = { timer_status: initialTimerStatus, confirmed_unstruck_keys_log: [], confirmed_struck_keys_log: [] };
             try {
               await setDoc(matchDocRef, initialDataForMatch, { merge: true });
-              setTimerStatus(initialTimerStatus);
+              setTimerStatus(initialTimerStatus); // Update local timerStatus
               setInputRoundDurationMinutes((initialTimerStatus.roundDuration / 60).toString());
               setPrevSavedUnstruckKeys(new Set()); setAllContributingEntryKeys(new Set());
               setPrevSavedStruckKeys(new Set()); setPermanentlyStruckEntryKeys(new Set());
@@ -262,53 +367,6 @@ function DewanSatuPageComponent() {
             setKetuaActionsLog(actions);
         }, (err) => { if (mounted) { console.error(`[Dewan-1] Error fetching official actions:`, err); setKetuaActionsLog([]); }}));
         
-        const verificationQuery = query(collection(db, MATCHES_TANDING_COLLECTION, activeScheduleId, VERIFICATIONS_SUBCOLLECTION), where('status', '==', 'pending'), orderBy('timestamp', 'desc'), limit(1));
-        unsubscribers.push(onSnapshot(verificationQuery, (snapshot) => {
-          if (!mounted) return;
-
-          if (snapshot.empty) { // No 'pending' verifications
-            if (isDisplayVerificationModalOpen) { // If modal was open for a verification that's now resolved/deleted
-                 setActiveDisplayVerificationRequest(null);
-                 setIsDisplayVerificationModalOpen(false);
-            }
-            // If match was paused for ANY verification, and no verification is NOW pending, reset to 'Pending' state.
-            if (timerStatus.matchStatus.startsWith('PausedForVerificationRound')) {
-              updateTimerStatusInFirestore({
-                isTimerRunning: false,
-                matchStatus: 'Pending',
-                timerSeconds: timerStatus.roundDuration,
-              });
-            }
-          } else { // There is at least one 'pending' verification
-            const latestPendingVerification = { id: snapshot.docs[0].id, ...snapshot.docs[0].data() } as VerificationRequest;
-            setActiveDisplayVerificationRequest(latestPendingVerification);
-            setIsDisplayVerificationModalOpen(true);
-
-            // Ensure timer is paused specifically for THIS verification's round
-            const expectedPausedStatus: TimerMatchStatus = `PausedForVerificationRound${latestPendingVerification.round}`;
-            if (timerStatus.isTimerRunning || timerStatus.matchStatus !== expectedPausedStatus) {
-               updateTimerStatusInFirestore({
-                  isTimerRunning: false,
-                  matchStatus: expectedPausedStatus
-               });
-            }
-          }
-        }, (err) => { 
-          if (mounted) { 
-            console.error(`[Dewan-1] Error fetching verification for display:`, err); 
-            setActiveDisplayVerificationRequest(null); 
-            setIsDisplayVerificationModalOpen(false); 
-            // Potentially reset timer status if it was stuck in PausedForVerification
-            if (timerStatus.matchStatus.startsWith('PausedForVerificationRound')) {
-                updateTimerStatusInFirestore({
-                  isTimerRunning: false,
-                  matchStatus: 'Pending',
-                  timerSeconds: timerStatus.roundDuration,
-                });
-            }
-          }
-        }));
-
       } catch (err) {
         if (mounted) { console.error("[Dewan-1] Error in loadData function:", err); setError("Gagal memuat data pertandingan."); }
       } finally {
@@ -317,7 +375,7 @@ function DewanSatuPageComponent() {
     };
     loadData();
     return () => { mounted = false; unsubscribers.forEach(unsub => unsub()); };
-  }, [activeScheduleId, updateTimerStatusInFirestore]);
+  }, [activeScheduleId]);
 
 
   useEffect(() => {
@@ -444,17 +502,37 @@ function DewanSatuPageComponent() {
     let interval: NodeJS.Timeout | null = null;
     if (timerStatus.isTimerRunning && timerStatus.timerSeconds > 0 && activeScheduleId) {
       interval = setInterval(async () => {
-        if (activeScheduleId) {
+        if (activeScheduleId) { // Check activeScheduleId again inside interval, in case it becomes null
             try {
                 const matchDocRef = doc(db, MATCHES_TANDING_COLLECTION, activeScheduleId);
                 const currentDBDoc = await getDoc(matchDocRef);
-                if (!currentDBDoc.exists()) { if(interval) clearInterval(interval); setTimerStatus(prev => ({ ...prev, isTimerRunning: false })); return; }
+                if (!currentDBDoc.exists()) { 
+                    if(interval) clearInterval(interval); 
+                    setTimerStatus(prev => ({ ...prev, isTimerRunning: false })); // Stop local timer
+                    return; 
+                }
                 const currentDBTimerStatus = currentDBDoc.data()?.timer_status as TimerStatus | undefined;
                 if (!currentDBTimerStatus || !currentDBTimerStatus.isTimerRunning) {
-                    setTimerStatus(prev => ({ ...prev, isTimerRunning: false, ...(currentDBTimerStatus && { timerSeconds: currentDBTimerStatus.timerSeconds, matchStatus: currentDBTimerStatus.matchStatus, currentRound: currentDBTimerStatus.currentRound, roundDuration: currentDBTimerStatus.roundDuration, })}));
-                    if(interval) clearInterval(interval); return;
+                    // Sync local state if Firestore timer stopped or data is missing
+                    setTimerStatus(prev => ({ 
+                        ...prev, 
+                        isTimerRunning: false, 
+                        ...(currentDBTimerStatus && { 
+                            timerSeconds: currentDBTimerStatus.timerSeconds, 
+                            matchStatus: currentDBTimerStatus.matchStatus, 
+                            currentRound: currentDBTimerStatus.currentRound, 
+                            roundDuration: currentDBTimerStatus.roundDuration,
+                        })
+                    }));
+                    if(interval) clearInterval(interval); 
+                    return;
                 }
-                if (!timerStatus.isTimerRunning) { if (interval) clearInterval(interval); return; } 
+                // Only proceed if the local timerStatus still thinks it should be running.
+                // This acts as a safeguard against the interval trying to run after it should have stopped.
+                if (!timerStatus.isTimerRunning) { // Check local state again
+                    if (interval) clearInterval(interval);
+                    return;
+                }
 
                 const newSeconds = Math.max(0, currentDBTimerStatus.timerSeconds - 1);
                 let newMatchStatus: TimerMatchStatus = currentDBTimerStatus.matchStatus;
@@ -463,16 +541,32 @@ function DewanSatuPageComponent() {
                 if (newSeconds === 0) {
                     newIsTimerRunning = false;
                     newMatchStatus = `FinishedRound${currentDBTimerStatus.currentRound}` as TimerMatchStatus;
-                    if (currentDBTimerStatus.currentRound === TOTAL_ROUNDS) newMatchStatus = 'MatchFinished';
+                    if (currentDBTimerStatus.currentRound === TOTAL_ROUNDS) {
+                        newMatchStatus = 'MatchFinished';
+                    }
                 }
-                const updatedStatusForFirestore: TimerStatus = { ...currentDBTimerStatus, timerSeconds: newSeconds, isTimerRunning: newIsTimerRunning, matchStatus: newMatchStatus, };
+                const updatedStatusForFirestore: TimerStatus = {
+                    ...currentDBTimerStatus,
+                    timerSeconds: newSeconds,
+                    isTimerRunning: newIsTimerRunning,
+                    matchStatus: newMatchStatus,
+                };
                 await setDoc(matchDocRef, { timer_status: updatedStatusForFirestore }, { merge: true });
-            } catch (e) { console.error(`[Dewan-1] Error updating timer in interval: `, e); if(interval) clearInterval(interval); setTimerStatus(prev => ({ ...prev, isTimerRunning: false })); }
-        } else { if(interval) clearInterval(interval); }
+                // Local timerStatus will be updated by the onSnapshot listener for this document.
+            } catch (e) {
+                console.error(`[Dewan-1] Error updating timer in interval: `, e);
+                if(interval) clearInterval(interval);
+                setTimerStatus(prev => ({ ...prev, isTimerRunning: false })); // Stop local timer on error
+            }
+        } else {
+            if(interval) clearInterval(interval); // Clear interval if activeScheduleId becomes null
+        }
       }, 1000);
-    } else if (!timerStatus.isTimerRunning || timerStatus.timerSeconds === 0) { if(interval) clearInterval(interval); }
+    } else if (!timerStatus.isTimerRunning || timerStatus.timerSeconds === 0) {
+      if(interval) clearInterval(interval);
+    }
     return () => { if (interval) clearInterval(interval); };
-  }, [timerStatus.isTimerRunning, timerStatus.timerSeconds, activeScheduleId]);
+  }, [timerStatus.isTimerRunning, timerStatus.timerSeconds, activeScheduleId]); // Depends on local timerStatus to decide if interval should run
 
 
   const handleTimerControl = (action: 'start' | 'pause') => {
