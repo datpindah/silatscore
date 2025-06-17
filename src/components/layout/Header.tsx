@@ -19,7 +19,8 @@ const navItems = [
 
 const ACTIVATION_THRESHOLD_PX = 50;
 
-export function Header() {
+// Ditambahkan prop overrideBackgroundClass
+export function Header({ overrideBackgroundClass }: { overrideBackgroundClass?: string }) {
   const { user, signOut, loading: authLoading } = useAuth(); // Dari AuthContext
   const [isVisible, setIsVisible] = useState(false);
   const [isMouseOverHeader, setIsMouseOverHeader] = useState(false);
@@ -72,7 +73,9 @@ export function Header() {
   return (
     <header
       className={cn(
-        "sticky top-0 z-50 w-full border-b border-border/40 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60",
+        "sticky top-0 z-50 w-full border-b border-border/40",
+        // Menggunakan overrideBackgroundClass jika ada, jika tidak gunakan default
+        overrideBackgroundClass || "bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60",
         "transition-transform duration-300 ease-in-out",
         !isVisible && "-translate-y-full"
       )}

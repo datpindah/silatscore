@@ -184,21 +184,22 @@ function DewanSatuPageComponent() {
         if (docSnap.exists() && docSnap.data()?.timer_status) {
             baseTimerStatus = docSnap.data()?.timer_status as TimerStatus;
         } else {
-            // Document doesn't exist, or timer_status field is missing.
-            // This branch indicates an initialization or recovery.
             console.warn(`[Dewan-1] timer_status missing for match ${activeScheduleId}. Initializing.`);
             const effectiveRoundDuration = newStatusUpdates.roundDuration ?? initialTimerStatus.roundDuration;
+            const effectiveCurrentRound = newStatusUpdates.currentRound ?? initialTimerStatus.currentRound;
             baseTimerStatus = {
-                currentRound: newStatusUpdates.currentRound ?? initialTimerStatus.currentRound,
-                // If newStatusUpdates provides timerSeconds, use it. Otherwise, for init/recovery, set to full duration.
-                timerSeconds: newStatusUpdates.timerSeconds !== undefined ? newStatusUpdates.timerSeconds : effectiveRoundDuration,
-                isTimerRunning: newStatusUpdates.isTimerRunning !== undefined ? newStatusUpdates.isTimerRunning : false, // Default to not running
-                matchStatus: newStatusUpdates.matchStatus ?? 'Pending', // Default to Pending
+                ...initialTimerStatus, // Start with defaults
+                currentRound: effectiveCurrentRound,
                 roundDuration: effectiveRoundDuration,
+                // If newStatusUpdates provides timerSeconds, use it for init. Otherwise, set to full duration.
+                timerSeconds: newStatusUpdates.timerSeconds !== undefined ? newStatusUpdates.timerSeconds : effectiveRoundDuration,
+                 // Default to Pending if not specified in updates, especially for init
+                matchStatus: newStatusUpdates.matchStatus ?? 'Pending',
+                // Default to not running if not specified in updates
+                isTimerRunning: newStatusUpdates.isTimerRunning !== undefined ? newStatusUpdates.isTimerRunning : false,
             };
         }
-
-        // Construct the final intended state by overriding base with newStatusUpdates
+        
         const intendedTimerStatus: TimerStatus = {
             currentRound: newStatusUpdates.currentRound ?? baseTimerStatus.currentRound,
             timerSeconds: newStatusUpdates.timerSeconds !== undefined ? newStatusUpdates.timerSeconds : baseTimerStatus.timerSeconds,
@@ -208,16 +209,10 @@ function DewanSatuPageComponent() {
         };
         
         let needsFirestoreWrite = false;
-        // Check if intended state is different from what's effectively in DB (baseTimerStatus represents this if docSnap exists)
-        if (!docSnap.exists() || !docSnap.data()?.timer_status) { // If it was missing or doc didn't exist, we definitely write
+        if (!docSnap.exists() || !docSnap.data()?.timer_status) {
             needsFirestoreWrite = true;
         } else {
-            // Compare field by field to avoid unnecessary writes if objects are different but values are same
-            if (intendedTimerStatus.currentRound !== baseTimerStatus.currentRound ||
-                intendedTimerStatus.timerSeconds !== baseTimerStatus.timerSeconds ||
-                intendedTimerStatus.isTimerRunning !== baseTimerStatus.isTimerRunning ||
-                intendedTimerStatus.matchStatus !== baseTimerStatus.matchStatus ||
-                intendedTimerStatus.roundDuration !== baseTimerStatus.roundDuration) {
+            if (JSON.stringify(intendedTimerStatus) !== JSON.stringify(baseTimerStatus)) {
               needsFirestoreWrite = true;
             }
         }
@@ -232,7 +227,6 @@ function DewanSatuPageComponent() {
     }
   }, [activeScheduleId]);
 
-  // useEffect for handling display of verification requests from Ketua
   useEffect(() => {
     if (!activeScheduleId) {
       setIsDisplayVerificationModalOpen(false);
@@ -240,64 +234,71 @@ function DewanSatuPageComponent() {
       return;
     }
 
-    const verificationsCollectionRef = collection(db, MATCHES_TANDING_COLLECTION, activeScheduleId, VERIFICATIONS_SUBCOLLECTION);
-    const q = query(verificationsCollectionRef, orderBy('timestamp', 'desc'), limit(1));
-
-    const unsubscribe = onSnapshot(q, async (snapshot) => {
-      if (snapshot.empty) {
-        setIsDisplayVerificationModalOpen(false);
-        setActiveDisplayVerificationRequest(null);
-        
-        const matchDocSnap = await getDoc(doc(db, MATCHES_TANDING_COLLECTION, activeScheduleId));
-        if (matchDocSnap.exists()) {
-            const currentFirestoreTimerStatus = matchDocSnap.data()?.timer_status as TimerStatus | undefined;
-            if (currentFirestoreTimerStatus && currentFirestoreTimerStatus.matchStatus.startsWith('PausedForVerificationRound')) {
-                const roundNumber = currentFirestoreTimerStatus.currentRound;
-                updateTimerStatusInFirestore({
-                    matchStatus: `PausedRound${roundNumber}` as TimerMatchStatus,
-                    isTimerRunning: false,
-                    // timerSeconds is preserved by updateTimerStatusInFirestore's merge logic
-                });
+    const verificationsQuery = query(collection(db, MATCHES_TANDING_COLLECTION, activeScheduleId, VERIFICATIONS_SUBCOLLECTION), orderBy('timestamp', 'desc'), limit(1));
+    
+    const unsubscribe = onSnapshot(verificationsQuery, async (snapshot) => {
+        if (snapshot.empty) {
+            // No verifications found (or all are resolved/cancelled)
+            setIsDisplayVerificationModalOpen(false);
+            setActiveDisplayVerificationRequest(null);
+            
+            // Check Firestore for current timer status directly
+            const matchDocSnap = await getDoc(doc(db, MATCHES_TANDING_COLLECTION, activeScheduleId));
+            if (matchDocSnap.exists()) {
+                const currentFirestoreTimerStatus = matchDocSnap.data()?.timer_status as TimerStatus | undefined;
+                if (currentFirestoreTimerStatus && currentFirestoreTimerStatus.matchStatus.startsWith('PausedForVerificationRound')) {
+                    const roundNumber = currentFirestoreTimerStatus.currentRound;
+                    // Transition to PausedRound, preserving timerSeconds
+                    updateTimerStatusInFirestore({
+                        matchStatus: `PausedRound${roundNumber}` as TimerMatchStatus,
+                        isTimerRunning: false,
+                        // timerSeconds and roundDuration are implicitly preserved by updateTimerStatusInFirestore's logic
+                    });
+                }
+            }
+        } else {
+            const latestVerification = { id: snapshot.docs[0].id, ...snapshot.docs[0].data() } as VerificationRequest;
+            
+            if (latestVerification.status === 'pending') {
+                setActiveDisplayVerificationRequest(latestVerification);
+                setIsDisplayVerificationModalOpen(true);
+                const expectedPausedStatus: TimerMatchStatus = `PausedForVerificationRound${latestVerification.round}`;
+                
+                const matchDocSnap = await getDoc(doc(db, MATCHES_TANDING_COLLECTION, activeScheduleId));
+                if (matchDocSnap.exists()){
+                    const currentFirestoreTimerStatus = matchDocSnap.data()?.timer_status as TimerStatus | undefined;
+                    // Only update if not already paused correctly for THIS verification's round
+                    if (!currentFirestoreTimerStatus || currentFirestoreTimerStatus.isTimerRunning || currentFirestoreTimerStatus.matchStatus !== expectedPausedStatus || currentFirestoreTimerStatus.currentRound !== latestVerification.round) {
+                        updateTimerStatusInFirestore({
+                            isTimerRunning: false,
+                            matchStatus: expectedPausedStatus,
+                            currentRound: latestVerification.round, // Ensure round is synced with verification
+                            // timerSeconds and roundDuration are implicitly preserved
+                        });
+                    }
+                }
+            } else { 
+                // Verification is not pending (e.g., completed, cancelled)
+                setIsDisplayVerificationModalOpen(false);
+                setActiveDisplayVerificationRequest(null);
+                
+                const matchDocSnap = await getDoc(doc(db, MATCHES_TANDING_COLLECTION, activeScheduleId));
+                if (matchDocSnap.exists()){
+                    const currentFirestoreTimerStatus = matchDocSnap.data()?.timer_status as TimerStatus | undefined;
+                    // Check if the match was paused specifically for THIS verification's round
+                    if (currentFirestoreTimerStatus && currentFirestoreTimerStatus.matchStatus === `PausedForVerificationRound${latestVerification.round}` && currentFirestoreTimerStatus.currentRound === latestVerification.round) {
+                         updateTimerStatusInFirestore({
+                            matchStatus: `PausedRound${latestVerification.round}` as TimerMatchStatus,
+                            isTimerRunning: false,
+                            // timerSeconds and roundDuration are implicitly preserved
+                        });
+                    }
+                }
             }
         }
-      } else {
-        const latestVerification = { id: snapshot.docs[0].id, ...snapshot.docs[0].data() } as VerificationRequest;
-
-        if (latestVerification.status === 'pending') {
-          setActiveDisplayVerificationRequest(latestVerification);
-          setIsDisplayVerificationModalOpen(true);
-          const expectedPausedStatus: TimerMatchStatus = `PausedForVerificationRound${latestVerification.round}`;
-          
-          const matchDocSnap = await getDoc(doc(db, MATCHES_TANDING_COLLECTION, activeScheduleId));
-          if (matchDocSnap.exists()){
-            const currentFirestoreTimerStatus = matchDocSnap.data()?.timer_status as TimerStatus | undefined;
-            if (!currentFirestoreTimerStatus || currentFirestoreTimerStatus.isTimerRunning || currentFirestoreTimerStatus.matchStatus !== expectedPausedStatus) {
-                updateTimerStatusInFirestore({
-                  isTimerRunning: false,
-                  matchStatus: expectedPausedStatus,
-                  // timerSeconds, currentRound, roundDuration are preserved by updateTimerStatusInFirestore's merge logic
-                });
-            }
-          }
-        } else { 
-          setIsDisplayVerificationModalOpen(false);
-          setActiveDisplayVerificationRequest(null);
-          const matchDocSnap = await getDoc(doc(db, MATCHES_TANDING_COLLECTION, activeScheduleId));
-          if (matchDocSnap.exists()){
-            const currentFirestoreTimerStatus = matchDocSnap.data()?.timer_status as TimerStatus | undefined;
-            if (currentFirestoreTimerStatus && currentFirestoreTimerStatus.matchStatus.startsWith('PausedForVerificationRound')) {
-                const roundNumber = currentFirestoreTimerStatus.currentRound;
-                updateTimerStatusInFirestore({
-                    matchStatus: `PausedRound${roundNumber}` as TimerMatchStatus,
-                    isTimerRunning: false,
-                     // timerSeconds is preserved by updateTimerStatusInFirestore's merge logic
-                });
-            }
-          }
-        }
-      }
     }, (err) => {
       console.error(`[Dewan-1] Error fetching verification for display:`, err);
+      // Attempt to revert to a generic Paused state if an error occurs and we were in verification pause
       setActiveDisplayVerificationRequest(null);
       setIsDisplayVerificationModalOpen(false);
       if (activeScheduleId) {
@@ -315,7 +316,6 @@ function DewanSatuPageComponent() {
         }).catch(e => console.error("Error fetching match doc on verification error for cleanup:", e));
       }
     });
-
     return () => unsubscribe();
   }, [activeScheduleId, updateTimerStatusInFirestore]);
 
@@ -360,35 +360,28 @@ function DewanSatuPageComponent() {
             const data = docSnap.data();
             if (data?.timer_status) {
                 const newTimerStatus = data.timer_status as TimerStatus;
-                // Only update if substantially different to prevent loops from minor timestamp changes if they were part of TimerStatus
                 if (JSON.stringify(timerStatus) !== JSON.stringify(newTimerStatus)) {
                     setTimerStatus(newTimerStatus);
                 }
-                setInputRoundDurationMinutes((newTimerStatus.roundDuration / 60).toString());
             } else {
-                // Document exists, but timer_status field is MISSING.
-                console.error(`[Dewan-1] CRITICAL: timer_status field missing in existing match document ${activeScheduleId}. Local timer state may be stale until next explicit update.`);
-                // Avoid writing initialTimerStatus back from here, to prevent resets.
+                 console.error(`[Dewan-1] CRITICAL: timer_status field missing in existing match document ${activeScheduleId}. Local timer state may be stale until next explicit update or Ketua's action.`);
             }
             const firestoreUnstruckKeys = new Set(data?.confirmed_unstruck_keys_log as string[] || []);
             const firestoreStruckKeys = new Set(data?.confirmed_struck_keys_log as string[] || []);
             
-            // Only update if sets are different
             if (firestoreUnstruckKeys.size !== prevSavedUnstruckKeys.size || !Array.from(firestoreUnstruckKeys).every(k => prevSavedUnstruckKeys.has(k))) {
                 setPrevSavedUnstruckKeys(firestoreUnstruckKeys);
-                setAllContributingEntryKeys(firestoreUnstruckKeys); // Assuming this should mirror saved
+                setAllContributingEntryKeys(firestoreUnstruckKeys);
             }
             if (firestoreStruckKeys.size !== prevSavedStruckKeys.size || !Array.from(firestoreStruckKeys).every(k => prevSavedStruckKeys.has(k))) {
                 setPrevSavedStruckKeys(firestoreStruckKeys);
-                setPermanentlyStruckEntryKeys(firestoreStruckKeys); // Assuming this should mirror
+                setPermanentlyStruckEntryKeys(firestoreStruckKeys);
             }
 
           } else { 
-            // Document does NOT exist. This is the true initialization case.
             const initialDataForMatch = { timer_status: initialTimerStatus, confirmed_unstruck_keys_log: [], confirmed_struck_keys_log: [] };
             try {
-              await setDoc(matchDocRef, initialDataForMatch); // Not merging, it's a new doc
-              // setTimerStatus(initialTimerStatus); // Listener will pick this up.
+              await setDoc(matchDocRef, initialDataForMatch);
               setPrevSavedUnstruckKeys(new Set()); setAllContributingEntryKeys(new Set());
               setPrevSavedStruckKeys(new Set()); setPermanentlyStruckEntryKeys(new Set());
             } catch (setErr) { console.error(`[Dewan-1] Error setting initial match data:`, setErr); }
@@ -681,9 +674,12 @@ function DewanSatuPageComponent() {
     try {
         const batch = writeBatch(db);
         const matchDocRef = doc(db, MATCHES_TANDING_COLLECTION, activeScheduleId);
-        // Use the current roundDuration if available, otherwise default.
-        const currentRoundDuration = timerStatus.roundDuration > 0 ? timerStatus.roundDuration : initialTimerStatus.roundDuration;
-        const resetTimerStatus = { ...initialTimerStatus, roundDuration: currentRoundDuration, timerSeconds: currentRoundDuration };
+        
+        const currentTimerDoc = await getDoc(matchDocRef);
+        const currentTimerData = currentTimerDoc.exists() ? currentTimerDoc.data()?.timer_status as TimerStatus | undefined : undefined;
+        const effectiveRoundDuration = currentTimerData?.roundDuration ?? initialTimerStatus.roundDuration;
+
+        const resetTimerStatus = { ...initialTimerStatus, roundDuration: effectiveRoundDuration, timerSeconds: effectiveRoundDuration };
         batch.set(matchDocRef, { timer_status: resetTimerStatus, confirmed_unstruck_keys_log: [], confirmed_struck_keys_log: [] }, { merge: true }); 
         
         const initialJuriDataContent: JuriMatchData = { merah: { round1: [], round2: [], round3: [] }, biru: { round1: [], round2: [], round3: [] }, lastUpdated: serverTimestamp() as Timestamp };
@@ -786,7 +782,8 @@ function DewanSatuPageComponent() {
 
   if (!gelanggangName && !isLoading) {
     return (
-        <div className="flex flex-col min-h-screen"> <Header />
+        <div className="flex flex-col min-h-screen"> 
+          <Header overrideBackgroundClass="bg-gray-100 dark:bg-gray-900" />
             <main className="flex-1 container mx-auto p-4 md:p-8 flex flex-col items-center justify-center text-center">
                 <AlertTriangle className="h-12 w-12 text-destructive mb-4" />
                 <h1 className="text-xl font-semibold text-destructive">Nama Gelanggang Diperlukan</h1>
@@ -801,7 +798,8 @@ function DewanSatuPageComponent() {
 
   if (isLoading && (!activeScheduleId || !matchDetailsLoaded)) { 
     return (
-        <div className="flex flex-col min-h-screen"> <Header />
+        <div className="flex flex-col min-h-screen"> 
+          <Header overrideBackgroundClass="bg-gray-100 dark:bg-gray-900" />
             <main className="flex-1 container mx-auto p-4 md:p-8 flex flex-col items-center justify-center">
                 <Loader2 className="h-12 w-12 animate-spin text-primary mb-4" />
                 <p className="text-lg text-muted-foreground">
@@ -817,7 +815,8 @@ function DewanSatuPageComponent() {
 
   if (!activeScheduleId && !isLoading && configMatchId === null) { 
     return (
-      <div className="flex flex-col min-h-screen"> <Header />
+      <div className="flex flex-col min-h-screen"> 
+        <Header overrideBackgroundClass="bg-gray-100 dark:bg-gray-900" />
         <main className="flex-1 container mx-auto px-4 py-8">
            <Card className="mt-6 shadow-lg">
             <CardHeader><CardTitle className="text-xl font-headline text-center text-primary">Scoring Tanding - Dewan Kontrol</CardTitle></CardHeader>
@@ -844,7 +843,7 @@ function DewanSatuPageComponent() {
 
   return (
     <div className="flex flex-col min-h-screen bg-gray-100 dark:bg-gray-900 font-body">
-      <Header />
+      <Header overrideBackgroundClass="bg-gray-100 dark:bg-gray-900" />
       <main className="flex-1 container mx-auto px-2 py-4 md:px-4 md:py-6">
         <Card className="mb-4 shadow-xl bg-gradient-to-r from-primary to-red-700 text-primary-foreground">
           <CardContent className="p-3 md:p-4 text-center">
@@ -963,7 +962,8 @@ function DewanSatuPageComponent() {
 export default function ScoringTandingDewanSatuPage() {
   return (
     <Suspense fallback={
-      <div className="flex flex-col min-h-screen"> <Header />
+      <div className="flex flex-col min-h-screen"> 
+        <Header overrideBackgroundClass="bg-gray-100 dark:bg-gray-900" />
         <main className="flex-1 container mx-auto p-4 md:p-8 flex flex-col items-center justify-center">
           <Loader2 className="h-12 w-12 animate-spin text-primary mb-4" />
           <p className="text-lg text-muted-foreground">Memuat halaman Dewan Kontrol...</p>
@@ -981,4 +981,3 @@ interface CombinedScoreEntry extends ScoreEntry {
   round: keyof LibRoundScores;
   color: 'merah' | 'biru';
 }
-
