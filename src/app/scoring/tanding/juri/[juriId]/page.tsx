@@ -1,24 +1,25 @@
 
 "use client";
 
-import { useState, useEffect, useCallback, use } from 'react';
+import { useState, useEffect, useCallback, use, Suspense } from 'react';
 import Link from 'next/link';
+import { useSearchParams } from 'next/navigation'; // Ditambahkan
 import { Header } from '@/components/layout/Header';
 import { PageTitle } from '@/components/shared/PageTitle';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogFooter, DialogClose } from "@/components/ui/dialog";
-import { ArrowLeft, MinusSquare, Target, Shield, Lock, Unlock, Loader2, Vote } from 'lucide-react';
+import { ArrowLeft, MinusSquare, Target, Shield, Lock, Unlock, Loader2, Vote, AlertTriangle } from 'lucide-react';
 import type { ScheduleTanding, VerificationRequest, JuriVoteValue, JuriMatchData as LibJuriMatchData, RoundScores as LibRoundScoresType, ScoreEntry as LibScoreEntryType } from '@/lib/types';
 import { db } from '@/lib/firebase';
 import { doc, onSnapshot, getDoc, Timestamp, setDoc, updateDoc, collection, query, where, orderBy, limit, serverTimestamp } from 'firebase/firestore';
 import { cn } from '@/lib/utils';
 import { Skeleton } from '@/components/ui/skeleton';
 
-const ACTIVE_TANDING_SCHEDULE_CONFIG_PATH = 'app_settings/active_match_tanding';
+const ACTIVE_TANDING_MATCHES_BY_GELANGGANG_PATH = 'app_settings/active_tanding_matches_by_gelanggang'; // Path baru
 const SCHEDULE_TANDING_COLLECTION = 'schedules_tanding';
 const MATCHES_TANDING_COLLECTION = 'matches_tanding';
-const VERIFICATIONS_SUBCOLLECTION = 'verifications'; // For listening to verification requests
+const VERIFICATIONS_SUBCOLLECTION = 'verifications';
 const JURI_VISUAL_GRACE_PERIOD_MS = 2000;
 
 interface PesilatInfo {
@@ -27,13 +28,8 @@ interface PesilatInfo {
 }
 
 interface ScoreEntry extends LibScoreEntryType {}
-
-
 interface RoundScores extends LibRoundScoresType {}
-
-
 interface JuriMatchData extends LibJuriMatchData {}
-
 
 interface TimerStatusFromDewan {
   currentRound: 1 | 2 | 3;
@@ -53,13 +49,11 @@ const initialJuriMatchData = (): JuriMatchData => ({
   lastUpdated: null,
 });
 
-export default function JuriDynamicPage({ params: paramsPromise }: { params: Promise<{ juriId: string }> }) {
-  const params = use(paramsPromise);
-  const { juriId } = params;
+function JuriPageComponent({ juriId, gelanggangName }: { juriId: string; gelanggangName: string | null }) {
   const juriDisplayName = `Juri ${juriId?.split('-')[1] || 'Tidak Dikenal'}`;
 
-  const [configMatchId, setConfigMatchId] = useState<string | null | undefined>(undefined);
-  const [activeMatchId, setActiveMatchId] = useState<string | null>(null);
+  const [configMatchId, setConfigMatchId] = useState<string | null | undefined>(undefined); // ID dari peta gelanggang
+  const [activeMatchId, setActiveMatchId] = useState<string | null>(null); // ID yang sedang diproses
 
   const [pesilatMerah, setPesilatMerah] = useState<PesilatInfo | null>(null);
   const [pesilatBiru, setPesilatBiru] = useState<PesilatInfo | null>(null);
@@ -91,50 +85,77 @@ export default function JuriDynamicPage({ params: paramsPromise }: { params: Pro
     setActiveVerification(null);
     setIsVerificationModalOpen(false);
     setError(null);
+    // matchDetailsLoaded will be reset by its own logic
   }, []);
 
+  // Effect untuk memantau perubahan pada peta gelanggang
   useEffect(() => {
-    const unsubConfig = onSnapshot(doc(db, ACTIVE_TANDING_SCHEDULE_CONFIG_PATH), (docSnap) => {
-      const newDbConfigId = docSnap.exists() ? docSnap.data()?.activeScheduleId : null;
-      if (newDbConfigId !== configMatchId) {
-        setConfigMatchId(newDbConfigId);
-      } else if (configMatchId === undefined && newDbConfigId === null) {
-        setConfigMatchId(null);
+    if (!gelanggangName) {
+      setError("Nama gelanggang tidak ditemukan di URL.");
+      setConfigMatchId(null);
+      setIsLoading(false);
+      return;
+    }
+    setError(null);
+    setIsLoading(true);
+
+    const unsubGelanggangMap = onSnapshot(doc(db, ACTIVE_TANDING_MATCHES_BY_GELANGGANG_PATH), (docSnap) => {
+      let newDbConfigId: string | null = null;
+      if (docSnap.exists()) {
+        newDbConfigId = docSnap.data()?.[gelanggangName] || null;
+      }
+      
+      setConfigMatchId(prevId => {
+        if (prevId === newDbConfigId) return prevId;
+        return newDbConfigId;
+      });
+
+      if (!newDbConfigId) {
+         setError(`Tidak ada jadwal Tanding aktif untuk Gelanggang: ${gelanggangName}.`);
       }
     }, (err) => {
-      console.error(`[Juri ${juriId}] Error fetching active schedule config:`, err);
-      setError("Gagal memuat konfigurasi jadwal aktif global.");
+      console.error(`[Juri ${juriId}] Error fetching active matches by gelanggang map:`, err);
+      setError("Gagal memuat peta jadwal aktif per gelanggang.");
       setConfigMatchId(null);
     });
-    return () => unsubConfig();
-  }, [configMatchId, juriId]); 
+    return () => unsubGelanggangMap();
+  }, [gelanggangName, juriId]);
 
+  // Effect untuk sinkronisasi activeMatchId dengan configMatchId dan mereset data
   useEffect(() => {
     if (configMatchId === undefined) {
-      setIsLoading(true);
+      // Masih menunggu data dari peta gelanggang
+      // setIsLoading(true) sudah ditangani di effect sebelumnya atau effect berikutnya
       return;
     }
     if (configMatchId !== activeMatchId) {
       resetAllMatchData();
       setActiveMatchId(configMatchId);
-      setMatchDetailsLoaded(false);
-      if (configMatchId) setIsLoading(true);
-      else setIsLoading(false);
-    } else if (configMatchId === null && activeMatchId === null && isLoading) {
-      setIsLoading(false);
+      setMatchDetailsLoaded(false); // Penting untuk mereset ini agar data detail dimuat ulang
     }
-  }, [configMatchId, activeMatchId, resetAllMatchData, isLoading]);
+  }, [configMatchId, activeMatchId, resetAllMatchData]);
 
+
+  // Effect utama untuk memuat data pertandingan dan skor
   useEffect(() => {
+    let mounted = true;
+    
     if (!activeMatchId) {
-      if(isLoading) setIsLoading(false);
-      setError(null);
+      // Jika tidak ada activeMatchId (misalnya, configMatchId null atau belum dimuat)
+      if (!gelanggangName) { // Jika gelanggangName juga tidak ada, ini sudah ditangani
+        setIsLoading(false);
+      } else if (configMatchId === null) { // Jika configMatchId sudah null (tidak ada jadwal untuk gelanggang ini)
+        setIsLoading(false);
+      } else if (configMatchId === undefined) { // Jika configMatchId masih loading
+        setIsLoading(true);
+      }
+      setMatchDetailsLoaded(false); // Pastikan ini false jika tidak ada match
       return;
     }
 
-    let mounted = true;
-    if(!isLoading) setIsLoading(true);
-    setError(null);
+    // Jika ada activeMatchId, mulai memuat
+    setIsLoading(true);
+    setError(null); // Clear error sebelumnya jika ada
 
     let unsubMatchDoc: (() => void) | null = null;
     let unsubJuriScores: (() => void) | null = null;
@@ -146,13 +167,14 @@ export default function JuriDynamicPage({ params: paramsPromise }: { params: Pro
     let verificationListenerReady = false;
 
     const tryStopLoading = () => {
+      // Hanya set isLoading false jika semua data yang diharapkan sudah "siap" (dimuat atau listener aktif)
       if (mounted && detailsFetched && matchListenerReady && juriListenerReady && verificationListenerReady) {
-        if(isLoading) setIsLoading(false);
+        setIsLoading(false);
       }
     };
 
     const loadScheduleDetails = async () => {
-      if (!mounted || !activeMatchId) return;
+      if (!mounted || !activeMatchId) { detailsFetched = true; tryStopLoading(); return; }
       try {
         const scheduleDocRef = doc(db, SCHEDULE_TANDING_COLLECTION, activeMatchId);
         const scheduleDoc = await getDoc(scheduleDocRef);
@@ -169,7 +191,7 @@ export default function JuriDynamicPage({ params: paramsPromise }: { params: Pro
           detailsFetched = true;
         }
       } catch (err) {
-        setError("Gagal memuat detail jadwal.");
+        if(mounted) setError("Gagal memuat detail jadwal.");
         setMatchDetailsLoaded(false);
         detailsFetched = true;
       }
@@ -221,7 +243,6 @@ export default function JuriDynamicPage({ params: paramsPromise }: { params: Pro
       if (!juriListenerReady) juriListenerReady = true; tryStopLoading();
     });
 
-    // Listener untuk verifikasi
     const verificationsQuery = query(
       collection(db, MATCHES_TANDING_COLLECTION, activeMatchId, VERIFICATIONS_SUBCOLLECTION),
       where('status', '==', 'pending'),
@@ -232,13 +253,14 @@ export default function JuriDynamicPage({ params: paramsPromise }: { params: Pro
       if (!mounted) return;
       if (!snapshot.empty) {
         const verificationData = { id: snapshot.docs[0].id, ...snapshot.docs[0].data() } as VerificationRequest;
-        // Hanya tampilkan modal jika Juri ini belum vote
         if (verificationData.votes[juriId as keyof VerificationRequest['votes']] === null) {
           setActiveVerification(verificationData);
           setIsVerificationModalOpen(true);
         } else {
            if (activeVerification && activeVerification.id === verificationData.id) {
+             // Juri ini sudah vote untuk verifikasi ini, biarkan modal tertutup
            } else {
+             // Verifikasi baru atau verifikasi lama sudah selesai, reset
              setActiveVerification(null);
              setIsVerificationModalOpen(false);
            }
@@ -253,8 +275,7 @@ export default function JuriDynamicPage({ params: paramsPromise }: { params: Pro
       if (!mounted) return;
       console.error(`[Juri ${juriId}] Error listening to verifications:`, error);
       setError("Gagal mendapatkan status verifikasi.");
-      if (!verificationListenerReady) verificationListenerReady = true;
-      tryStopLoading();
+      if (!verificationListenerReady) verificationListenerReady = true; tryStopLoading();
     });
 
 
@@ -264,7 +285,7 @@ export default function JuriDynamicPage({ params: paramsPromise }: { params: Pro
       if (unsubJuriScores) unsubJuriScores();
       if (unsubVerifications) unsubVerifications();
     };
-  }, [activeMatchId, juriId, resetAllMatchData]); 
+  }, [activeMatchId, juriId, resetAllMatchData, gelanggangName]); 
 
   const saveScoresToFirestore = useCallback(async (newScoresData: JuriMatchData) => {
     if (!activeMatchId || !juriId) return;
@@ -287,7 +308,7 @@ export default function JuriDynamicPage({ params: paramsPromise }: { params: Pro
       const roundKey = `round${dewanControlledRound}` as keyof RoundScores;
       const newEntry: ScoreEntry = { 
         points: pointsValue, 
-        timestamp: Timestamp.now(), // Use client-side Timestamp.now() here
+        timestamp: Timestamp.now(),
       };
       const updatedColorScoresForRound = [...(prevScores[pesilatColor]?.[roundKey] || []), newEntry];
       const newScoresData: JuriMatchData = {
@@ -337,11 +358,11 @@ export default function JuriDynamicPage({ params: paramsPromise }: { params: Pro
     return roundData.map((entry, index) => {
       let entryTimestampMillis: number | null = null;
       if (entry.timestamp) {
-        if (entry.timestamp instanceof Timestamp) { // Firestore Timestamp
+        if (entry.timestamp instanceof Timestamp) {
           entryTimestampMillis = entry.timestamp.toMillis();
-        } else if (entry.timestamp instanceof Date) { // JS Date
+        } else if (entry.timestamp instanceof Date) {
           entryTimestampMillis = entry.timestamp.getTime();
-        } else if (typeof entry.timestamp === 'object' && entry.timestamp !== null && typeof (entry.timestamp as {seconds: number}).seconds === 'number') { // Plain object
+        } else if (typeof entry.timestamp === 'object' && entry.timestamp !== null && typeof (entry.timestamp as {seconds: number}).seconds === 'number') {
           entryTimestampMillis = (entry.timestamp as {seconds: number}).seconds * 1000 + ((entry.timestamp as {nanoseconds: number}).nanoseconds || 0) / 1000000;
         }
       }
@@ -367,9 +388,10 @@ export default function JuriDynamicPage({ params: paramsPromise }: { params: Pro
   const isInputDisabled = isLoading || !activeMatchId || !matchDetailsLoaded || dewanMatchStatus === 'MatchFinished' || !isTimerRunningByDewan || dewanMatchStatus.startsWith('FinishedRound') || dewanMatchStatus.startsWith('Paused') || dewanMatchStatus === 'Pending';
 
   const inputDisabledReason = () => {
-    if (configMatchId === undefined && isLoading) return "Memuat konfigurasi global...";
-    if (isLoading && (activeMatchId || configMatchId === undefined )) return `Sinkronisasi data pertandingan... (Babak Dewan: ${dewanControlledRound})`;
-    if (!activeMatchId && !isLoading && configMatchId === null) return "Tidak ada pertandingan aktif.";
+    if (configMatchId === undefined && isLoading && !gelanggangName) return "Memuat konfigurasi global...";
+    if (!gelanggangName) return "Gelanggang tidak ditemukan di URL.";
+    if (isLoading && (activeMatchId || (configMatchId === undefined && gelanggangName))) return `Sinkronisasi untuk Gelanggang: ${gelanggangName || '...'} (Babak Dewan: ${dewanControlledRound})`;
+    if (!activeMatchId && !isLoading && configMatchId === null) return `Tidak ada pertandingan aktif untuk Gelanggang: ${gelanggangName}.`;
     if (activeMatchId && !matchDetailsLoaded && !isLoading) return "Menunggu detail pertandingan...";
     if (error) return `Error: ${error}`;
     if (dewanMatchStatus === 'MatchFinished') return "Pertandingan telah Selesai.";
@@ -382,17 +404,19 @@ export default function JuriDynamicPage({ params: paramsPromise }: { params: Pro
   };
 
   const pageDescription = () => {
-    if (configMatchId === undefined && isLoading) return "Memuat konfigurasi...";
-    if (isLoading && (activeMatchId || configMatchId === undefined )) return `Memuat data pertandingan... (Babak Dewan: ${dewanControlledRound})`;
-    if (!activeMatchId && !isLoading && configMatchId === null) return "Tidak ada pertandingan yang aktif.";
+    if (configMatchId === undefined && isLoading && !gelanggangName) return "Memuat konfigurasi...";
+    if (!gelanggangName) return "Gelanggang tidak valid.";
+    if (isLoading && (activeMatchId || (configMatchId === undefined && gelanggangName))) return `Memuat data untuk Gelanggang: ${gelanggangName}... (Babak Dewan: ${dewanControlledRound})`;
+    if (!activeMatchId && !isLoading && configMatchId === null) return `Tidak ada pertandingan aktif untuk Gelanggang: ${gelanggangName}.`;
     if (matchDetailsLoaded && activeMatchId) return `${pesilatMerah?.name || 'Merah'} vs ${pesilatBiru?.name || 'Biru'} - Babak Aktif: ${dewanControlledRound}`;
     if (activeMatchId && !matchDetailsLoaded && !isLoading) return "Menunggu detail pertandingan...";
     if (error) return `Error: ${error}`;
-    return `Menunggu info pertandingan... (Babak Dewan: ${dewanControlledRound})`;
+    return `Menunggu info pertandingan untuk Gelanggang: ${gelanggangName || '...'} (Babak Dewan: ${dewanControlledRound})`;
   };
 
   const getStatusIcon = () => {
-    if (error) return <ArrowLeft className="h-5 w-5 text-red-500" />;
+    if (!gelanggangName) return <AlertTriangle className="h-5 w-5 text-red-500" />;
+    if (error) return <AlertTriangle className="h-5 w-5 text-red-500" />;
     if (isLoading || (activeMatchId && !matchDetailsLoaded)) return <Loader2 className="h-5 w-5 text-yellow-500 animate-spin"/>;
     if (isInputDisabled) return <Lock className="h-5 w-5 text-red-500" />;
     if (!isInputDisabled && activeMatchId && matchDetailsLoaded) return <Unlock className="h-5 w-5 text-green-500" />;
@@ -403,16 +427,31 @@ export default function JuriDynamicPage({ params: paramsPromise }: { params: Pro
     const reason = inputDisabledReason();
     if (reason) return reason;
     if (activeMatchId && matchDetailsLoaded && !isInputDisabled) return "Input Nilai Terbuka";
-    if (isLoading || (activeMatchId && !matchDetailsLoaded)) return `Memuat data... (Babak Dewan: ${dewanControlledRound})`;
-    return `Memeriksa status... (Babak Dewan: ${dewanControlledRound})`;
+    if (isLoading || (activeMatchId && !matchDetailsLoaded)) return `Memuat data untuk Gelanggang ${gelanggangName || '...'} (Babak Dewan: ${dewanControlledRound})`;
+    return `Memeriksa status untuk Gelanggang: ${gelanggangName || '...'} (Babak Dewan: ${dewanControlledRound})`;
   };
+
+  if (!gelanggangName && !isLoading) {
+    return (
+        <div className="flex flex-col min-h-screen"> <Header />
+            <main className="flex-1 container mx-auto p-4 md:p-8 flex flex-col items-center justify-center text-center">
+                <AlertTriangle className="h-12 w-12 text-destructive mb-4" />
+                <h1 className="text-xl font-semibold text-destructive">Gelanggang Diperlukan</h1>
+                <p className="text-muted-foreground mt-2">Parameter 'gelanggang' tidak ditemukan di URL. Halaman Juri tidak dapat memuat data pertandingan tanpa nama gelanggang.</p>
+                <Button asChild className="mt-6">
+                    <Link href={`/login?redirect=/scoring/tanding/juri/${juriId}`}><ArrowLeft className="mr-2 h-4 w-4"/> Kembali ke Halaman Login</Link>
+                </Button>
+            </main>
+        </div>
+    );
+  }
 
   return (
     <div className="flex flex-col min-h-screen">
       <Header />
       <main className="flex-1 container mx-auto px-4 py-8">
         <PageTitle
-          title={`${juriDisplayName} - Scoring Tanding`}
+          title={`${juriDisplayName} - Scoring Tanding (Gel: ${gelanggangName || 'N/A'})`}
           description={pageDescription()}
         >
           <div className="flex items-center gap-2">
@@ -426,7 +465,7 @@ export default function JuriDynamicPage({ params: paramsPromise }: { params: Pro
                 {getStatusText()}
             </span>
             <Button variant="outline" asChild>
-              <Link href="/login"><ArrowLeft className="mr-2 h-4 w-4" /> Kembali ke Login</Link>
+              <Link href={`/login?redirect=/scoring/tanding/juri/${juriId}&gelanggang=${gelanggangName || ''}`}><ArrowLeft className="mr-2 h-4 w-4" /> Kembali</Link>
             </Button>
           </div>
         </PageTitle>
@@ -540,5 +579,24 @@ export default function JuriDynamicPage({ params: paramsPromise }: { params: Pro
 
       </main>
     </div>
+  );
+}
+
+
+export default function DynamicJuriPageWithSuspense({ params }: { params: { juriId: string } }) {
+  const searchParams = useSearchParams();
+  const gelanggangName = searchParams.get('gelanggang');
+  
+  return (
+    <Suspense fallback={
+      <div className="flex flex-col min-h-screen"> <Header />
+        <main className="flex-1 container mx-auto p-4 md:p-8 flex flex-col items-center justify-center">
+          <Loader2 className="h-12 w-12 animate-spin text-primary mb-4" />
+          <p className="text-lg text-muted-foreground">Memuat halaman Juri ({params.juriId}) untuk gelanggang...</p>
+        </main>
+      </div>
+    }>
+      <JuriPageComponent juriId={params.juriId} gelanggangName={gelanggangName} />
+    </Suspense>
   );
 }
