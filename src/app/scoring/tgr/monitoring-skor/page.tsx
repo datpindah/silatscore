@@ -193,7 +193,7 @@ function MonitoringSkorTGRPageComponent({ gelanggangName }: { gelanggangName: st
     setIsWinnerOverlayOpen(false);
   }, []);
 
-  useEffect(() => {
+ useEffect(() => {
     if (!gelanggangName) {
       setError("Nama gelanggang tidak ditemukan di URL.");
       setConfigMatchId(null);
@@ -636,7 +636,7 @@ function MonitoringSkorTGRPageComponent({ gelanggangName }: { gelanggangName: st
               <p className="text-xl text-center text-[var(--monitor-overlay-text-primary)] mb-2">{error || `Tidak ada pertandingan TGR yang aktif untuk dimonitor di Gel. ${gelanggangName}.`}</p>
               <p className="text-sm text-center text-[var(--monitor-overlay-text-secondary)] mb-6">Silakan aktifkan jadwal TGR di panel admin atau tunggu pertandingan dimulai.</p>
               <Button variant="outline" asChild className="bg-[var(--monitor-overlay-button-bg)] border-[var(--monitor-overlay-button-border)] hover:bg-[var(--monitor-overlay-button-hover-bg)] text-[var(--monitor-overlay-button-text)]">
-                <Link href={`/scoring/tgr/login?gelanggang=${gelanggangName || ''}`}><ArrowLeft className="mr-2 h-4 w-4" /> Kembali</Link>
+                <Link href={`/scoring/tgr/login?redirect=/scoring/tgr/monitoring-skor&gelanggang=${gelanggangName || ''}`}><ArrowLeft className="mr-2 h-4 w-4" /> Kembali</Link>
               </Button>
           </div>
         )}
@@ -773,3 +773,4 @@ export default function MonitoringSkorTGRPageSuspended() {
     </Suspense>
   );
 }
+
