@@ -3,9 +3,9 @@
 
 import { useState, useEffect, useCallback, useRef, Suspense, type PointerEvent } from 'react';
 import Link from 'next/link';
-import { useSearchParams } from 'next/navigation'; 
+import { useSearchParams } from 'next/navigation';
 import { Button } from '@/components/ui/button';
-import { Header } from '@/components/layout/Header'; // Re-added global Header
+// Header global tidak diimpor/digunakan di sini
 import { ArrowLeft, Eye, Loader2, RadioTower, AlertTriangle, Sun, Moon, ChevronsRight } from 'lucide-react';
 import type { ScheduleTanding, TimerStatus, VerificationRequest, JuriVoteValue, KetuaActionLogEntry, PesilatColorIdentity, KetuaActionType } from '@/lib/types';
 import type { ScoreEntry as LibScoreEntryType, RoundScores as LibRoundScoresType } from '@/lib/types';
@@ -13,7 +13,7 @@ import { db } from '@/lib/firebase';
 import { doc, onSnapshot, getDoc, collection, query, orderBy, limit, Timestamp, setDoc, where, getDocs, updateDoc, deleteField } from 'firebase/firestore';
 import { cn } from '@/lib/utils';
 import { Skeleton } from '@/components/ui/skeleton';
-import { Dialog, DialogContent, DialogHeader, DialogTitle as RadixDialogTitle } from "@/components/ui/dialog"; 
+import { Dialog, DialogContent, DialogHeader, DialogTitle as RadixDialogTitle } from "@/components/ui/dialog";
 import { Card, CardContent } from '@/components/ui/card';
 
 
@@ -25,7 +25,7 @@ const OFFICIAL_ACTIONS_SUBCOLLECTION = 'official_actions';
 const JURI_SCORES_SUBCOLLECTION = 'juri_scores';
 const JURI_IDS = ['juri-1', 'juri-2', 'juri-3'] as const;
 const JURI_INPUT_VALIDITY_WINDOW_MS = 2000;
-// const ACTIVATION_THRESHOLD_PX = 60; // No longer needed here, Header component handles its own logic
+const ACTIVATION_THRESHOLD_PX = 50;
 
 
 interface PesilatDisplayInfo {
@@ -41,7 +41,7 @@ const initialTimerStatus: TimerStatus = {
   roundDuration: 120,
 };
 
-interface ScoreEntry extends LibScoreEntryType {} 
+interface ScoreEntry extends LibScoreEntryType {}
 
 interface CombinedScoreEntry extends ScoreEntry {
   juriId: string;
@@ -82,7 +82,48 @@ function MonitoringSkorPageComponent({ gelanggangName }: { gelanggangName: strin
   const [isDisplayVerificationModalOpen, setIsDisplayVerificationModalOpen] = useState(false);
   const [isNavigatingNextMatch, setIsNavigatingNextMatch] = useState(false);
 
-  // States for page-specific header visibility (auto-hide) are removed as the global header handles this.
+  const [isHeaderVisible, setIsHeaderVisible] = useState(false);
+  const [isMouseOverPageHeader, setIsMouseOverPageHeader] = useState(false);
+
+
+  useEffect(() => {
+    const handleMouseMove = (event: MouseEvent) => {
+      if (event.clientY < ACTIVATION_THRESHOLD_PX) {
+        setIsHeaderVisible(true);
+      } else {
+        if (!isMouseOverPageHeader) {
+          setIsHeaderVisible(false);
+        }
+      }
+    };
+
+    const handleDocumentMouseLeave = () => {
+      if (!isMouseOverPageHeader) {
+        setIsHeaderVisible(false);
+      }
+    };
+
+    document.addEventListener('mousemove', handleMouseMove);
+    document.documentElement.addEventListener('mouseleave', handleDocumentMouseLeave);
+
+    return () => {
+      document.removeEventListener('mousemove', handleMouseMove);
+      document.documentElement.removeEventListener('mouseleave', handleDocumentMouseLeave);
+    };
+  }, [isMouseOverPageHeader]);
+
+  const handlePageHeaderMouseEnter = () => {
+    setIsMouseOverPageHeader(true);
+    setIsHeaderVisible(true);
+  };
+
+  const handlePageHeaderMouseLeave = (event: PointerEvent<HTMLElement>) => {
+    setIsMouseOverPageHeader(false);
+    if (event.clientY >= ACTIVATION_THRESHOLD_PX) {
+      setIsHeaderVisible(false);
+    }
+  };
+
 
   const resetMatchDisplayData = useCallback(() => {
     setMatchDetails(null);
@@ -137,7 +178,7 @@ function MonitoringSkorPageComponent({ gelanggangName }: { gelanggangName: strin
     if (configMatchId === undefined) { setIsLoading(true); return; }
     if (configMatchId === null) {
       if (activeScheduleId !== null) { resetMatchDisplayData(); setActiveScheduleId(null); }
-      setIsLoading(false); 
+      setIsLoading(false);
       if (!error && gelanggangName) setError(`Tidak ada jadwal Tanding aktif untuk Gelanggang: ${gelanggangName}.`);
       return;
     }
@@ -220,7 +261,7 @@ function MonitoringSkorPageComponent({ gelanggangName }: { gelanggangName: strin
             if (latestVerification.status === 'pending') {
               setActiveDisplayVerificationRequest(latestVerification);
               setIsDisplayVerificationModalOpen(true);
-            } else { 
+            } else {
               setActiveDisplayVerificationRequest(null);
               setIsDisplayVerificationModalOpen(false);
             }
@@ -248,7 +289,7 @@ function MonitoringSkorPageComponent({ gelanggangName }: { gelanggangName: strin
 
     loadData(activeScheduleId);
     return () => { mounted = false; unsubscribers.forEach(unsub => unsub()); };
-  }, [activeScheduleId, matchDetailsLoaded, resetMatchDisplayData]); 
+  }, [activeScheduleId, matchDetailsLoaded, resetMatchDisplayData]);
 
  useEffect(() => {
     if (isLoading && (matchDetailsLoaded || activeScheduleId === null)) {
@@ -295,7 +336,7 @@ function MonitoringSkorPageComponent({ gelanggangName }: { gelanggangName: strin
     });
 
     const confirmedUnstruckEntries = allRawEntries.filter(e => prevSavedUnstruckKeysFromDewan.has(e.key));
-    
+
     let calculatedTotalMerah = 0;
     let calculatedTotalBiru = 0;
     const scoredPairKeys = new Set<string>();
@@ -352,7 +393,7 @@ function MonitoringSkorPageComponent({ gelanggangName }: { gelanggangName: strin
         (['merah', 'biru'] as PesilatColorIdentity[]).forEach(color => {
           const currentRoundEntries = (currentJuriScoresForId as any)[color]?.[roundKey] || [];
           const prevRoundEntries = (prevJuriScoresForId as any)?.[color]?.[roundKey] || [];
-          
+
           if (currentRoundEntries.length > prevRoundEntries.length) {
             const newEntry = currentRoundEntries[currentRoundEntries.length - 1];
             if (newEntry) {
@@ -384,7 +425,7 @@ function MonitoringSkorPageComponent({ gelanggangName }: { gelanggangName: strin
 
  const getFoulStatus = (pesilatColor: PesilatColorIdentity, type: KetuaActionType, count: number): boolean => {
     if (!timerStatus || !timerStatus.currentRound) return false;
-    
+
     if (type === "Binaan") {
       const pureBinaanActions = ketuaActionsLog.filter(
         log => log.pesilatColor === pesilatColor &&
@@ -399,10 +440,10 @@ function MonitoringSkorPageComponent({ gelanggangName }: { gelanggangName: strin
                log.originalActionType === 'Binaan'
       );
 
-      if (count === 1) { 
+      if (count === 1) {
         return pureBinaanActions.length >= 1;
       }
-      if (count === 2) { 
+      if (count === 2) {
         return pureBinaanActions.length >= 1 && convertedBinaanToTeguranActions.length >= 1;
       }
       return false;
@@ -413,13 +454,13 @@ function MonitoringSkorPageComponent({ gelanggangName }: { gelanggangName: strin
                 action.round === timerStatus.currentRound &&
                 action.actionType === type
     );
-    
+
     if (type === "Teguran") {
         const teguranCount = ketuaActionsLog.filter(
             log => log.pesilatColor === pesilatColor &&
                    log.round === timerStatus.currentRound &&
                    log.actionType === 'Teguran' &&
-                   (typeof log.originalActionType === 'undefined' || log.originalActionType === null) 
+                   (typeof log.originalActionType === 'undefined' || log.originalActionType === null)
         ).length;
         return teguranCount >= count;
     }
@@ -477,7 +518,7 @@ function MonitoringSkorPageComponent({ gelanggangName }: { gelanggangName: strin
         const schedulesRef = collection(db, SCHEDULE_TANDING_COLLECTION);
         const q = query(
             schedulesRef,
-            where('place', '==', gelanggangName), 
+            where('place', '==', gelanggangName),
             where('matchNumber', '>', currentMatchNumber),
             orderBy('matchNumber', 'asc'),
             limit(1)
@@ -503,7 +544,7 @@ function MonitoringSkorPageComponent({ gelanggangName }: { gelanggangName: strin
   if (!gelanggangName && !isLoading) {
     return (
       <div className={cn("flex flex-col min-h-screen items-center justify-center", pageTheme === 'light' ? 'monitoring-theme-light' : 'monitoring-theme-dark', "bg-gray-100 dark:bg-gray-900 text-[var(--monitor-text)]")}>
-        <Header overrideBackgroundClass="bg-gray-100 dark:bg-gray-900" />
+        {/* No global Header here */}
         <AlertTriangle className="h-16 w-16 text-[var(--monitor-overlay-accent-text)] mb-4" />
         <p className="text-xl text-center text-[var(--monitor-overlay-text-primary)] mb-2">Gelanggang Tidak Ditemukan</p>
         <p className="text-sm text-center text-[var(--monitor-overlay-text-secondary)] mb-6">Parameter 'gelanggang' tidak ada di URL. Halaman monitor tidak bisa memuat data.</p>
@@ -517,7 +558,7 @@ function MonitoringSkorPageComponent({ gelanggangName }: { gelanggangName: strin
   if (isLoading && configMatchId === undefined) {
     return (
         <div className={cn("flex flex-col min-h-screen items-center justify-center", pageTheme === 'light' ? 'monitoring-theme-light' : 'monitoring-theme-dark', "bg-gray-100 dark:bg-gray-900 text-[var(--monitor-text)]")}>
-            <Header overrideBackgroundClass="bg-gray-100 dark:bg-gray-900" />
+            {/* No global Header here */}
             <Loader2 className="h-16 w-16 animate-spin text-[var(--monitor-overlay-accent-text)] mb-4" />
             <p className="text-xl">Memuat Konfigurasi Monitor untuk Gelanggang: {gelanggangName || '...'}</p>
         </div>
@@ -526,10 +567,10 @@ function MonitoringSkorPageComponent({ gelanggangName }: { gelanggangName: strin
 
   return (
     <>
-      <Header overrideBackgroundClass="bg-gray-100 dark:bg-gray-900" />
+      {/* No global Header component here */}
       <div
         className={cn(
-          "flex flex-col min-h-screen font-sans bg-gray-100 dark:bg-gray-900", 
+          "flex flex-col min-h-screen font-sans bg-gray-100 dark:bg-gray-900",
           pageTheme === 'light' ? 'monitoring-theme-light' : 'monitoring-theme-dark',
           "text-[var(--monitor-text)]"
         )}
@@ -547,12 +588,16 @@ function MonitoringSkorPageComponent({ gelanggangName }: { gelanggangName: strin
             <Moon className="h-[1.2rem] w-[1.2rem]" />
           )}
         </Button>
-        
-        <Card 
+
+        <Card
             className={cn(
-                "w-full", // Full width, not sticky, regular card flow
-                "mb-2 md:mb-4 shadow-xl bg-gradient-to-r from-primary to-red-700 text-primary-foreground mx-1 md:mx-2 mt-1 md:mt-2"
+                "sticky top-0 z-40 w-full",
+                "mb-2 md:mb-4 shadow-xl bg-gradient-to-r from-primary to-red-700 text-primary-foreground mx-1 md:mx-2 mt-1 md:mt-2",
+                "transition-transform duration-300 ease-in-out",
+                !isHeaderVisible && "-translate-y-full"
             )}
+            onMouseEnter={handlePageHeaderMouseEnter}
+            onMouseLeave={handlePageHeaderMouseLeave}
         >
           <CardContent className="p-3 md:p-4 text-center">
             <h1 className="text-xl md:text-2xl font-bold font-headline">
@@ -616,8 +661,8 @@ function MonitoringSkorPageComponent({ gelanggangName }: { gelanggangName: strin
                     className={cn(
                       "w-full py-1.5 md:py-2 border-2 flex items-center justify-center text-xs md:text-sm font-semibold rounded-md",
                       timerStatus.currentRound === b
-                        ? "bg-[var(--monitor-babak-indicator-active-bg)] text-[var(--monitor-babak-indicator-active-text)] border-[var(--monitor-babak-indicator-active-border)]" 
-                        : "bg-[var(--monitor-babak-indicator-inactive-bg)] text-[var(--monitor-babak-indicator-inactive-text)] border-[var(--monitor-babak-indicator-inactive-border)]" 
+                        ? "bg-[var(--monitor-babak-indicator-active-bg)] text-[var(--monitor-babak-indicator-active-text)] border-[var(--monitor-babak-indicator-active-border)]"
+                        : "bg-[var(--monitor-babak-indicator-inactive-bg)] text-[var(--monitor-babak-indicator-inactive-text)] border-[var(--monitor-babak-indicator-inactive-border)]"
                     )}
                   >
                     {b === 1 ? 'I' : b === 2 ? 'II' : 'III'}
@@ -793,4 +838,3 @@ function PageWithSearchParams() {
   const gelanggangName = searchParams.get('gelanggang');
   return <MonitoringSkorPageComponent gelanggangName={gelanggangName} />;
 }
-
