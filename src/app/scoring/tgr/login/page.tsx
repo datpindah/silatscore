@@ -10,18 +10,18 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import { LogIn, AlertCircle, Loader2 } from 'lucide-react';
+import { LogIn, AlertCircle, Loader2, Landmark } from 'lucide-react'; // Added Landmark
 import type { ScheduleTGR } from '@/lib/types';
 import { db } from '@/lib/firebase';
 import { doc, getDoc, onSnapshot } from 'firebase/firestore';
 import { useAuth } from '@/contexts/AuthContext';
 
-const ACTIVE_TGR_SCHEDULE_CONFIG_PATH = 'app_settings/active_match_tgr';
+const ACTIVE_TGR_MATCHES_BY_GELANGGANG_PATH = 'app_settings/active_tgr_matches_by_gelanggang';
 const SCHEDULE_TGR_COLLECTION = 'schedules_tgr';
 const NO_ACTIVE_TGR_SCHEDULE_VALUE = "NO_ACTIVE_TGR_SCHEDULE_SELECTED";
 
 const defaultPartaiOptions = [
-  { value: NO_ACTIVE_TGR_SCHEDULE_VALUE, label: 'Tidak ada jadwal TGR aktif' },
+  { value: NO_ACTIVE_TGR_SCHEDULE_VALUE, label: 'Masukkan nama gelanggang untuk melihat partai aktif' },
 ];
 
 const tgrHalamanOptions = [
@@ -35,6 +35,8 @@ const tgrHalamanOptions = [
   { value: '/scoring/tgr/dewan-1', label: 'Dewan 1 (Input Penalti TGR)' },
   { value: '/scoring/tgr/ketua-pertandingan', label: 'Ketua Pertandingan (TGR)' },
   { value: '/scoring/tgr/monitoring-skor', label: 'Monitoring Skor (Display Umum TGR)' },
+  // Admin roles can be added here if needed, or handled separately
+  { value: '/admin', label: 'Admin Panel' }
 ];
 
 
@@ -42,35 +44,43 @@ function TGRLoginPageContent() {
   const router = useRouter();
   const { user, signIn, loading: authLoading, error: authError, setError: setAuthError } = useAuth();
 
-  const [partaiOptions, setPartaiOptions] = useState<{value: string; label: string}[]>(defaultPartaiOptions);
-  const [selectedPartai, setSelectedPartai] = useState<string>(NO_ACTIVE_TGR_SCHEDULE_VALUE);
+  const [partaiInfo, setPartaiInfo] = useState<string>(defaultPartaiOptions[0].label);
+  const [selectedPartaiId, setSelectedPartaiId] = useState<string>(NO_ACTIVE_TGR_SCHEDULE_VALUE);
   const [selectedHalaman, setSelectedHalaman] = useState<string>('');
   const [email, setEmail] = useState<string>('');
   const [password, setPassword] = useState<string>('');
+  const [gelanggang, setGelanggang] = useState<string>('');
   
   const [pageError, setPageError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
-  const [scheduleLoading, setScheduleLoading] = useState<boolean>(true);
+  const [scheduleLoading, setScheduleLoading] = useState<boolean>(false);
 
   useEffect(() => {
-    if (user && selectedHalaman) {
+    if (user && selectedHalaman && gelanggang) {
+        router.push(`${selectedHalaman}?gelanggang=${encodeURIComponent(gelanggang)}`);
+    } else if (user && selectedHalaman && selectedHalaman.startsWith('/admin')) {
         router.push(selectedHalaman);
     }
-  }, [user, selectedHalaman, router]);
+  }, [user, selectedHalaman, gelanggang, router]);
   
   useEffect(() => {
+    if (!gelanggang.trim()) {
+      setPartaiInfo(defaultPartaiOptions[0].label);
+      setSelectedPartaiId(NO_ACTIVE_TGR_SCHEDULE_VALUE);
+      setScheduleLoading(false);
+      return;
+    }
+
     setScheduleLoading(true);
-    const unsub = onSnapshot(doc(db, ACTIVE_TGR_SCHEDULE_CONFIG_PATH), async (docSnap) => {
-      if (docSnap.exists() && docSnap.data()?.activeScheduleId) {
-        const activeScheduleId = docSnap.data().activeScheduleId;
-        if (activeScheduleId === null || activeScheduleId === "") {
-            setPartaiOptions(defaultPartaiOptions);
-            setSelectedPartai(NO_ACTIVE_TGR_SCHEDULE_VALUE);
-            setScheduleLoading(false);
-            return;
-        }
+    const unsub = onSnapshot(doc(db, ACTIVE_TGR_MATCHES_BY_GELANGGANG_PATH), async (docSnap) => {
+      let activeScheduleIdForGelanggang: string | null = null;
+      if (docSnap.exists()) {
+        activeScheduleIdForGelanggang = docSnap.data()?.[gelanggang.trim()] || null;
+      }
+
+      if (activeScheduleIdForGelanggang) {
         try {
-          const scheduleDocRef = doc(db, SCHEDULE_TGR_COLLECTION, activeScheduleId);
+          const scheduleDocRef = doc(db, SCHEDULE_TGR_COLLECTION, activeScheduleIdForGelanggang);
           const scheduleDoc = await getDoc(scheduleDocRef);
 
           if (scheduleDoc.exists()) {
@@ -79,32 +89,32 @@ function TGRLoginPageContent() {
             if (activeScheduleData.pesilatBiruName) {
               displayLabel += ` & ${activeScheduleData.pesilatBiruName}`;
             }
-            displayLabel += ` (${activeScheduleData.category})`;
-            setPartaiOptions([{ value: activeScheduleId, label: displayLabel }]);
-            setSelectedPartai(activeScheduleId);
+            displayLabel += ` (${activeScheduleData.category}) di Gel. ${gelanggang.trim()}`;
+            setPartaiInfo(displayLabel);
+            setSelectedPartaiId(activeScheduleIdForGelanggang);
           } else {
-            setPartaiOptions(defaultPartaiOptions);
-            setSelectedPartai(NO_ACTIVE_TGR_SCHEDULE_VALUE);
+            setPartaiInfo(`Tidak ada jadwal TGR aktif untuk gelanggang: ${gelanggang.trim()}`);
+            setSelectedPartaiId(NO_ACTIVE_TGR_SCHEDULE_VALUE);
           }
         } catch (err) {
           console.error("Error fetching active TGR schedule details:", err);
-          setPartaiOptions(defaultPartaiOptions);
-          setSelectedPartai(NO_ACTIVE_TGR_SCHEDULE_VALUE);
+          setPartaiInfo(`Error memuat jadwal untuk gelanggang: ${gelanggang.trim()}`);
+          setSelectedPartaiId(NO_ACTIVE_TGR_SCHEDULE_VALUE);
         }
       } else {
-        setPartaiOptions(defaultPartaiOptions);
-        setSelectedPartai(NO_ACTIVE_TGR_SCHEDULE_VALUE);
+        setPartaiInfo(`Tidak ada jadwal TGR aktif untuk gelanggang: ${gelanggang.trim()}`);
+        setSelectedPartaiId(NO_ACTIVE_TGR_SCHEDULE_VALUE);
       }
       setScheduleLoading(false);
     }, (errorSub) => {
-      console.error("Error subscribing to active TGR schedule config:", errorSub);
-      setPartaiOptions(defaultPartaiOptions);
-      setSelectedPartai(NO_ACTIVE_TGR_SCHEDULE_VALUE);
+      console.error("Error subscribing to active TGR matches by gelanggang:", errorSub);
+      setPartaiInfo(`Error memuat peta jadwal gelanggang.`);
+      setSelectedPartaiId(NO_ACTIVE_TGR_SCHEDULE_VALUE);
       setScheduleLoading(false);
     });
 
     return () => unsub();
-  }, []);
+  }, [gelanggang]);
 
   useEffect(() => {
     if (authError) {
@@ -122,8 +132,12 @@ function TGRLoginPageContent() {
     e.preventDefault();
     setPageError(null);
     
-    if (selectedPartai === NO_ACTIVE_TGR_SCHEDULE_VALUE && selectedHalaman && !selectedHalaman.startsWith('/admin')) {
-      setPageError('Tidak ada jadwal TGR aktif yang bisa dipilih. Silakan aktifkan jadwal di halaman Admin.');
+    if (!gelanggang.trim() && selectedHalaman && !selectedHalaman.startsWith('/admin')) {
+        setPageError('Nama gelanggang tidak boleh kosong untuk halaman scoring.');
+        return;
+    }
+    if (selectedPartaiId === NO_ACTIVE_TGR_SCHEDULE_VALUE && selectedHalaman && !selectedHalaman.startsWith('/admin')) {
+      setPageError(`Tidak ada jadwal TGR aktif yang bisa dipilih untuk gelanggang: ${gelanggang.trim()}. Silakan aktifkan jadwal di halaman Admin atau periksa nama gelanggang.`);
       return;
     }
     if (!selectedHalaman) {
@@ -138,9 +152,8 @@ function TGRLoginPageContent() {
     setIsSubmitting(true);
     try {
       await signIn(email, password);
+      // Redirect is handled by useEffect watching `user`, `selectedHalaman`, and `gelanggang`
     } catch (submitError) {
-      // This catch block is a safeguard for unexpected errors from signIn,
-      // though signIn from AuthContext is designed to handle its own errors.
       console.error("Error during TGR login handleSubmit calling signIn:", submitError);
       setPageError("Terjadi kesalahan tak terduga saat mencoba login.");
     } finally {
@@ -158,7 +171,7 @@ function TGRLoginPageContent() {
           <CardHeader>
             <CardTitle className="text-3xl font-headline text-primary text-center">Login Panel Scoring TGR</CardTitle>
             <CardDescription className="text-center font-body">
-              Masukkan email dan password Anda. Pilih partai TGR dan halaman tujuan.
+              Masukkan email, password, dan nama gelanggang. Pilih halaman tujuan.
             </CardDescription>
           </CardHeader>
           <form onSubmit={handleSubmit}>
@@ -197,17 +210,26 @@ function TGRLoginPageContent() {
                 />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="partai-tgr" className="font-headline">Partai TGR Aktif</Label>
-                 <Input
-                  id="partai-tgr-display" 
+                <Label htmlFor="gelanggang" className="font-headline">
+                  <Landmark className="inline-block mr-1 h-4 w-4 text-primary" /> Nama Gelanggang
+                </Label>
+                <Input
+                  id="gelanggang"
                   type="text"
-                  value={partaiOptions[0]?.label || 'Memuat...'}
-                  readOnly
-                  disabled
-                  className="bg-muted/50 text-muted-foreground"
+                  value={gelanggang}
+                  onChange={(e) => setGelanggang(e.target.value)}
+                  placeholder="cth: Gelanggang TGR 1"
+                  required={!selectedHalaman.startsWith('/admin')}
+                  disabled={isLoadingOverall}
+                  className="bg-background/80"
                 />
-                 {scheduleLoading && partaiOptions[0]?.value === NO_ACTIVE_TGR_SCHEDULE_VALUE && <p className="text-xs text-muted-foreground">Memuat jadwal TGR aktif...</p>}
-                 {!scheduleLoading && partaiOptions[0]?.value === NO_ACTIVE_TGR_SCHEDULE_VALUE && <p className="text-xs text-destructive">Tidak ada jadwal TGR aktif. Silakan atur di Admin.</p>}
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="partai-tgr-info" className="font-headline">Partai TGR Aktif di Gelanggang Ini</Label>
+                 <div className="p-3 min-h-[3rem] rounded-md border border-input bg-muted/50 text-sm text-muted-foreground flex items-center">
+                    {scheduleLoading ? <Loader2 className="h-4 w-4 animate-spin mr-2"/> : null}
+                    {partaiInfo}
+                 </div>
               </div>
               <div className="space-y-2">
                 <Label htmlFor="halaman-tgr" className="font-headline">Pilih Halaman Tujuan TGR</Label>
@@ -246,10 +268,13 @@ function TGRLoginPageContent() {
 }
 
 export default function TGRLoginPage() {
+  // Wrap with Suspense because TGRLoginPageContent might use hooks like useSearchParams indirectly
+  // or if it were to be used in a context that needs it.
+  // For now, standard export is fine if TGRLoginPageContent itself isn't Suspense-gated.
+  // However, to be safe and consistent with other login/scoring pages that will use useSearchParams:
   return (
-    <Suspense fallback={<div className="flex h-screen items-center justify-center"><Loader2 className="h-12 w-12 animate-spin text-primary" /> Memuat Halaman Login...</div>}>
+    <Suspense fallback={<div className="flex h-screen items-center justify-center"><Loader2 className="h-12 w-12 animate-spin text-primary" /> Memuat Halaman Login TGR...</div>}>
       <TGRLoginPageContent />
     </Suspense>
   )
 }
-
