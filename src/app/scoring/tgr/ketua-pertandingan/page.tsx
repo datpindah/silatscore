@@ -1,8 +1,9 @@
 
 "use client";
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, Suspense } from 'react'; // Added Suspense
 import Link from 'next/link';
+import { useSearchParams } from 'next/navigation'; // Added useSearchParams
 import { Header } from '@/components/layout/Header';
 import { Button } from '@/components/ui/button';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -14,7 +15,8 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { cn } from '@/lib/utils';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
 
-const ACTIVE_TGR_SCHEDULE_CONFIG_PATH = 'app_settings/active_match_tgr';
+// Changed Firestore path
+const ACTIVE_TGR_MATCHES_BY_GELANGGANG_PATH = 'app_settings/active_tgr_matches_by_gelanggang';
 const SCHEDULE_TGR_COLLECTION = 'schedules_tgr';
 const MATCHES_TGR_COLLECTION = 'matches_tgr';
 const JURI_SCORES_TGR_SUBCOLLECTION = 'juri_scores_tgr';
@@ -103,7 +105,10 @@ function calculateMedian(scores: number[]): number {
 }
 
 
-export default function KetuaPertandinganTGRPage() {
+// Renamed original export default
+function KetuaPertandinganTGRPageComponent({ gelanggangNameParam }: { gelanggangNameParam: string | null }) {
+  const [gelanggangName, setGelanggangName] = useState<string | null>(null); // State for gelanggangName
+
   const [configMatchId, setConfigMatchId] = useState<string | null | undefined>(undefined);
   const [activeMatchId, setActiveMatchId] = useState<string | null>(null);
   const [scheduleDetails, setScheduleDetails] = useState<ScheduleTGR | null>(null);
@@ -122,8 +127,10 @@ export default function KetuaPertandinganTGRPage() {
 
   const [isWinnerModalOpen, setIsWinnerModalOpen] = useState(false);
   const [winnerData, setWinnerData] = useState<TGRMatchResult | null>(null);
+  
+  // Added isLoading state for overall page loading indication
+  const [isLoadingPage, setIsLoadingPage] = useState(true);
 
-  const derivedIsLoading = configMatchId === undefined || (!!activeMatchId && !matchDetailsLoaded);
 
   const resetPageData = useCallback(() => {
     setScheduleDetails(null);
@@ -139,50 +146,88 @@ export default function KetuaPertandinganTGRPage() {
     setIsWinnerModalOpen(false);
     setWinnerData(null);
   }, []);
-
+  
+  // Effect to set gelanggangName from prop
   useEffect(() => {
-    const unsubConfig = onSnapshot(doc(db, ACTIVE_TGR_SCHEDULE_CONFIG_PATH), (docSnap) => {
-      const newDbConfigId = docSnap.exists() ? docSnap.data()?.activeScheduleId : null;
+    setGelanggangName(gelanggangNameParam);
+  }, [gelanggangNameParam]);
+
+  // Effect 1: Listen to gelanggang map to get configMatchId
+  useEffect(() => {
+    if (!gelanggangName) {
+      setError("Nama gelanggang tidak ditemukan di URL.");
+      setConfigMatchId(null); 
+      setIsLoadingPage(false);
+      return;
+    }
+    setError(null); 
+    setIsLoadingPage(true); // Start loading when gelanggangName is present
+
+    const unsubGelanggangMap = onSnapshot(doc(db, ACTIVE_TGR_MATCHES_BY_GELANGGANG_PATH), (docSnap) => {
+      let newDbConfigId: string | null = null;
+      if (docSnap.exists()) {
+        newDbConfigId = docSnap.data()?.[gelanggangName] || null;
+      }
       setConfigMatchId(prevId => (prevId === newDbConfigId ? prevId : newDbConfigId));
+      if (!newDbConfigId) {
+        setError(`Tidak ada jadwal TGR aktif untuk Gelanggang: ${gelanggangName}.`);
+        // Keep setIsLoadingPage true here, let subsequent effects handle it if matchId becomes null
+      }
     }, (err) => {
-      console.error("[KetuaTGR] Error fetching active schedule config:", err);
-      setError("Gagal memuat konfigurasi jadwal aktif TGR.");
+      console.error("[KetuaTGR] Error fetching active matches by gelanggang map:", err);
+      setError("Gagal memuat peta jadwal aktif TGR per gelanggang.");
       setConfigMatchId(null);
+      setIsLoadingPage(false); // Stop loading on error
     });
-    return () => unsubConfig();
-  }, []);
+    return () => unsubGelanggangMap();
+  }, [gelanggangName]);
 
+  // Effect 2: Sync activeMatchId with configMatchId and reset page data
   useEffect(() => {
-    if (configMatchId === undefined) return; 
-    if (configMatchId === null) {
+    if (configMatchId === undefined) { // Still waiting for configMatchId
+      setIsLoadingPage(true);
+      return;
+    }
+    if (configMatchId === null) { // No active match for this gelanggang
       if (activeMatchId !== null) { 
         resetPageData(); 
         setActiveMatchId(null); 
       }
-      setError("Tidak ada jadwal TGR yang aktif."); 
+      if (!error) setError(`Tidak ada jadwal TGR aktif untuk Gelanggang: ${gelanggangName}.`);
+      setIsLoadingPage(false); // Stop loading as there's no match
       return;
     }
     if (configMatchId !== activeMatchId) {
       resetPageData();
       setActiveMatchId(configMatchId);
+      // setIsLoadingPage(true) will be set by the next effect if activeMatchId is valid
     }
-  }, [configMatchId, activeMatchId, resetPageData]);
+  }, [configMatchId, activeMatchId, resetPageData, gelanggangName, error]);
 
 
+  // Effect 3: Load Schedule Details and other match data when activeMatchId changes
   useEffect(() => {
     if (!activeMatchId) {
       setMatchDetailsLoaded(false); 
-      if (!error?.includes("konfigurasi")) setError(null);
+      // If configMatchId also became null, the previous effect handles error and loading.
+      // If activeMatchId became null for other reasons, ensure loading stops.
+      if(isLoadingPage && configMatchId === null) setIsLoadingPage(false);
       return;
     }
 
     let mounted = true;
+    // Only set loading true if we are actually going to fetch data for a new match
+    if (!matchDetailsLoaded) setIsLoadingPage(true); 
+    
     const unsubscribers: (() => void)[] = [];
 
     const loadData = async (currentMatchId: string) => {
-      if (!mounted || !currentMatchId) return;
+      if (!mounted || !currentMatchId) {
+        if(mounted) setIsLoadingPage(false); // Ensure loading stops if condition not met
+        return;
+      }
       
-      setMatchDetailsLoaded(false); 
+      let scheduleDetailsLoadedThisEffect = false;
 
       try {
         const scheduleDocRef = doc(db, SCHEDULE_TGR_COLLECTION, currentMatchId);
@@ -192,46 +237,51 @@ export default function KetuaPertandinganTGRPage() {
         if (scheduleDocSnap.exists()) {
           setScheduleDetails(scheduleDocSnap.data() as ScheduleTGR);
           setMatchDetailsLoaded(true); 
+          scheduleDetailsLoadedThisEffect = true;
         } else {
           setError(`Detail jadwal TGR ID ${currentMatchId} tidak ditemukan.`);
           setScheduleDetails(null);
           setMatchDetailsLoaded(false); 
+          if (mounted) setIsLoadingPage(false); // Stop loading if schedule not found
           return; 
         }
 
-        const matchDataDocRef = doc(db, MATCHES_TGR_COLLECTION, currentMatchId);
-        unsubscribers.push(onSnapshot(matchDataDocRef, (docSnap) => {
-          if (!mounted) return;
-          if (docSnap.exists()) {
-            const data = docSnap.data();
-            const fsTimerStatus = data?.timerStatus as TGRTimerStatus | undefined;
-            setTgrTimerStatus(fsTimerStatus ? { ...initialGlobalTgrTimerStatus, ...fsTimerStatus } : initialGlobalTgrTimerStatus);
-            if (data?.matchResult) { 
-              setWinnerData(data.matchResult as TGRMatchResult);
-              setIsWinnerModalOpen(true);
-            } else {
-              setWinnerData(null);
-            }
-          } else {
-            setTgrTimerStatus(initialGlobalTgrTimerStatus);
-            setWinnerData(null);
-          }
-        }));
-
-        TGR_JURI_IDS.forEach(juriId => {
-          unsubscribers.push(onSnapshot(doc(matchDataDocRef, JURI_SCORES_TGR_SUBCOLLECTION, juriId), (juriScoreDoc) => {
-            if (!mounted) return;
-            setAllJuriScores(prev => ({
-              ...prev,
-              [juriId]: juriScoreDoc.exists() ? juriScoreDoc.data() as TGRJuriScore : null
+        // Only subscribe to other data if schedule is loaded
+        if(scheduleDetailsLoadedThisEffect) {
+            const matchDataDocRef = doc(db, MATCHES_TGR_COLLECTION, currentMatchId);
+            unsubscribers.push(onSnapshot(matchDataDocRef, (docSnap) => {
+              if (!mounted) return;
+              if (docSnap.exists()) {
+                const data = docSnap.data();
+                const fsTimerStatus = data?.timerStatus as TGRTimerStatus | undefined;
+                setTgrTimerStatus(fsTimerStatus ? { ...initialGlobalTgrTimerStatus, ...fsTimerStatus } : initialGlobalTgrTimerStatus);
+                if (data?.matchResult) { 
+                  setWinnerData(data.matchResult as TGRMatchResult);
+                  setIsWinnerModalOpen(true);
+                } else {
+                  setWinnerData(null);
+                }
+              } else {
+                setTgrTimerStatus(initialGlobalTgrTimerStatus);
+                setWinnerData(null);
+              }
             }));
-          }));
-        });
-        
-        unsubscribers.push(onSnapshot(query(collection(matchDataDocRef, DEWAN_PENALTIES_TGR_SUBCOLLECTION), orderBy("timestamp", "asc")), (snap) => {
-          if (!mounted) return;
-          setDewanPenalties(snap.docs.map(d => ({ id: d.id, ...d.data() } as TGRDewanPenalty)));
-        }));
+
+            TGR_JURI_IDS.forEach(juriId => {
+              unsubscribers.push(onSnapshot(doc(matchDataDocRef, JURI_SCORES_TGR_SUBCOLLECTION, juriId), (juriScoreDoc) => {
+                if (!mounted) return;
+                setAllJuriScores(prev => ({
+                  ...prev,
+                  [juriId]: juriScoreDoc.exists() ? juriScoreDoc.data() as TGRJuriScore : null
+                }));
+              }));
+            });
+            
+            unsubscribers.push(onSnapshot(query(collection(matchDataDocRef, DEWAN_PENALTIES_TGR_SUBCOLLECTION), orderBy("timestamp", "asc")), (snap) => {
+              if (!mounted) return;
+              setDewanPenalties(snap.docs.map(d => ({ id: d.id, ...d.data() } as TGRDewanPenalty)));
+            }));
+        }
 
       } catch (err) {
         if (mounted) { 
@@ -239,14 +289,17 @@ export default function KetuaPertandinganTGRPage() {
           setError("Gagal memuat data pertandingan TGR."); 
           setMatchDetailsLoaded(false); 
         }
+      } finally {
+         // Stop loading only if all expected parts are done or failed
+        if (mounted && (scheduleDetailsLoadedThisEffect || error)) setIsLoadingPage(false);
       }
     };
 
     loadData(activeMatchId);
     return () => { mounted = false; unsubscribers.forEach(unsub => unsub()); };
-  }, [activeMatchId]);
+  }, [activeMatchId]); // Removed matchDetailsLoaded from deps to avoid re-triggering on sub-data load
 
-
+  // Effect for score calculations
   useEffect(() => {
     if (!scheduleDetails) {
       setMedianScores(initialSideScores);
@@ -338,9 +391,9 @@ export default function KetuaPertandinganTGRPage() {
         } else if (finalScores.merah > finalScores.biru) {
             winner = 'merah';
         } else { // Skor akhir sama, cek standar deviasi
-            if (standardDeviations.biru > standardDeviations.merah) {
+            if (standardDeviations.biru < standardDeviations.merah) { // Lower std dev is better
                 winner = 'biru';
-            } else if (standardDeviations.merah > standardDeviations.biru) {
+            } else if (standardDeviations.merah < standardDeviations.biru) {
                 winner = 'merah';
             } else {
                 winner = 'seri'; // Jika standar deviasi juga sama
@@ -390,14 +443,36 @@ export default function KetuaPertandinganTGRPage() {
     }
   };
 
+  // isLoadingPage is true if gelanggangName is missing, or config is loading, or activeMatchId is set but details not loaded
+  const derivedIsLoading = isLoadingPage || (gelanggangName && configMatchId === undefined) || (activeMatchId && !matchDetailsLoaded);
 
-  if (derivedIsLoading) {
+
+  if (derivedIsLoading && !gelanggangName) {
+    return (
+      <div className="flex flex-col min-h-screen"><Header />
+        <main className="flex-1 container mx-auto p-4 md:p-8 flex flex-col items-center justify-center text-center">
+            <Info className="h-12 w-12 text-destructive mb-4" />
+            <h1 className="text-xl font-semibold text-destructive">Nama Gelanggang Diperlukan</h1>
+            <p className="text-muted-foreground mt-2">Parameter 'gelanggang' tidak ditemukan di URL.</p>
+            <Button asChild className="mt-6">
+                <Link href={`/scoring/tgr/login`}><ArrowLeft className="mr-2 h-4 w-4"/> Kembali ke Login</Link>
+            </Button>
+        </main>
+      </div>
+    );
+  }
+
+  if (derivedIsLoading) { // General loading for when gelanggangName is present but data is still fetching
     return (
       <div className="flex flex-col min-h-screen">
         <Header />
         <main className="flex-1 container mx-auto p-4 md:p-8 flex flex-col items-center justify-center">
           <Loader2 className="h-12 w-12 animate-spin text-primary mb-4" />
-          <p className="text-lg text-muted-foreground">Memuat Panel Ketua Pertandingan TGR...</p>
+          <p className="text-lg text-muted-foreground">
+            {gelanggangName && configMatchId === undefined ? `Memuat konfigurasi Gel. ${gelanggangName}...` :
+            gelanggangName && activeMatchId && !matchDetailsLoaded ? `Memuat detail pertandingan Gel. ${gelanggangName}...` :
+            `Memuat Panel Ketua TGR...`}
+          </p>
         </main>
       </div>
     );
@@ -411,7 +486,9 @@ export default function KetuaPertandinganTGRPage() {
           <Info className="mx-auto h-12 w-12 text-destructive mb-4" />
           <h1 className="text-2xl font-bold text-destructive mb-2">Terjadi Kesalahan</h1>
           <p className="text-muted-foreground mb-4">{error}</p>
-          <Button variant="outline" asChild><Link href="/scoring/tgr"><ArrowLeft className="mr-2 h-4 w-4" /> Kembali</Link></Button>
+          <Button variant="outline" asChild>
+            <Link href={`/scoring/tgr/login?gelanggang=${gelanggangName || ''}`}><ArrowLeft className="mr-2 h-4 w-4" /> Kembali</Link>
+          </Button>
         </main>
       </div>
     );
@@ -424,8 +501,10 @@ export default function KetuaPertandinganTGRPage() {
         <main className="flex-1 container mx-auto p-4 md:p-8 text-center">
           <Info className="mx-auto h-12 w-12 text-yellow-500 mb-4" />
           <h1 className="text-2xl font-bold text-yellow-600 mb-2">Informasi Tidak Tersedia</h1>
-          <p className="text-muted-foreground mb-4">Tidak ada jadwal TGR yang aktif atau detail tidak dapat dimuat.</p>
-          <Button variant="outline" asChild><Link href="/scoring/tgr"><ArrowLeft className="mr-2 h-4 w-4" /> Kembali</Link></Button>
+          <p className="text-muted-foreground mb-4">{`Tidak ada jadwal TGR yang aktif untuk Gelanggang: ${gelanggangName || 'N/A'} atau detail tidak dapat dimuat.`}</p>
+          <Button variant="outline" asChild>
+             <Link href={`/scoring/tgr/login?gelanggang=${gelanggangName || ''}`}><ArrowLeft className="mr-2 h-4 w-4" /> Kembali</Link>
+          </Button>
         </main>
       </div>
     );
@@ -507,7 +586,7 @@ export default function KetuaPertandinganTGRPage() {
                   <TableRow><TableCell className="font-medium py-2 px-2">Stamina/Flow <span className="text-xs">(0.01-0.10)</span></TableCell>
                     {TGR_JURI_IDS.map(id => (
                       <TableCell key={`stamina-${id}-${side}`} className="text-center py-2 px-2">
-                        {derivedIsLoading ? <Skeleton className="h-5 w-10 mx-auto" /> : (allJuriScores[id]?.[side]?.isReady ? allJuriScores[id]?.[side]?.staminaKemantapanBonus.toFixed(2) : '-')}
+                        {derivedIsLoading ? <Skeleton className="h-5 w-10 mx-auto" /> : (allJuriScores[id]?.[side]?.isReady ? (allJuriScores[id]?.[side]?.staminaKemantapanBonus?.toFixed(2) ?? '-') : '-')}
                       </TableCell>
                     ))}
                   </TableRow>
@@ -594,7 +673,7 @@ export default function KetuaPertandinganTGRPage() {
             Tentukan Pemenang
           </Button>
           <Button variant="outline" asChild>
-            <Link href="/scoring/tgr/login"><ArrowLeft className="mr-2 h-4 w-4" /> Kembali ke Login TGR</Link>
+            <Link href={`/scoring/tgr/login?gelanggang=${gelanggangName || ''}`}><ArrowLeft className="mr-2 h-4 w-4" /> Kembali ke Login TGR</Link>
           </Button>
         </div>
 
@@ -689,3 +768,26 @@ export default function KetuaPertandinganTGRPage() {
     </div>
   );
 }
+
+// Wrapper component to handle Suspense for useSearchParams
+export default function KetuaPertandinganTGRPageWithSuspense() {
+  return (
+    <Suspense fallback={
+      <div className="flex flex-col min-h-screen"> <Header />
+        <main className="flex-1 container mx-auto p-4 md:p-8 flex flex-col items-center justify-center">
+          <Loader2 className="h-12 w-12 animate-spin text-primary mb-4" />
+          <p className="text-lg text-muted-foreground">Memuat Panel Ketua Pertandingan TGR...</p>
+        </main>
+      </div>
+    }>
+      <KetuaPertandinganTGRPageComponentWithSearchParams />
+    </Suspense>
+  );
+}
+
+function KetuaPertandinganTGRPageComponentWithSearchParams() {
+  const searchParams = useSearchParams();
+  const gelanggangNameParam = searchParams.get('gelanggang');
+  return <KetuaPertandinganTGRPageComponent gelanggangNameParam={gelanggangNameParam} />;
+}
+
