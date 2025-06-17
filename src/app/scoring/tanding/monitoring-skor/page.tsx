@@ -5,7 +5,7 @@ import { useState, useEffect, useCallback, useRef, Suspense } from 'react';
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation'; // Ditambahkan
 import { Button } from '@/components/ui/button';
-import { Header } from '@/components/layout/Header';
+// import { Header } from '@/components/layout/Header'; // Header global tidak lagi di-render di halaman ini
 import { ArrowLeft, Eye, Loader2, RadioTower, AlertTriangle, Sun, Moon, ChevronsRight } from 'lucide-react';
 import type { ScheduleTanding, TimerStatus, VerificationRequest, JuriVoteValue, KetuaActionLogEntry, PesilatColorIdentity, KetuaActionType } from '@/lib/types';
 import type { ScoreEntry as LibScoreEntryType, RoundScores as LibRoundScoresType } from '@/lib/types';
@@ -521,7 +521,7 @@ function MonitoringSkorPageComponent({ gelanggangName }: { gelanggangName: strin
 
   return (
     <>
-      <Header overrideBackgroundClass="bg-gray-100 dark:bg-gray-900" />
+      {/* Global Header tidak lagi di-render di sini */}
       <div
         className={cn(
           "flex flex-col min-h-screen font-sans overflow-hidden relative",
@@ -543,6 +543,7 @@ function MonitoringSkorPageComponent({ gelanggangName }: { gelanggangName: strin
           )}
         </Button>
         
+        {/* Page-specific header card */}
         <Card className="mb-2 md:mb-4 shadow-xl bg-gradient-to-r from-primary to-red-700 text-primary-foreground mx-1 md:mx-2 mt-1 md:mt-2">
           <CardContent className="p-3 md:p-4 text-center">
             <h1 className="text-xl md:text-2xl font-bold font-headline">
@@ -795,4 +796,3 @@ function PageWithSearchParams() {
   const gelanggangName = searchParams.get('gelanggang');
   return <MonitoringSkorPageComponent gelanggangName={gelanggangName} />;
 }
-
