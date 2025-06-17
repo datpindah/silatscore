@@ -5,7 +5,7 @@ import { useState, useEffect, useCallback, useRef, Suspense, type PointerEvent }
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
 import { Button } from '@/components/ui/button';
-import { Header } from '@/components/layout/Header'; // Ditambahkan kembali
+import { Header } from '@/components/layout/Header'; 
 import { ArrowLeft, Eye, Loader2, RadioTower, AlertTriangle, Sun, Moon, ChevronsRight } from 'lucide-react';
 import type { ScheduleTanding, TimerStatus, VerificationRequest, JuriVoteValue, KetuaActionLogEntry, PesilatColorIdentity, KetuaActionType } from '@/lib/types';
 import type { ScoreEntry as LibScoreEntryType, RoundScores as LibRoundScoresType } from '@/lib/types';
@@ -520,6 +520,7 @@ function MonitoringSkorPageComponent({ gelanggangName }: { gelanggangName: strin
     );
   }
 
+
   return (
     <>
       <Header overrideBackgroundClass="bg-gray-100 dark:bg-gray-900" />
@@ -527,14 +528,14 @@ function MonitoringSkorPageComponent({ gelanggangName }: { gelanggangName: strin
         className={cn(
           "flex flex-col min-h-screen font-sans",
           pageTheme === 'light' ? 'monitoring-theme-light' : 'monitoring-theme-dark',
-          "bg-gray-100 dark:bg-gray-900 text-[var(--monitor-text)]" // Pastikan bg diterapkan di sini juga
+          "bg-gray-100 dark:bg-gray-900 text-[var(--monitor-text)]"
         )}
       >
         <Button
           variant="outline"
           size="icon"
           onClick={() => setPageTheme(prev => prev === 'light' ? 'dark' : 'light')}
-          className="absolute top-20 right-2 z-[60] bg-card text-card-foreground border-border hover:bg-muted" // Disesuaikan top agar tidak tertutup Header global
+          className="absolute top-20 right-2 z-[60] bg-card text-card-foreground border-border hover:bg-muted" 
           aria-label={pageTheme === "dark" ? "Ganti ke mode terang" : "Ganti ke mode gelap"}
         >
           {pageTheme === 'dark' ? (
@@ -544,6 +545,7 @@ function MonitoringSkorPageComponent({ gelanggangName }: { gelanggangName: strin
           )}
         </Button>
 
+        {/* Page-specific header (the red gradient card) */}
         <Card className="mb-2 md:mb-4 shadow-xl bg-gradient-to-r from-primary to-red-700 text-primary-foreground mx-1 md:mx-2 mt-1 md:mt-2">
           <CardContent className="p-3 md:p-4 text-center">
             <h1 className="text-xl md:text-2xl font-bold font-headline">
