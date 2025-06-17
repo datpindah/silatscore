@@ -69,25 +69,28 @@ export function Header({ overrideBackgroundClass }: { overrideBackgroundClass?: 
   };
 
   const baseClasses = "sticky top-0 z-50 w-full border-b border-border/40";
-  const visibilityAndTransformClasses = isVisible
-    ? "transform-none" // Explicitly set to no transform when visible
-    : "-translate-y-full"; // Transform for hiding
   const transitionClasses = "transition-transform duration-300 ease-in-out";
+  const visibilityAndTransformClasses = isVisible
+    ? "transform-none"
+    : "-translate-y-full";
+  
+  let finalClassName;
 
-  let backgroundClassToUse: string;
   if (overrideBackgroundClass) {
-    backgroundClassToUse = overrideBackgroundClass;
+    finalClassName = cn(
+      baseClasses,
+      transitionClasses,
+      visibilityAndTransformClasses,
+      overrideBackgroundClass // Apply override directly
+    );
   } else {
-    backgroundClassToUse = "bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60";
+    finalClassName = cn(
+      baseClasses,
+      transitionClasses,
+      visibilityAndTransformClasses,
+      "bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60" // Default background classes
+    );
   }
-
-  const finalClassName = cn(
-    baseClasses,
-    transitionClasses,
-    visibilityAndTransformClasses,
-    backgroundClassToUse // Background class applied last
-  );
-
 
   return (
     <header
