@@ -522,13 +522,15 @@ function MonitoringSkorPageComponent({ gelanggangName }: { gelanggangName: strin
 
 
   return (
-    <>
+    <div className="flex flex-col min-h-screen bg-gray-100 dark:bg-gray-900">
       <Header overrideBackgroundClass="bg-gray-100 dark:bg-gray-900" />
       <div
         className={cn(
-          "flex flex-col min-h-screen font-sans",
+          "flex flex-col flex-1 font-sans", // Changed from min-h-screen to flex-1
           pageTheme === 'light' ? 'monitoring-theme-light' : 'monitoring-theme-dark',
-          "bg-gray-100 dark:bg-gray-900 text-[var(--monitor-text)]"
+          // bg-gray-100 dark:bg-gray-900 is now handled by parent
+          // explicit bg-[var(--monitor-bg)] is useful if theme class itself doesn't set background
+          "bg-[var(--monitor-bg)] text-[var(--monitor-text)]" 
         )}
       >
         <Button
@@ -763,7 +765,7 @@ function MonitoringSkorPageComponent({ gelanggangName }: { gelanggangName: strin
               </Button>
           )}
       </div>
-    </>
+    </div>
   );
 }
 
@@ -786,3 +788,4 @@ function PageWithSearchParams() {
   const gelanggangName = searchParams.get('gelanggang');
   return <MonitoringSkorPageComponent gelanggangName={gelanggangName} />;
 }
+
