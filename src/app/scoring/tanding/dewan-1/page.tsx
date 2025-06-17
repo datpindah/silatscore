@@ -176,55 +176,55 @@ function DewanSatuPageComponent() {
   const updateTimerStatusInFirestore = useCallback(async (newStatusUpdates: Partial<TimerStatus>) => {
     if (!activeScheduleId) return;
     try {
-      const matchDocRef = doc(db, MATCHES_TANDING_COLLECTION, activeScheduleId);
-      const docSnap = await getDoc(matchDocRef);
+        const matchDocRef = doc(db, MATCHES_TANDING_COLLECTION, activeScheduleId);
+        const docSnap = await getDoc(matchDocRef);
 
-      let baseTimerStatus: TimerStatus;
-      if (docSnap.exists() && docSnap.data()?.timer_status) {
-        baseTimerStatus = docSnap.data()?.timer_status as TimerStatus;
-      } else {
-        // Document doesn't exist or timer_status field is missing.
-        // This is an initialization or error case.
-        // Fallback to initialTimerStatus, but prioritize values from newStatusUpdates if they seem like initial values.
-        baseTimerStatus = { 
-            ...initialTimerStatus, 
-            currentRound: newStatusUpdates.currentRound ?? initialTimerStatus.currentRound,
-            roundDuration: newStatusUpdates.roundDuration ?? initialTimerStatus.roundDuration,
-            // Crucially, if newStatusUpdates doesn't specify timerSeconds, use default from initialTimerStatus.
-            // This path is for when timer_status is truly missing, so there's no "previous" timerSeconds to preserve.
-            timerSeconds: newStatusUpdates.timerSeconds ?? initialTimerStatus.timerSeconds 
+        let baseTimerStatus: TimerStatus;
+
+        if (docSnap.exists() && docSnap.data()?.timer_status) {
+            baseTimerStatus = docSnap.data()?.timer_status as TimerStatus;
+        } else {
+            // Document doesn't exist, or timer_status field is missing.
+            // This branch indicates an initialization or recovery.
+            console.warn(`[Dewan-1] timer_status missing for match ${activeScheduleId}. Initializing.`);
+            const effectiveRoundDuration = newStatusUpdates.roundDuration ?? initialTimerStatus.roundDuration;
+            baseTimerStatus = {
+                currentRound: newStatusUpdates.currentRound ?? initialTimerStatus.currentRound,
+                // If newStatusUpdates provides timerSeconds, use it. Otherwise, for init/recovery, set to full duration.
+                timerSeconds: newStatusUpdates.timerSeconds !== undefined ? newStatusUpdates.timerSeconds : effectiveRoundDuration,
+                isTimerRunning: newStatusUpdates.isTimerRunning !== undefined ? newStatusUpdates.isTimerRunning : false, // Default to not running
+                matchStatus: newStatusUpdates.matchStatus ?? 'Pending', // Default to Pending
+                roundDuration: effectiveRoundDuration,
+            };
+        }
+
+        // Construct the final intended state by overriding base with newStatusUpdates
+        const intendedTimerStatus: TimerStatus = {
+            currentRound: newStatusUpdates.currentRound ?? baseTimerStatus.currentRound,
+            timerSeconds: newStatusUpdates.timerSeconds !== undefined ? newStatusUpdates.timerSeconds : baseTimerStatus.timerSeconds,
+            isTimerRunning: newStatusUpdates.isTimerRunning !== undefined ? newStatusUpdates.isTimerRunning : baseTimerStatus.isTimerRunning,
+            matchStatus: newStatusUpdates.matchStatus ?? baseTimerStatus.matchStatus,
+            roundDuration: newStatusUpdates.roundDuration ?? baseTimerStatus.roundDuration,
         };
-      }
-
-      // Construct the final intended state by overriding base with newStatusUpdates
-      const intendedTimerStatus: TimerStatus = {
-        currentRound: newStatusUpdates.currentRound ?? baseTimerStatus.currentRound,
-        // Key change: Preserve timerSeconds from base (which is from DB if exists)
-        // UNLESS newStatusUpdates explicitly provides it.
-        timerSeconds: newStatusUpdates.timerSeconds !== undefined ? newStatusUpdates.timerSeconds : baseTimerStatus.timerSeconds,
-        isTimerRunning: newStatusUpdates.isTimerRunning !== undefined ? newStatusUpdates.isTimerRunning : baseTimerStatus.isTimerRunning,
-        matchStatus: newStatusUpdates.matchStatus ?? baseTimerStatus.matchStatus,
-        roundDuration: newStatusUpdates.roundDuration ?? baseTimerStatus.roundDuration,
-      };
-      
-      let needsFirestoreWrite = false;
-      // Check if intended state is different from what's in DB (or if DB was uninitialized)
-      if (!docSnap.exists() || !docSnap.data()?.timer_status) {
-          needsFirestoreWrite = true; // Definitely write if doc/field was missing
-      } else {
-          // Compare field by field to avoid unnecessary writes if objects are different but values are same
-          if (intendedTimerStatus.currentRound !== baseTimerStatus.currentRound ||
-              intendedTimerStatus.timerSeconds !== baseTimerStatus.timerSeconds ||
-              intendedTimerStatus.isTimerRunning !== baseTimerStatus.isTimerRunning ||
-              intendedTimerStatus.matchStatus !== baseTimerStatus.matchStatus ||
-              intendedTimerStatus.roundDuration !== baseTimerStatus.roundDuration) {
+        
+        let needsFirestoreWrite = false;
+        // Check if intended state is different from what's effectively in DB (baseTimerStatus represents this if docSnap exists)
+        if (!docSnap.exists() || !docSnap.data()?.timer_status) { // If it was missing or doc didn't exist, we definitely write
             needsFirestoreWrite = true;
-          }
-      }
+        } else {
+            // Compare field by field to avoid unnecessary writes if objects are different but values are same
+            if (intendedTimerStatus.currentRound !== baseTimerStatus.currentRound ||
+                intendedTimerStatus.timerSeconds !== baseTimerStatus.timerSeconds ||
+                intendedTimerStatus.isTimerRunning !== baseTimerStatus.isTimerRunning ||
+                intendedTimerStatus.matchStatus !== baseTimerStatus.matchStatus ||
+                intendedTimerStatus.roundDuration !== baseTimerStatus.roundDuration) {
+              needsFirestoreWrite = true;
+            }
+        }
 
-      if (needsFirestoreWrite) {
-        await setDoc(matchDocRef, { timer_status: intendedTimerStatus }, { merge: true });
-      }
+        if (needsFirestoreWrite) {
+          await setDoc(matchDocRef, { timer_status: intendedTimerStatus }, { merge: true });
+        }
 
     } catch (e) {
       console.error(`[Dewan-1] Error updating timer status in Firestore:`, e);
@@ -244,26 +244,21 @@ function DewanSatuPageComponent() {
     const q = query(verificationsCollectionRef, orderBy('timestamp', 'desc'), limit(1));
 
     const unsubscribe = onSnapshot(q, async (snapshot) => {
-      const matchDocRef = doc(db, MATCHES_TANDING_COLLECTION, activeScheduleId);
-      const matchDocSnap = await getDoc(matchDocRef);
-      const currentFirestoreTimerStatus = matchDocSnap.exists() ? matchDocSnap.data()?.timer_status as TimerStatus | undefined : undefined;
-
-      if (!currentFirestoreTimerStatus) {
+      if (snapshot.empty) {
         setIsDisplayVerificationModalOpen(false);
         setActiveDisplayVerificationRequest(null);
-        console.warn(`[Dewan-1] currentFirestoreTimerStatus is undefined for activeScheduleId: ${activeScheduleId} during verification check.`);
-        return;
-      }
-
-      if (snapshot.empty) { 
-        setIsDisplayVerificationModalOpen(false);
-        setActiveDisplayVerificationRequest(null);
-        if (currentFirestoreTimerStatus.matchStatus.startsWith('PausedForVerificationRound')) {
-           const roundNumber = currentFirestoreTimerStatus.currentRound;
-           updateTimerStatusInFirestore({
-              isTimerRunning: false,
-              matchStatus: `PausedRound${roundNumber}` as TimerMatchStatus,
-           });
+        
+        const matchDocSnap = await getDoc(doc(db, MATCHES_TANDING_COLLECTION, activeScheduleId));
+        if (matchDocSnap.exists()) {
+            const currentFirestoreTimerStatus = matchDocSnap.data()?.timer_status as TimerStatus | undefined;
+            if (currentFirestoreTimerStatus && currentFirestoreTimerStatus.matchStatus.startsWith('PausedForVerificationRound')) {
+                const roundNumber = currentFirestoreTimerStatus.currentRound;
+                updateTimerStatusInFirestore({
+                    matchStatus: `PausedRound${roundNumber}` as TimerMatchStatus,
+                    isTimerRunning: false,
+                    // timerSeconds is preserved by updateTimerStatusInFirestore's merge logic
+                });
+            }
         }
       } else {
         const latestVerification = { id: snapshot.docs[0].id, ...snapshot.docs[0].data() } as VerificationRequest;
@@ -272,21 +267,32 @@ function DewanSatuPageComponent() {
           setActiveDisplayVerificationRequest(latestVerification);
           setIsDisplayVerificationModalOpen(true);
           const expectedPausedStatus: TimerMatchStatus = `PausedForVerificationRound${latestVerification.round}`;
-          if (currentFirestoreTimerStatus.isTimerRunning || currentFirestoreTimerStatus.matchStatus !== expectedPausedStatus) {
-            updateTimerStatusInFirestore({
-              isTimerRunning: false,
-              matchStatus: expectedPausedStatus,
-            });
+          
+          const matchDocSnap = await getDoc(doc(db, MATCHES_TANDING_COLLECTION, activeScheduleId));
+          if (matchDocSnap.exists()){
+            const currentFirestoreTimerStatus = matchDocSnap.data()?.timer_status as TimerStatus | undefined;
+            if (!currentFirestoreTimerStatus || currentFirestoreTimerStatus.isTimerRunning || currentFirestoreTimerStatus.matchStatus !== expectedPausedStatus) {
+                updateTimerStatusInFirestore({
+                  isTimerRunning: false,
+                  matchStatus: expectedPausedStatus,
+                  // timerSeconds, currentRound, roundDuration are preserved by updateTimerStatusInFirestore's merge logic
+                });
+            }
           }
         } else { 
           setIsDisplayVerificationModalOpen(false);
           setActiveDisplayVerificationRequest(null);
-          if (currentFirestoreTimerStatus.matchStatus.startsWith('PausedForVerificationRound')) {
-             const roundNumber = currentFirestoreTimerStatus.currentRound;
-             updateTimerStatusInFirestore({
-                isTimerRunning: false,
-                matchStatus: `PausedRound${roundNumber}` as TimerMatchStatus,
-             });
+          const matchDocSnap = await getDoc(doc(db, MATCHES_TANDING_COLLECTION, activeScheduleId));
+          if (matchDocSnap.exists()){
+            const currentFirestoreTimerStatus = matchDocSnap.data()?.timer_status as TimerStatus | undefined;
+            if (currentFirestoreTimerStatus && currentFirestoreTimerStatus.matchStatus.startsWith('PausedForVerificationRound')) {
+                const roundNumber = currentFirestoreTimerStatus.currentRound;
+                updateTimerStatusInFirestore({
+                    matchStatus: `PausedRound${roundNumber}` as TimerMatchStatus,
+                    isTimerRunning: false,
+                     // timerSeconds is preserved by updateTimerStatusInFirestore's merge logic
+                });
+            }
           }
         }
       }
@@ -301,8 +307,8 @@ function DewanSatuPageComponent() {
             if (currentFirestoreTimerStatusOnError && currentFirestoreTimerStatusOnError.matchStatus.startsWith('PausedForVerificationRound')) {
                const roundNumber = currentFirestoreTimerStatusOnError.currentRound;
                updateTimerStatusInFirestore({
-                  isTimerRunning: false,
                   matchStatus: `PausedRound${roundNumber}` as TimerMatchStatus,
+                  isTimerRunning: false,
                });
             }
           }
@@ -353,26 +359,36 @@ function DewanSatuPageComponent() {
           if (docSnap.exists()) {
             const data = docSnap.data();
             if (data?.timer_status) {
-              const newTimerStatus = data.timer_status as TimerStatus;
-              setTimerStatus(newTimerStatus); 
-              setInputRoundDurationMinutes((newTimerStatus.roundDuration / 60).toString());
-            } else { 
-                const currentLocalRoundDuration = timerStatus.roundDuration || initialTimerStatus.roundDuration;
-                const initialDataForMissingTimer = { ...initialTimerStatus, roundDuration: currentLocalRoundDuration };
-                await setDoc(matchDocRef, { timer_status: initialDataForMissingTimer }, { merge: true });
+                const newTimerStatus = data.timer_status as TimerStatus;
+                // Only update if substantially different to prevent loops from minor timestamp changes if they were part of TimerStatus
+                if (JSON.stringify(timerStatus) !== JSON.stringify(newTimerStatus)) {
+                    setTimerStatus(newTimerStatus);
+                }
+                setInputRoundDurationMinutes((newTimerStatus.roundDuration / 60).toString());
+            } else {
+                // Document exists, but timer_status field is MISSING.
+                console.error(`[Dewan-1] CRITICAL: timer_status field missing in existing match document ${activeScheduleId}. Local timer state may be stale until next explicit update.`);
+                // Avoid writing initialTimerStatus back from here, to prevent resets.
             }
             const firestoreUnstruckKeys = new Set(data?.confirmed_unstruck_keys_log as string[] || []);
             const firestoreStruckKeys = new Set(data?.confirmed_struck_keys_log as string[] || []);
-            setPrevSavedUnstruckKeys(firestoreUnstruckKeys);
-            setAllContributingEntryKeys(firestoreUnstruckKeys);
-            setPrevSavedStruckKeys(firestoreStruckKeys);
-            setPermanentlyStruckEntryKeys(firestoreStruckKeys);
+            
+            // Only update if sets are different
+            if (firestoreUnstruckKeys.size !== prevSavedUnstruckKeys.size || !Array.from(firestoreUnstruckKeys).every(k => prevSavedUnstruckKeys.has(k))) {
+                setPrevSavedUnstruckKeys(firestoreUnstruckKeys);
+                setAllContributingEntryKeys(firestoreUnstruckKeys); // Assuming this should mirror saved
+            }
+            if (firestoreStruckKeys.size !== prevSavedStruckKeys.size || !Array.from(firestoreStruckKeys).every(k => prevSavedStruckKeys.has(k))) {
+                setPrevSavedStruckKeys(firestoreStruckKeys);
+                setPermanentlyStruckEntryKeys(firestoreStruckKeys); // Assuming this should mirror
+            }
+
           } else { 
+            // Document does NOT exist. This is the true initialization case.
             const initialDataForMatch = { timer_status: initialTimerStatus, confirmed_unstruck_keys_log: [], confirmed_struck_keys_log: [] };
             try {
-              await setDoc(matchDocRef, initialDataForMatch, { merge: true });
-              setTimerStatus(initialTimerStatus); 
-              setInputRoundDurationMinutes((initialTimerStatus.roundDuration / 60).toString());
+              await setDoc(matchDocRef, initialDataForMatch); // Not merging, it's a new doc
+              // setTimerStatus(initialTimerStatus); // Listener will pick this up.
               setPrevSavedUnstruckKeys(new Set()); setAllContributingEntryKeys(new Set());
               setPrevSavedStruckKeys(new Set()); setPermanentlyStruckEntryKeys(new Set());
             } catch (setErr) { console.error(`[Dewan-1] Error setting initial match data:`, setErr); }
@@ -404,7 +420,7 @@ function DewanSatuPageComponent() {
     };
     loadData();
     return () => { mounted = false; unsubscribers.forEach(unsub => unsub()); };
-  }, [activeScheduleId, timerStatus.roundDuration]); // Removed initialTimerStatus.roundDuration as it's constant
+  }, [activeScheduleId]);
 
 
   useEffect(() => {
@@ -627,7 +643,6 @@ function DewanSatuPageComponent() {
             newTimerSeconds = timerStatus.roundDuration; 
         }
     } else if (timerStatus.matchStatus.startsWith('PausedRound') || timerStatus.matchStatus.startsWith('PausedForVerificationRound')) { 
-        // When setting a babak while paused (not finished), always reset to Pending and full duration for that new babak
         newMatchStatus = 'Pending'; 
         newTimerSeconds = timerStatus.roundDuration; 
     } else if ((timerStatus.matchStatus === 'Pending' || timerStatus.matchStatus.startsWith('OngoingRound'))) { 
@@ -649,8 +664,6 @@ function DewanSatuPageComponent() {
         updateTimerStatusInFirestore({ matchStatus: `FinishedRound${timerStatus.currentRound}` as TimerMatchStatus, timerSeconds: 0, isTimerRunning: false }); return; 
     }
     if (isPausedForVerification && timerStatus.currentRound <= TOTAL_ROUNDS) {
-        // If verification is done, this button might be clicked. It should transition to a normal pause for the round.
-        // The verification listener should already handle this, but as a fallback:
         updateTimerStatusInFirestore({ isTimerRunning: false, matchStatus: `PausedRound${timerStatus.currentRound}` as TimerMatchStatus }); return;
     }
     if (timerStatus.currentRound < TOTAL_ROUNDS) {
@@ -668,7 +681,9 @@ function DewanSatuPageComponent() {
     try {
         const batch = writeBatch(db);
         const matchDocRef = doc(db, MATCHES_TANDING_COLLECTION, activeScheduleId);
-        const resetTimerStatus = { ...initialTimerStatus, roundDuration: initialTimerStatus.roundDuration };
+        // Use the current roundDuration if available, otherwise default.
+        const currentRoundDuration = timerStatus.roundDuration > 0 ? timerStatus.roundDuration : initialTimerStatus.roundDuration;
+        const resetTimerStatus = { ...initialTimerStatus, roundDuration: currentRoundDuration, timerSeconds: currentRoundDuration };
         batch.set(matchDocRef, { timer_status: resetTimerStatus, confirmed_unstruck_keys_log: [], confirmed_struck_keys_log: [] }, { merge: true }); 
         
         const initialJuriDataContent: JuriMatchData = { merah: { round1: [], round2: [], round3: [] }, biru: { round1: [], round2: [], round3: [] }, lastUpdated: serverTimestamp() as Timestamp };
@@ -694,7 +709,7 @@ function DewanSatuPageComponent() {
     
     const updates: Partial<TimerStatus> = { roundDuration: newDurationSeconds };
     if (!timerStatus.isTimerRunning && 
-        (timerStatus.matchStatus === 'Pending' || timerStatus.matchStatus.startsWith('FinishedRound'))) {
+        (timerStatus.matchStatus === 'Pending' || timerStatus.matchStatus.startsWith('FinishedRound') || timerStatus.matchStatus.startsWith('PausedRound'))) {
         updates.timerSeconds = newDurationSeconds;
     }
     updateTimerStatusInFirestore(updates);
