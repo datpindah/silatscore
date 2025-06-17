@@ -116,7 +116,7 @@ function KetuaPertandinganPageComponent({ gelanggangName }: { gelanggangName: st
   const [ketuaActionsLog, setKetuaActionsLog] = useState<KetuaActionLogEntry[]>([]);
 
   const [isSubmittingAction, setIsSubmittingAction] = useState(false);
-  const [isLoadingPage, setIsLoadingPage] = useState(true); // Renamed from isLoading for clarity
+  const [isLoadingPage, setIsLoadingPage] = useState(true); 
   const [error, setError] = useState<string | null>(null);
 
   const [isVerificationCreationDialogOpen, setIsVerificationCreationDialogOpen] = useState(false);
@@ -139,7 +139,7 @@ function KetuaPertandinganPageComponent({ gelanggangName }: { gelanggangName: st
     setActiveVerificationDetails(null);
     setIsVoteResultModalOpen(false);
     setKetuaSelectedDecision(null);
-    setError(null); // Clear general errors when resetting for a new match
+    setError(null); 
   }, []);
 
   useEffect(() => {
@@ -196,7 +196,7 @@ function KetuaPertandinganPageComponent({ gelanggangName }: { gelanggangName: st
   useEffect(() => {
     if (!activeMatchId) {
       setMatchDetailsLoaded(false); 
-      setScheduleDetails(null);
+      setMatchDetails(null);
       setPesilatMerahInfo(null);
       setPesilatBiruInfo(null);
       setDewanTimerStatus(initialDewanTimerStatus);
@@ -207,8 +207,6 @@ function KetuaPertandinganPageComponent({ gelanggangName }: { gelanggangName: st
     }
 
     let mounted = true;
-    // Start loading only if we have an activeMatchId and details aren't loaded yet.
-    // This prevents setting isLoadingPage to true if only sub-data changes later.
     if (!matchDetailsLoaded) {
         setIsLoadingPage(true);
     }
@@ -227,7 +225,7 @@ function KetuaPertandinganPageComponent({ gelanggangName }: { gelanggangName: st
 
         if (scheduleDocSnap.exists()) {
           const data = scheduleDocSnap.data() as ScheduleTanding;
-          setScheduleDetails(data);
+          setMatchDetails(data);
           setPesilatMerahInfo({ name: data.pesilatMerahName, contingent: data.pesilatMerahContingent });
           setPesilatBiruInfo({ name: data.pesilatBiruName, contingent: data.pesilatBiruContingent });
           setMatchDetailsLoaded(true);
@@ -247,7 +245,6 @@ function KetuaPertandinganPageComponent({ gelanggangName }: { gelanggangName: st
         return;
       }
       
-      // Only subscribe if schedule details were successfully loaded
       if (currentScheduleDetailsLoaded) {
         const matchDocRef = doc(db, MATCHES_TANDING_COLLECTION, activeMatchId);
         
@@ -280,7 +277,6 @@ function KetuaPertandinganPageComponent({ gelanggangName }: { gelanggangName: st
             }
         }, (err) => { if (mounted) console.error("Error fetching active verification details:", err); }));
       }
-      // Set loading to false after initial data fetch and subscriptions are set up
       if (mounted && currentScheduleDetailsLoaded) {
           setIsLoadingPage(false);
       }
@@ -292,9 +288,8 @@ function KetuaPertandinganPageComponent({ gelanggangName }: { gelanggangName: st
       mounted = false; 
       unsubscribers.forEach(unsub => unsub()); 
     };
-  }, [activeMatchId]); // Only activeMatchId. resetPageData is stable.
+  }, [activeMatchId]); 
 
-  // Effect to manage modal visibility based on activeVerificationDetails
   useEffect(() => {
     if (activeVerificationDetails && activeVerificationDetails.status === 'pending') {
       setIsVoteResultModalOpen(true);
