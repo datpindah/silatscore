@@ -1,8 +1,9 @@
 
 "use client";
 
-import { useState, useEffect, useCallback, use } from 'react';
+import { useState, useEffect, useCallback, use, Suspense } from 'react';
 import Link from 'next/link';
+import { useSearchParams } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { Header } from '@/components/layout/Header';
 import { ArrowLeft, Loader2, Info, XIcon, AlertCircle, CheckCircle2 } from 'lucide-react';
@@ -14,7 +15,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { cn } from '@/lib/utils';
 import { Card, CardHeader, CardContent, CardTitle, CardDescription } from '@/components/ui/card';
 
-const ACTIVE_TGR_SCHEDULE_CONFIG_PATH = 'app_settings/active_match_tgr';
+const ACTIVE_TGR_MATCHES_BY_GELANGGANG_PATH = 'app_settings/active_tgr_matches_by_gelanggang';
 const SCHEDULE_TGR_COLLECTION = 'schedules_tgr';
 const MATCHES_TGR_COLLECTION = 'matches_tgr';
 const JURI_SCORES_TGR_SUBCOLLECTION = 'juri_scores_tgr';
@@ -61,9 +62,7 @@ const defaultInitialTgrTimerStatus: TGRTimerStatus = {
   currentPerformingSide: null,
 };
 
-export default function JuriTGRPage({ params: paramsPromise }: { params: Promise<{ juriId: string }> }) {
-  const resolvedParams = use(paramsPromise);
-  const { juriId } = resolvedParams;
+function JuriTGRPageComponent({ juriId, gelanggangName }: { juriId: string; gelanggangName: string | null }) {
   const juriDisplayName = `Juri ${juriId?.split('-')[1] || 'TGR Tidak Dikenal'}`;
 
   const [configMatchId, setConfigMatchId] = useState<string | null | undefined>(undefined);
@@ -72,7 +71,6 @@ export default function JuriTGRPage({ params: paramsPromise }: { params: Promise
   const [scheduleDetails, setScheduleDetails] = useState<ScheduleTGR | null>(null);
   const [matchDetailsLoaded, setMatchDetailsLoaded] = useState(false);
 
-  // Initialize juriScore with a version that considers a potentially undefined category at first
   const [juriScore, setJuriScore] = useState<TGRJuriScore>(getInitialJuriScoreData(undefined));
   const [tgrTimerStatus, setTgrTimerStatus] = useState<TGRTimerStatus>(defaultInitialTgrTimerStatus);
 
@@ -98,12 +96,13 @@ export default function JuriTGRPage({ params: paramsPromise }: { params: Promise
       const elementSum = (elements.teknikSeranganBertahan || 0) +
                          (elements.firmnessHarmony || 0) +
                          (elements.soulfulness || 0);
-      return parseFloat((BASE_SCORE_GANDA + elementSum).toFixed(2));
+      return parseFloat((BASE_SCORE_GANDA + elementSum - (sideData.externalDeductions || 0)).toFixed(2));
     } else { 
       return parseFloat(
         (BASE_SCORE_TUNGGAL_REGU -
         ((sideData.gerakanSalahCount || 0) * GERAKAN_SALAH_DEDUCTION_TGR) +
-        (sideData.staminaKemantapanBonus || 0)
+        (sideData.staminaKemantapanBonus || 0) -
+        (sideData.externalDeductions || 0) 
         ).toFixed(2)
       );
     }
@@ -126,43 +125,55 @@ export default function JuriTGRPage({ params: paramsPromise }: { params: Promise
             }));
         }
     }
-  }, [juriScore.biru?.gerakanSalahCount, juriScore.biru?.staminaKemantapanBonus, juriScore.biru?.gandaElements, 
-      juriScore.merah?.gerakanSalahCount, juriScore.merah?.staminaKemantapanBonus, juriScore.merah?.gandaElements,
+  }, [juriScore.biru?.gerakanSalahCount, juriScore.biru?.staminaKemantapanBonus, juriScore.biru?.gandaElements, juriScore.biru?.externalDeductions,
+      juriScore.merah?.gerakanSalahCount, juriScore.merah?.staminaKemantapanBonus, juriScore.merah?.gandaElements, juriScore.merah?.externalDeductions,
       currentCategory, calculateSideScoreForJuriDisplay, juriScore.biru, juriScore.merah]);
 
 
   useEffect(() => {
-    const unsub = onSnapshot(doc(db, ACTIVE_TGR_SCHEDULE_CONFIG_PATH), (docSnap) => {
-      const newDbConfigId = docSnap.exists() ? docSnap.data()?.activeScheduleId : null;
+    if (!gelanggangName) {
+      setError("Nama gelanggang tidak ditemukan di URL.");
+      setConfigMatchId(null);
+      setIsLoading(false);
+      return;
+    }
+    setError(null);
+    setIsLoading(true);
+
+    const unsubGelanggangMap = onSnapshot(doc(db, ACTIVE_TGR_MATCHES_BY_GELANGGANG_PATH), (docSnap) => {
+      let newDbConfigId: string | null = null;
+      if (docSnap.exists()) {
+        newDbConfigId = docSnap.data()?.[gelanggangName] || null;
+      }
       setConfigMatchId(prevId => (prevId === newDbConfigId ? prevId : newDbConfigId));
+      if (!newDbConfigId) {
+         setError(`Tidak ada jadwal TGR aktif untuk Gelanggang: ${gelanggangName}.`);
+      }
     }, (err) => {
-      console.error(`[${juriDisplayName}] Error fetching active TGR schedule config:`, err);
-      setError("Gagal memuat konfigurasi jadwal aktif TGR.");
+      console.error(`[${juriDisplayName}] Error fetching active TGR matches by gelanggang map:`, err);
+      setError("Gagal memuat peta jadwal aktif TGR per gelanggang.");
       setConfigMatchId(null);
     });
-    return () => unsub();
-  }, [juriDisplayName]);
-
-  useEffect(() => {
-    setIsLoading(configMatchId === undefined || (!!activeMatchId && !matchDetailsLoaded));
-  }, [configMatchId, activeMatchId, matchDetailsLoaded]);
+    return () => unsubGelanggangMap();
+  }, [gelanggangName, juriDisplayName]);
 
 
   useEffect(() => {
-    if (configMatchId === undefined) return; 
-
+    if (configMatchId === undefined) {
+      setIsLoading(true); // Still waiting for configMatchId from the map
+      return;
+    }
     if (configMatchId !== activeMatchId) {
-      setActiveMatchId(configMatchId);
-      
-      // Reset states *before* attempting to load new category dependent data
       setScheduleDetails(null);
       setMatchDetailsLoaded(false);
-      // Intentionally set category to undefined here so getInitialJuriScoreData uses its base defaults
-      setJuriScore(getInitialJuriScoreData(undefined)); 
+      setJuriScore(getInitialJuriScoreData(undefined)); // Reset score with undefined category
       setTgrTimerStatus(defaultInitialTgrTimerStatus);
       setError(null);
       setIsSaving(false);
+      setActiveMatchId(configMatchId); // This will trigger subsequent data loading effects
     }
+     // Set loading based on whether there's a match to load and if details are loaded
+    setIsLoading(!!configMatchId && !matchDetailsLoaded);
   }, [configMatchId, activeMatchId]);
 
 
@@ -170,9 +181,12 @@ export default function JuriTGRPage({ params: paramsPromise }: { params: Promise
     if (!activeMatchId) {
       setScheduleDetails(null);
       setMatchDetailsLoaded(false);
+      // If configMatchId is null (meaning no active match for gelanggang), loading should be false.
+      if (configMatchId === null) setIsLoading(false);
       return;
     }
     let mounted = true;
+    setIsLoading(true); // Start loading schedule details
 
     const loadSchedule = async () => {
       if (!mounted) return;
@@ -195,8 +209,7 @@ export default function JuriTGRPage({ params: paramsPromise }: { params: Promise
           const loadedScheduleDetails = { ...rawData, id: scheduleDocSnap.id, date: processedDate } as ScheduleTGR;
           setScheduleDetails(loadedScheduleDetails);
           setMatchDetailsLoaded(true); 
-          // Initialize juriScore here, now that category is known
-          setJuriScore(getInitialJuriScoreData(loadedScheduleDetails.category));
+          setJuriScore(getInitialJuriScoreData(loadedScheduleDetails.category)); // Initialize with correct category
         } else {
           setError(`Detail Jadwal TGR (ID: ${activeMatchId}) tidak ditemukan.`);
           setScheduleDetails(null); setMatchDetailsLoaded(false);
@@ -205,14 +218,15 @@ export default function JuriTGRPage({ params: paramsPromise }: { params: Promise
         if (mounted) setError(`Error memuat detail jadwal TGR: ${err instanceof Error ? err.message : String(err)}`);
         setScheduleDetails(null); setMatchDetailsLoaded(false);
       }
+      if (mounted) setIsLoading(false); // Stop loading after attempting to fetch schedule
     };
     loadSchedule();
     return () => { mounted = false; };
   }, [activeMatchId]); 
 
   useEffect(() => {
-    if (!activeMatchId || !juriId || !currentCategory) { // Ensure currentCategory is available
-        setJuriScore(getInitialJuriScoreData(currentCategory)); // Use currentCategory if available
+    if (!activeMatchId || !juriId || !currentCategory || !matchDetailsLoaded) { 
+        // Don't try to load juri scores if essential info is missing or schedule hasn't loaded
         return;
     }
     
@@ -228,14 +242,13 @@ export default function JuriTGRPage({ params: paramsPromise }: { params: Promise
             if (currentCategory === 'Ganda') {
                 merged.gandaElements = { ...initialGandaElementScores, ...sideData?.gandaElements };
             }
-            // Calculate score based on merged data
             merged.calculatedScore = calculateSideScoreForJuriDisplay(merged, currentCategory);
             return merged;
         };
         setJuriScore({
           biru: getSideData(data.biru),
           merah: getSideData(data.merah),
-          lastUpdated: data.lastUpdated,
+          lastUpdated: data.lastUpdated || null,
         });
       } else {
         setJuriScore(getInitialJuriScoreData(currentCategory));
@@ -244,11 +257,11 @@ export default function JuriTGRPage({ params: paramsPromise }: { params: Promise
       if (mounted) setError(`Gagal memuat skor juri: ${err.message}`);
     });
     return () => { mounted = false; unsubJuriScore(); };
-  }, [activeMatchId, juriId, currentCategory, calculateSideScoreForJuriDisplay]);
+  }, [activeMatchId, juriId, currentCategory, calculateSideScoreForJuriDisplay, matchDetailsLoaded]);
 
 
   useEffect(() => {
-    if (!activeMatchId) {
+    if (!activeMatchId || !matchDetailsLoaded) { // Only listen if match details are loaded
       setTgrTimerStatus(defaultInitialTgrTimerStatus);
       return;
     }
@@ -270,7 +283,7 @@ export default function JuriTGRPage({ params: paramsPromise }: { params: Promise
       if (mounted) setError(`Gagal sinkronisasi status timer TGR: ${err.message}`);
     });
     return () => { mounted = false; unsubMatchData(); };
-  }, [activeMatchId]);
+  }, [activeMatchId, matchDetailsLoaded]);
 
 
   const saveJuriScore = useCallback(async (scoreDataFromState: TGRJuriScore) => {
@@ -288,8 +301,8 @@ export default function JuriTGRPage({ params: paramsPromise }: { params: Promise
         const currentData = { ...initial, ...sideData }; 
 
         if (category === 'Ganda') {
-          currentData.gerakanSalahCount = null;
-          currentData.staminaKemantapanBonus = null;
+          currentData.gerakanSalahCount = null; // Explicitly set to null for Ganda
+          currentData.staminaKemantapanBonus = null; // Explicitly set to null for Ganda
           currentData.gandaElements = {
             teknikSeranganBertahan: currentData.gandaElements?.teknikSeranganBertahan ?? 0,
             firmnessHarmony: currentData.gandaElements?.firmnessHarmony ?? 0,
@@ -298,7 +311,7 @@ export default function JuriTGRPage({ params: paramsPromise }: { params: Promise
         } else { // Tunggal or Regu
           currentData.gerakanSalahCount = currentData.gerakanSalahCount ?? 0;
           currentData.staminaKemantapanBonus = currentData.staminaKemantapanBonus ?? 0;
-          currentData.gandaElements = null;
+          currentData.gandaElements = null; // Explicitly set to null for Tunggal/Regu
         }
 
         currentData.externalDeductions = currentData.externalDeductions ?? 0;
@@ -348,9 +361,9 @@ export default function JuriTGRPage({ params: paramsPromise }: { params: Promise
   const handleGerakanSalah = () => {
     if (scoreActionButtonsDisabled || !currentSide || !currentSideScoreData || currentCategory === 'Ganda') return;
     setJuriScore(prev => {
-      const updatedSideScore = { ...(prev[currentSide] || getInitialSideSpecificScore(currentCategory)) };
+      const updatedSideScore = { ...(prev[currentSide!] || getInitialSideSpecificScore(currentCategory)) };
       updatedSideScore.gerakanSalahCount = (updatedSideScore.gerakanSalahCount || 0) + 1;
-      const newFullScore = { ...prev, [currentSide]: updatedSideScore };
+      const newFullScore = { ...prev, [currentSide!]: updatedSideScore };
       saveJuriScore(newFullScore);
       return newFullScore;
     });
@@ -359,9 +372,9 @@ export default function JuriTGRPage({ params: paramsPromise }: { params: Promise
   const handleStaminaBonusChange = (bonusValue: number) => {
     if (scoreActionButtonsDisabled || !currentSide || !currentSideScoreData || currentCategory === 'Ganda') return;
     setJuriScore(prev => {
-      const updatedSideScore = { ...(prev[currentSide] || getInitialSideSpecificScore(currentCategory)) };
+      const updatedSideScore = { ...(prev[currentSide!] || getInitialSideSpecificScore(currentCategory)) };
       updatedSideScore.staminaKemantapanBonus = bonusValue;
-      const newFullScore = { ...prev, [currentSide]: updatedSideScore };
+      const newFullScore = { ...prev, [currentSide!]: updatedSideScore };
       saveJuriScore(newFullScore);
       return newFullScore;
     });
@@ -396,8 +409,8 @@ export default function JuriTGRPage({ params: paramsPromise }: { params: Promise
   const handleJuriSiap = () => {
     if (juriSiapButtonDisabled || !currentSide || !currentSideScoreData) return;
     setJuriScore(prev => {
-      const updatedSideScore = { ...(prev[currentSide] || getInitialSideSpecificScore(currentCategory)), isReady: true };
-      const newFullScore = { ...prev, [currentSide]: updatedSideScore };
+      const updatedSideScore = { ...(prev[currentSide!] || getInitialSideSpecificScore(currentCategory)), isReady: true };
+      const newFullScore = { ...prev, [currentSide!]: updatedSideScore };
       saveJuriScore(newFullScore);
       return newFullScore;
     });
@@ -415,8 +428,8 @@ export default function JuriTGRPage({ params: paramsPromise }: { params: Promise
 
   const getStatusText = () => {
     if (configMatchId === undefined && isLoading) return "Memuat konfigurasi global...";
-    if (isLoading && activeMatchId) return `Sinkronisasi data pertandingan...`;
-    if (!activeMatchId && !isLoading && configMatchId === null) return "Tidak ada pertandingan TGR aktif.";
+    if (isLoading && activeMatchId && gelanggangName) return `Sinkronisasi data pertandingan untuk Gel. ${gelanggangName}...`;
+    if (!activeMatchId && !isLoading && configMatchId === null && gelanggangName) return `Tidak ada pertandingan TGR aktif untuk Gel. ${gelanggangName}.`;
     if (activeMatchId && !matchDetailsLoaded && !isLoading) return "Menunggu detail pertandingan...";
     if (isSaving) return "Menyimpan skor...";
     if (error) return `Error: ${error}`;
@@ -454,7 +467,7 @@ export default function JuriTGRPage({ params: paramsPromise }: { params: Promise
     } else if (currentSide === 'merah') {
         nameToDisplay = scheduleDetails.pesilatMerahName || "Peserta Merah";
         contingentToDisplay = scheduleDetails.pesilatMerahContingent || "Kontingen Merah";
-    } else { // No current side, or side doesn't match participant data for some reason
+    } else { 
         if (scheduleDetails.pesilatMerahName && !scheduleDetails.pesilatBiruName) {
             nameToDisplay = scheduleDetails.pesilatMerahName;
             contingentToDisplay = scheduleDetails.pesilatMerahContingent || "Kontingen";
@@ -468,13 +481,28 @@ export default function JuriTGRPage({ params: paramsPromise }: { params: Promise
   const { name: participantName, contingent: participantContingent } = getParticipantNameAndContingent();
 
 
+  if (!gelanggangName && !isLoading) {
+    return (
+        <div className="flex flex-col min-h-screen"> <Header />
+            <main className="flex-1 container mx-auto p-4 md:p-8 flex flex-col items-center justify-center text-center">
+                <AlertCircle className="h-12 w-12 text-destructive mb-4" />
+                <h1 className="text-xl font-semibold text-destructive">Gelanggang Diperlukan</h1>
+                <p className="text-muted-foreground mt-2">Parameter 'gelanggang' tidak ditemukan di URL. Halaman Juri TGR tidak dapat memuat data.</p>
+                <Button asChild className="mt-6">
+                    <Link href={`/scoring/tgr/login`}><ArrowLeft className="mr-2 h-4 w-4"/> Kembali ke Login</Link>
+                </Button>
+            </main>
+        </div>
+    );
+  }
+
   return (
     <div className="flex flex-col min-h-screen bg-gray-100 dark:bg-gray-900 text-gray-800 dark:text-gray-900 font-sans">
       <Header />
       <main className="flex-1 container mx-auto px-2 py-4 md:p-6">
         <div className="mb-4 md:mb-6 text-center">
           <h1 className={cn("text-2xl md:text-3xl font-bold", sideColorClass)}>
-            {juriDisplayName} - {displaySideName}
+            {juriDisplayName} - {displaySideName} (Gel: {gelanggangName || 'N/A'})
           </h1>
            <div className={cn("text-xl md:text-2xl font-semibold", sideColorClass)}>
             Kontingen: {participantContingent}
@@ -569,6 +597,7 @@ export default function JuriTGRPage({ params: paramsPromise }: { params: Promise
               <div className="text-xs text-center mt-1 text-gray-500 dark:text-gray-600">
                   Pengurangan: {currentSideScoreData?.gerakanSalahCount || 0} x {GERAKAN_SALAH_DEDUCTION_TGR.toFixed(2)} = {((currentSideScoreData?.gerakanSalahCount || 0) * GERAKAN_SALAH_DEDUCTION_TGR).toFixed(2)}.
                   Bonus Stamina: {(currentSideScoreData?.staminaKemantapanBonus ?? 0).toFixed(2)}.
+                  Pengurangan Dewan: {(currentSideScoreData?.externalDeductions ?? 0).toFixed(2)}.
               </div>
             )}
              {currentCategory === 'Ganda' && (
@@ -576,6 +605,7 @@ export default function JuriTGRPage({ params: paramsPromise }: { params: Promise
                     Teknik: {(currentSideScoreData?.gandaElements?.teknikSeranganBertahan || 0).toFixed(2)},
                     Firmness: {(currentSideScoreData?.gandaElements?.firmnessHarmony || 0).toFixed(2)},
                     Soulfulness: {(currentSideScoreData?.gandaElements?.soulfulness || 0).toFixed(2)}.
+                    Pengurangan Dewan: {(currentSideScoreData?.externalDeductions ?? 0).toFixed(2)}.
                     Base: {BASE_SCORE_GANDA.toFixed(2)}.
                 </div>
             )}
@@ -605,12 +635,34 @@ export default function JuriTGRPage({ params: paramsPromise }: { params: Promise
                 </div>
              )}
           </div>
-           <Link href="/scoring/tgr/login" className="text-xs text-blue-600 hover:underline mt-4 dark:text-blue-400">
+           <Link href={`/scoring/tgr/login?gelanggang=${gelanggangName || ''}`} className="text-xs text-blue-600 hover:underline mt-4 dark:text-blue-400">
                 <ArrowLeft className="inline mr-1 h-3 w-3" /> Kembali ke Login Panel TGR
            </Link>
         </div>
       </main>
     </div>
   );
+}
+
+
+export default function JuriTGRPageWithSuspense({ params }: { params: { juriId: string } }) {
+  return (
+    <Suspense fallback={
+      <div className="flex flex-col min-h-screen"> <Header />
+        <main className="flex-1 container mx-auto p-4 md:p-8 flex flex-col items-center justify-center">
+          <Loader2 className="h-12 w-12 animate-spin text-primary mb-4" />
+          <p className="text-lg text-muted-foreground">Memuat halaman Juri TGR ({params.juriId})...</p>
+        </main>
+      </div>
+    }>
+      <JuriTGRPageWithSearchParams juriId={params.juriId} />
+    </Suspense>
+  );
+}
+
+function JuriTGRPageWithSearchParams({ juriId }: { juriId: string }) {
+  const searchParams = useSearchParams();
+  const gelanggangName = searchParams.get('gelanggang');
+  return <JuriTGRPageComponent juriId={juriId} gelanggangName={gelanggangName} />;
 }
 
