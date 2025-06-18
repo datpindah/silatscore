@@ -11,8 +11,10 @@ import { cn } from '@/lib/utils';
 import { Skeleton } from '@/components/ui/skeleton';
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
-import { Header } from '@/components/layout/Header'; // Ditambahkan
-import { Card, CardContent } from '@/components/ui/card'; // Ditambahkan
+import { Header } from '@/components/layout/Header';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow, TableCaption, TableFooter } from "@/components/ui/table";
+
 
 const ACTIVE_TANDING_MATCHES_BY_GELANGGANG_PATH = 'app_settings/active_tanding_matches_by_gelanggang';
 const SCHEDULE_TANDING_COLLECTION = 'schedules_tanding';
@@ -20,7 +22,7 @@ const MATCHES_TANDING_COLLECTION = 'matches_tanding';
 const OFFICIAL_ACTIONS_SUBCOLLECTION = 'official_actions';
 const JURI_SCORES_SUBCOLLECTION = 'juri_scores';
 const JURI_IDS = ['juri-1', 'juri-2', 'juri-3'] as const;
-const JURI_INPUT_VALIDITY_WINDOW_MS = 2000; 
+const JURI_INPUT_VALIDITY_WINDOW_MS = 2000;
 
 interface PesilatDisplayInfo {
   name: string;
@@ -74,14 +76,14 @@ const getJuriIndividualPointsArrayForRound = (
     pesilatColor: PesilatColorIdentity,
     round: 1 | 2 | 3,
     currentJuriScoresData: Record<string, JuriMatchDataForPage | null>
-): number[] => {
+): string => { // Returns string for display
   const juriData = currentJuriScoresData[juriId];
-  if (!juriData) return [];
+  if (!juriData) return '0';
   const roundKey = `round${round}` as keyof RoundScoresForPage;
   const scoresForColor = juriData[pesilatColor];
-  if (!scoresForColor) return [];
+  if (!scoresForColor) return '0';
   const scoresInRound = scoresForColor[roundKey];
-  return scoresInRound ? scoresInRound.map(entry => entry.points) : [];
+  return scoresInRound && scoresInRound.length > 0 ? scoresInRound.map(entry => entry.points).join(', ') : '0';
 };
 
 // Calculates SUM of points from Ketua for a specific action category (Jatuhan/Hukuman).
@@ -110,8 +112,8 @@ const getKetuaIndividualActionPointsArrayForRound = (
     actionCategory: 'Jatuhan' | 'Hukuman',
     round: 1 | 2 | 3,
     currentKetuaActionsLog: KetuaActionLogEntry[]
-): number[] => {
-  return currentKetuaActionsLog
+): string => { // Returns string for display
+  const points = currentKetuaActionsLog
     .filter(action => {
       if (action.pesilatColor !== pesilatColor || action.round !== round) return false;
       if (actionCategory === 'Jatuhan') return action.actionType === 'Jatuhan';
@@ -119,6 +121,7 @@ const getKetuaIndividualActionPointsArrayForRound = (
       return false;
     })
     .map(action => action.points);
+  return points.length > 0 ? points.join(', ') : '0';
 };
 
 
@@ -386,16 +389,6 @@ function DewanDuaPageComponent({ gelanggangName }: { gelanggangName: string | nu
     return "?";
   };
 
-  const ScoreCell = ({ value, isLoadingValue }: { value: string | number | null, isLoadingValue?: boolean }) => (
-    <td className="border border-black text-center p-1 md:p-2 h-10 md:h-12">
-      {isLoadingValue ? <Skeleton className="h-5 w-8 mx-auto bg-gray-400" /> : (value === null || value === undefined ? '-' : String(value))}
-    </td>
-  );
-
-  const LabelCell = ({ children }: { children: React.ReactNode }) => (
-    <td className="border border-black px-2 py-1 md:px-3 md:py-2 text-left text-xs md:text-sm h-10 md:h-12 align-top">{children}</td>
-  );
-
   const tableRowDefinitions = [
     { type: 'Juri 1', juriId: 'juri-1' as const },
     { type: 'Juri 2', juriId: 'juri-2' as const },
@@ -407,7 +400,7 @@ function DewanDuaPageComponent({ gelanggangName }: { gelanggangName: string | nu
 
   if (!gelanggangName && !isLoading) {
     return (
-        <div className="flex flex-col min-h-screen bg-blue-100 dark:bg-gray-900 text-gray-800 dark:text-gray-200">
+        <div className="flex flex-col min-h-screen bg-background text-foreground">
             <Header overrideBackgroundClass="bg-blue-100 dark:bg-gray-900" />
             <main className="flex-1 container mx-auto p-4 md:p-8 flex flex-col items-center justify-center text-center">
                 <AlertTriangle className="h-12 w-12 text-destructive mb-4" />
@@ -423,7 +416,7 @@ function DewanDuaPageComponent({ gelanggangName }: { gelanggangName: string | nu
 
   if (isLoading && (!activeScheduleId || !matchDetailsLoaded)) {
     return (
-        <div className="flex flex-col min-h-screen bg-blue-100 dark:bg-gray-900 text-gray-800 dark:text-gray-200">
+        <div className="flex flex-col min-h-screen bg-blue-100 dark:bg-gray-900 text-foreground">
             <Header overrideBackgroundClass="bg-blue-100 dark:bg-gray-900" />
             <main className="flex-1 container mx-auto p-4 md:p-8 flex flex-col items-center justify-center">
                 <Loader2 className="h-12 w-12 animate-spin text-primary mb-4" />
@@ -440,151 +433,153 @@ function DewanDuaPageComponent({ gelanggangName }: { gelanggangName: string | nu
   
   if (!activeScheduleId && !isLoading && configMatchId === null) { 
     return (
-      <div className="flex flex-col min-h-screen bg-blue-100 dark:bg-gray-900 text-gray-800 dark:text-gray-200">
+      <div className="flex flex-col min-h-screen bg-blue-100 dark:bg-gray-900 text-foreground">
         <Header overrideBackgroundClass="bg-blue-100 dark:bg-gray-900" />
         <main className="flex-1 container mx-auto px-4 py-8">
-           <div className="mt-6 shadow-lg bg-card text-card-foreground rounded-lg">
-            <div className="p-6 text-center">
+           <Card className="mt-6 shadow-lg">
+            <CardHeader><CardTitle className="text-xl font-headline text-center text-primary">Dewan Juri 2 - Skor Detail</CardTitle></CardHeader>
+            <CardContent className="p-6 text-center">
                 <p className="mb-4 text-muted-foreground">{error || `Tidak ada pertandingan yang aktif untuk Gelanggang: ${gelanggangName}.`}</p>
                 <Button variant="outline" asChild>
                   <Link href="/login">
                     <ArrowLeft className="mr-2 h-4 w-4" /> Kembali ke Login
                   </Link>
                 </Button>
-            </div>
-           </div>
+            </CardContent>
+           </Card>
         </main>
       </div>
     );
   }
 
   return (
-    <div className="flex flex-col min-h-screen bg-blue-100 dark:bg-gray-900 text-gray-800 dark:text-gray-200">
+    <div className="flex flex-col min-h-screen bg-blue-100 dark:bg-gray-900 text-foreground">
       <Header overrideBackgroundClass="bg-blue-100 dark:bg-gray-900" />
       
-      <div className="container mx-auto px-2 md:px-4 py-3 md:py-6">
+      <main className="container mx-auto px-2 md:px-4 py-3 md:py-6">
         <Card className="mb-4 shadow-xl bg-gradient-to-b from-blue-600 to-blue-800 text-white">
-          <CardContent className="p-3 md:p-4 text-center">
-            <h1 className="text-xl md:text-2xl font-bold font-headline">
-              DEWAN JURI 2 - SKOR DETAIL (GEL: {gelanggangName || <Loader2 className="inline h-5 w-5 animate-spin"/>})
-            </h1>
-            {matchDetails && (
-              <p className="text-xs md:text-sm">
+          <CardHeader className="pb-2 pt-3 px-3 md:pb-3 md:pt-4 md:px-4">
+            <CardTitle className="text-xl md:text-2xl font-bold font-headline text-center">
+              DEWAN JURI 2 - SKOR DETAIL (GEL: {gelanggangName || <Skeleton className="h-6 w-10 inline-block bg-blue-400" />})
+            </CardTitle>
+             {matchDetails && (
+              <CardDescription className="text-xs md:text-sm text-blue-200 text-center">
                 Partai No. {matchDetails.matchNumber} | {matchDetails.round} | {matchDetails.class}
-              </p>
+              </CardDescription>
             )}
-            {isLoading && !matchDetailsLoaded && activeScheduleId && (
-              <p className="text-xs md:text-sm">
+             {isLoading && !matchDetailsLoaded && activeScheduleId && (
+              <div className="text-xs md:text-sm text-blue-200 text-center">
                 <Skeleton className="h-4 w-16 inline-block bg-blue-400" /> | <Skeleton className="h-4 w-12 inline-block bg-blue-400" /> | <Skeleton className="h-4 w-20 inline-block bg-blue-400" />
-              </p>
+              </div>
             )}
             {error && !isLoading && !matchDetailsLoaded && (
-              <p className="text-xs md:text-sm text-yellow-300 mt-1">
+              <CardDescription className="text-xs md:text-sm text-yellow-300 mt-1 text-center">
                 Gagal memuat detail pertandingan. {error}
-              </p>
+              </CardDescription>
             )}
-          </CardContent>
+          </CardHeader>
         </Card>
 
-        <div className="grid grid-cols-3 items-center text-center mb-4 md:mb-8">
+        <div className="grid grid-cols-3 items-center text-center mb-4 md:mb-6">
           <div className="text-left">
-            <div className="text-sm md:text-base font-semibold text-red-600 dark:text-red-400">KONTINGEN {pesilatMerahInfo?.contingent.toUpperCase() || (isLoading ? <Skeleton className="h-5 w-24 bg-gray-300 dark:bg-gray-700" /> : '-')}</div>
-            <div className="text-lg md:text-2xl font-bold text-red-600 dark:text-red-400">{pesilatMerahInfo?.name.toUpperCase() || (isLoading ? <Skeleton className="h-6 w-32 bg-gray-300 dark:bg-gray-700" /> : 'PESILAT MERAH')}</div>
-            <div className="text-3xl md:text-5xl font-bold text-red-600 dark:text-red-400 mt-1">{isLoading ? <Skeleton className="h-10 w-10 bg-gray-300 dark:bg-gray-700"/> : confirmedScoreMerah}</div>
+            <div className="text-sm md:text-base font-semibold text-red-600 dark:text-red-400">KONTINGEN {pesilatMerahInfo?.contingent.toUpperCase() || (isLoading ? <Skeleton className="h-5 w-24 bg-muted" /> : '-')}</div>
+            <div className="text-lg md:text-2xl font-bold text-red-600 dark:text-red-400">{pesilatMerahInfo?.name.toUpperCase() || (isLoading ? <Skeleton className="h-6 w-32 bg-muted" /> : 'PESILAT MERAH')}</div>
+            <div className="text-3xl md:text-5xl font-bold text-red-600 dark:text-red-400 mt-1">{isLoading ? <Skeleton className="h-10 w-10 bg-muted"/> : confirmedScoreMerah}</div>
           </div>
 
           <div className="text-4xl md:text-6xl font-mono font-bold text-gray-700 dark:text-gray-300">
-            {isLoading ? <Skeleton className="h-12 w-40 mx-auto bg-gray-300 dark:bg-gray-700" /> : formatTime(timerStatus.timerSeconds)}
+            {isLoading ? <Skeleton className="h-12 w-40 mx-auto bg-muted" /> : formatTime(timerStatus.timerSeconds)}
           </div>
 
           <div className="text-right">
-             <div className="text-sm md:text-base font-semibold text-blue-600 dark:text-blue-400">KONTINGEN {pesilatBiruInfo?.contingent.toUpperCase() || (isLoading ? <Skeleton className="h-5 w-24 ml-auto bg-gray-300 dark:bg-gray-700" /> : '-')}</div>
-             <div className="text-lg md:text-2xl font-bold text-blue-600 dark:text-blue-400">{pesilatBiruInfo?.name.toUpperCase() || (isLoading ? <Skeleton className="h-6 w-32 ml-auto bg-gray-300 dark:bg-gray-700" /> : 'PESILAT BIRU')}</div>
-            <div className="text-3xl md:text-5xl font-bold text-blue-600 dark:text-blue-400 mt-1">{isLoading ? <Skeleton className="h-10 w-10 ml-auto bg-gray-300 dark:bg-gray-700"/> : confirmedScoreBiru}</div>
+             <div className="text-sm md:text-base font-semibold text-blue-600 dark:text-blue-400">KONTINGEN {pesilatBiruInfo?.contingent.toUpperCase() || (isLoading ? <Skeleton className="h-5 w-24 ml-auto bg-muted" /> : '-')}</div>
+             <div className="text-lg md:text-2xl font-bold text-blue-600 dark:text-blue-400">{pesilatBiruInfo?.name.toUpperCase() || (isLoading ? <Skeleton className="h-6 w-32 ml-auto bg-muted" /> : 'PESILAT BIRU')}</div>
+            <div className="text-3xl md:text-5xl font-bold text-blue-600 dark:text-blue-400 mt-1">{isLoading ? <Skeleton className="h-10 w-10 ml-auto bg-muted"/> : confirmedScoreBiru}</div>
           </div>
         </div>
 
-        {error && <p className="text-center text-red-500 bg-red-100 p-3 rounded-md mb-4">{error}</p>}
+        {error && <p className="text-center text-red-500 bg-red-100 p-3 rounded-md mb-4 dark:bg-red-900/30 dark:text-red-400">{error}</p>}
 
-        <div className="overflow-x-auto shadow-lg rounded-md">
-          <table className="w-full border-collapse border border-black bg-white dark:bg-gray-800">
-            <thead>
-              <tr>
-                <th className="bg-red-600 text-white text-center p-1 md:p-2 border border-black text-xs md:text-sm align-top">TOTAL</th>
-                <th className="bg-red-600 text-white text-left px-2 py-1 md:px-3 md:py-2 border border-black text-xs md:text-sm align-top">MERAH - DETAIL POIN</th>
-                <th className="bg-red-600 text-white text-center p-1 md:p-2 border border-black text-xs md:text-sm align-top">Nilai</th>
-                <th className="bg-gray-700 text-white text-center p-1 md:p-2 border border-black align-middle text-xs md:text-sm row-span-2">BABAK</th>
-                <th className="bg-blue-600 text-white text-left px-2 py-1 md:px-3 md:py-2 border border-black text-xs md:text-sm align-top">BIRU - DETAIL POIN</th>
-                <th className="bg-blue-600 text-white text-center p-1 md:p-2 border border-black text-xs md:text-sm align-top">Nilai</th>
-                <th className="bg-blue-600 text-white text-center p-1 md:p-2 border border-black text-xs md:text-sm align-top">TOTAL</th>
-              </tr>
-            </thead>
-            <tbody>
-              {tableRowDefinitions.map((rowData, index) => {
-                const currentRoundForCalc = timerStatus.currentRound;
-                let merahLabelText: React.ReactNode = rowData.type;
-                let biruLabelText: React.ReactNode = rowData.type;
-                
-                let merahDisplayValue: string | number;
-                let biruDisplayValue: string | number;
+        <Card>
+          <CardContent className="p-0 md:p-2">
+            <Table>
+              <TableCaption>Detail Skor Babak Saat Ini: {getRomanRound(timerStatus.currentRound)}</TableCaption>
+              <TableHeader>
+                <TableRow>
+                  <TableHead className="w-[35%] text-sm md:text-base px-2 py-2 md:px-3 md:py-3 text-red-700 dark:text-red-400">Merah - Detail Poin</TableHead>
+                  <TableHead className="w-[10%] text-center text-sm md:text-base px-1 py-2 md:px-2 md:py-3 text-red-700 dark:text-red-400">Nilai</TableHead>
+                  <TableHead className="w-[10%] text-center text-sm md:text-base px-1 py-2 md:px-2 md:py-3 bg-gray-200 dark:bg-gray-700 text-gray-800 dark:text-gray-100">Babak</TableHead>
+                  <TableHead className="w-[35%] text-sm md:text-base px-2 py-2 md:px-3 md:py-3 text-blue-700 dark:text-blue-400">Biru - Detail Poin</TableHead>
+                  <TableHead className="w-[10%] text-center text-sm md:text-base px-1 py-2 md:px-2 md:py-3 text-blue-700 dark:text-blue-400">Nilai</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {tableRowDefinitions.map((rowData, index) => {
+                  const currentRoundForCalc = timerStatus.currentRound;
+                  let merahLabelText: React.ReactNode = rowData.type;
+                  let biruLabelText: React.ReactNode = rowData.type;
+                  
+                  let merahDisplayValue: string | number;
+                  let biruDisplayValue: string | number;
+                  const showLoadingSkeleton = isLoading || !matchDetailsLoaded;
 
-                const showLoadingSkeleton = isLoading || !matchDetailsLoaded;
+                  if (rowData.juriId) {
+                    merahDisplayValue = getJuriIndividualPointsArrayForRound(rowData.juriId, 'merah', currentRoundForCalc, juriScores);
+                    biruDisplayValue = getJuriIndividualPointsArrayForRound(rowData.juriId, 'biru', currentRoundForCalc, juriScores);
+                  } else if (rowData.type === 'Total Nilai Juri') {
+                    merahLabelText = <span className="font-semibold">Total Nilai Juri</span>;
+                    biruLabelText = <span className="font-semibold">Total Nilai Juri</span>;
+                    merahDisplayValue = JURI_IDS.reduce((sum, id) => sum + calculateJuriScoreForRound(id, 'merah', currentRoundForCalc, juriScores), 0);
+                    biruDisplayValue = JURI_IDS.reduce((sum, id) => sum + calculateJuriScoreForRound(id, 'biru', currentRoundForCalc, juriScores), 0);
+                  } else if (rowData.type === 'Jatuhan') {
+                    merahDisplayValue = getKetuaIndividualActionPointsArrayForRound('merah', 'Jatuhan', currentRoundForCalc, ketuaActionsLog);
+                    biruDisplayValue = getKetuaIndividualActionPointsArrayForRound('biru', 'Jatuhan', currentRoundForCalc, ketuaActionsLog);
+                  } else { // Hukuman
+                    merahDisplayValue = getKetuaIndividualActionPointsArrayForRound('merah', 'Hukuman', currentRoundForCalc, ketuaActionsLog);
+                    biruDisplayValue = getKetuaIndividualActionPointsArrayForRound('biru', 'Hukuman', currentRoundForCalc, ketuaActionsLog);
+                  }
 
-                if (rowData.juriId) {
-                  const merahPointsArray = getJuriIndividualPointsArrayForRound(rowData.juriId, 'merah', currentRoundForCalc, juriScores);
-                  merahDisplayValue = merahPointsArray.length > 0 ? merahPointsArray.join(', ') : (showLoadingSkeleton ? '' : '0');
-                  const biruPointsArray = getJuriIndividualPointsArrayForRound(rowData.juriId, 'biru', currentRoundForCalc, juriScores);
-                  biruDisplayValue = biruPointsArray.length > 0 ? biruPointsArray.join(', ') : (showLoadingSkeleton ? '' : '0');
-                } else if (rowData.type === 'Total Nilai Juri') {
-                  merahLabelText = <span className="font-semibold">Total Nilai Juri</span>;
-                  biruLabelText = <span className="font-semibold">Total Nilai Juri</span>;
-                  merahDisplayValue = JURI_IDS.reduce((sum, id) => sum + calculateJuriScoreForRound(id, 'merah', currentRoundForCalc, juriScores), 0);
-                  biruDisplayValue = JURI_IDS.reduce((sum, id) => sum + calculateJuriScoreForRound(id, 'biru', currentRoundForCalc, juriScores), 0);
-                } else if (rowData.type === 'Jatuhan') {
-                  const merahPointsArray = getKetuaIndividualActionPointsArrayForRound('merah', 'Jatuhan', currentRoundForCalc, ketuaActionsLog);
-                  merahDisplayValue = merahPointsArray.length > 0 ? merahPointsArray.join(', ') : (showLoadingSkeleton ? '' : '0');
-                  const biruPointsArray = getKetuaIndividualActionPointsArrayForRound('biru', 'Jatuhan', currentRoundForCalc, ketuaActionsLog);
-                  biruDisplayValue = biruPointsArray.length > 0 ? biruPointsArray.join(', ') : (showLoadingSkeleton ? '' : '0');
-                } else { // Hukuman
-                  const merahPointsArray = getKetuaIndividualActionPointsArrayForRound('merah', 'Hukuman', currentRoundForCalc, ketuaActionsLog);
-                  merahDisplayValue = merahPointsArray.length > 0 ? merahPointsArray.join(', ') : (showLoadingSkeleton ? '' : '0');
-                  const biruPointsArray = getKetuaIndividualActionPointsArrayForRound('biru', 'Hukuman', currentRoundForCalc, ketuaActionsLog);
-                  biruDisplayValue = biruPointsArray.length > 0 ? biruPointsArray.join(', ') : (showLoadingSkeleton ? '' : '0');
-                }
-
-                return (
-                  <tr key={rowData.type}>
-                    {index === 0 && (
-                      <td className="border border-black text-center align-middle text-xl md:text-3xl font-bold p-1 md:p-2 h-full" rowSpan={tableRowDefinitions.length}>
-                        {showLoadingSkeleton ? <Skeleton className="h-10 w-10 mx-auto bg-gray-400" /> : calculateRoundTotalScore('merah', currentRoundForCalc, juriScores, ketuaActionsLog)}
-                      </td>
-                    )}
-                    <LabelCell>{merahLabelText}</LabelCell>
-                    <ScoreCell value={merahDisplayValue} isLoadingValue={showLoadingSkeleton} />
-                    {index === 0 && (
-                      <td className="border border-black text-center align-middle text-3xl md:text-5xl font-bold p-1 md:p-2" rowSpan={tableRowDefinitions.length}>
-                        {showLoadingSkeleton ? <Skeleton className="h-10 w-8 mx-auto bg-gray-400" /> : getRomanRound(timerStatus.currentRound)}
-                      </td>
-                    )}
-                    <LabelCell>{biruLabelText}</LabelCell>
-                    <ScoreCell value={biruDisplayValue} isLoadingValue={showLoadingSkeleton} />
-                    {index === 0 && (
-                      <td className="border border-black text-center align-middle text-xl md:text-3xl font-bold p-1 md:p-2 h-full" rowSpan={tableRowDefinitions.length}>
-                        {showLoadingSkeleton ? <Skeleton className="h-10 w-10 mx-auto bg-gray-400" /> : calculateRoundTotalScore('biru', currentRoundForCalc, juriScores, ketuaActionsLog)}
-                      </td>
-                    )}
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
+                  return (
+                    <TableRow key={rowData.type} className={index % 2 === 0 ? "bg-muted/25" : ""}>
+                      <TableCell className="px-2 py-2.5 md:px-3 md:py-3 text-xs md:text-sm align-top text-gray-700 dark:text-gray-300">{merahLabelText}</TableCell>
+                      <TableCell className="text-center px-1 py-2.5 md:px-2 md:py-3 text-xs md:text-sm align-middle text-gray-800 dark:text-gray-100">
+                        {showLoadingSkeleton ? <Skeleton className="h-5 w-8 mx-auto" /> : merahDisplayValue}
+                      </TableCell>
+                      {index === 0 && (
+                        <TableCell rowSpan={tableRowDefinitions.length} className="text-center align-middle font-bold text-xl md:text-3xl text-gray-800 dark:text-gray-100 bg-gray-100 dark:bg-gray-700/50">
+                          {showLoadingSkeleton ? <Skeleton className="h-8 w-8 mx-auto" /> : getRomanRound(timerStatus.currentRound)}
+                        </TableCell>
+                      )}
+                      <TableCell className="px-2 py-2.5 md:px-3 md:py-3 text-xs md:text-sm align-top text-gray-700 dark:text-gray-300">{biruLabelText}</TableCell>
+                      <TableCell className="text-center px-1 py-2.5 md:px-2 md:py-3 text-xs md:text-sm align-middle text-gray-800 dark:text-gray-100">
+                        {showLoadingSkeleton ? <Skeleton className="h-5 w-8 mx-auto" /> : biruDisplayValue}
+                      </TableCell>
+                    </TableRow>
+                  );
+                })}
+              </TableBody>
+              <TableFooter>
+                <TableRow className="bg-gray-200 dark:bg-gray-700 font-bold">
+                  <TableCell className="px-2 py-2.5 md:px-3 md:py-3 text-xs md:text-sm text-red-700 dark:text-red-400">TOTAL SKOR BABAK (MERAH)</TableCell>
+                  <TableCell className="text-center px-1 py-2.5 md:px-2 md:py-3 text-xs md:text-sm text-red-700 dark:text-red-400">
+                    {isLoading ? <Skeleton className="h-5 w-10 mx-auto" /> : calculateRoundTotalScore('merah', timerStatus.currentRound, juriScores, ketuaActionsLog)}
+                  </TableCell>
+                  <TableCell className="text-center"></TableCell> 
+                  <TableCell className="px-2 py-2.5 md:px-3 md:py-3 text-xs md:text-sm text-blue-700 dark:text-blue-400">TOTAL SKOR BABAK (BIRU)</TableCell>
+                  <TableCell className="text-center px-1 py-2.5 md:px-2 md:py-3 text-xs md:text-sm text-blue-700 dark:text-blue-400">
+                    {isLoading ? <Skeleton className="h-5 w-10 mx-auto" /> : calculateRoundTotalScore('biru', timerStatus.currentRound, juriScores, ketuaActionsLog)}
+                  </TableCell>
+                </TableRow>
+              </TableFooter>
+            </Table>
+          </CardContent>
+        </Card>
          <div className="mt-8 text-center">
-            <Button variant="outline" asChild className="bg-white hover:bg-gray-100 text-gray-700 dark:bg-gray-700 dark:hover:bg-gray-600 dark:text-gray-200">
+            <Button variant="outline" asChild className="bg-card hover:bg-muted text-card-foreground">
                 <Link href={`/login?redirect=/scoring/tanding/dewan-2&gelanggang=${gelanggangName || ''}`}><ArrowLeft className="mr-2 h-4 w-4"/> Kembali ke Login</Link>
             </Button>
         </div>
-      </div>
+      </main>
     </div>
   );
 }
@@ -613,6 +608,7 @@ function PageWithSearchParams() {
     
 
     
+
 
 
 
