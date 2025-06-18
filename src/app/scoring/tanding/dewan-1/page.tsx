@@ -845,7 +845,7 @@ function DewanSatuPageComponent() {
     <div className="flex flex-col min-h-screen bg-gray-100 dark:bg-gray-900 font-body">
       <Header overrideBackgroundClass="bg-gray-100 dark:bg-gray-900" />
       <main className="flex-1 container mx-auto px-2 py-4 md:px-4 md:py-6">
-        <Card className="mb-4 shadow-xl bg-gradient-to-r from-primary to-red-700 text-primary-foreground">
+        <Card className="mb-4 shadow-xl bg-primary text-primary-foreground">
           <CardContent className="p-3 md:p-4 text-center">
             <h1 className="text-xl md:text-2xl font-bold font-headline">PENCAK SILAT - GELANGGANG: {gelanggangName || <Loader2 className="inline h-5 w-5 animate-spin"/>}</h1>
             {matchDetails && (<p className="text-xs md:text-sm">Partai No. {matchDetails.matchNumber} | {matchDetails.round} | {matchDetails.class}</p>)}
@@ -981,3 +981,4 @@ interface CombinedScoreEntry extends ScoreEntry {
   round: keyof LibRoundScores;
   color: 'merah' | 'biru';
 }
+
