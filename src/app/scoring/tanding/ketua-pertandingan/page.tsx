@@ -4,7 +4,7 @@
 import { useState, useEffect, useCallback, Suspense } from 'react';
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
-import { Header } from '@/components/layout/Header'; // Ditambahkan
+import { Header } from '@/components/layout/Header'; 
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -571,14 +571,20 @@ function KetuaPertandinganPageComponent({ gelanggangName }: { gelanggangName: st
     return (
       <div className="flex flex-col min-h-screen">
         <Header overrideBackgroundClass="bg-gray-50 dark:bg-black" />
-        <main className="flex-1 container mx-auto px-4 py-8 text-center">
-           <h1 className="text-2xl font-bold text-primary mb-2">Ketua Pertandingan (Gel: {gelanggangName || 'N/A'})</h1>
-           <div className="text-muted-foreground mb-4">{error || `Tidak ada pertandingan yang aktif untuk Gelanggang: ${gelanggangName}.`}</div>
-           <Button variant="outline" asChild>
-            <Link href="/login">
-                <ArrowLeft className="mr-2 h-4 w-4" /> Kembali ke Login
-            </Link>
-           </Button>
+        <main className="flex-1 container mx-auto px-4 py-8">
+          <Card className="bg-primary text-primary-foreground text-center mb-6 shadow-xl">
+            <CardContent className="p-3 md:p-4">
+              <h1 className="text-xl md:text-2xl font-bold font-headline">Ketua Pertandingan (Gel: {gelanggangName || 'N/A'})</h1>
+            </CardContent>
+          </Card>
+           <div className="text-center">
+             <div className="text-muted-foreground mb-4">{error || `Tidak ada pertandingan yang aktif untuk Gelanggang: ${gelanggangName}.`}</div>
+             <Button variant="outline" asChild>
+              <Link href="/login">
+                  <ArrowLeft className="mr-2 h-4 w-4" /> Kembali ke Login
+              </Link>
+             </Button>
+           </div>
         </main>
       </div>
     );
@@ -588,36 +594,38 @@ function KetuaPertandinganPageComponent({ gelanggangName }: { gelanggangName: st
     <div className="flex flex-col min-h-screen bg-gray-50 dark:bg-black">
       <Header overrideBackgroundClass="bg-gray-50 dark:bg-black" />
       <main className="flex-1 container mx-auto px-2 py-4 md:p-6">
-        <div className="text-center mb-4">
-          <h1 className="text-2xl md:text-3xl font-bold text-gray-800 dark:text-gray-100">Ketua Pertandingan (Gel: {gelanggangName || 'N/A'})</h1>
-          <div className="text-sm text-gray-600 dark:text-gray-400">
-             {isLoadingPage && !matchDetailsLoaded ? <Skeleton className="h-4 w-32 inline-block" /> : (matchDetails?.place || `Partai No. ${matchDetails?.matchNumber || 'N/A'}`)}
-             {matchDetails && matchDetailsLoaded && ` - ${matchDetails.class} (${matchDetails.round})`}
-          </div>
-        </div>
+        <Card className="bg-primary text-primary-foreground text-center mb-4 shadow-xl">
+            <CardContent className="p-3 md:p-4">
+                <h1 className="text-xl md:text-2xl font-bold font-headline">Ketua Pertandingan (Gel: {gelanggangName || 'N/A'})</h1>
+                 <div className="text-xs md:text-sm opacity-90">
+                    {isLoadingPage && !matchDetailsLoaded ? <Skeleton className="h-4 w-32 inline-block bg-primary-foreground/30" /> : (matchDetails?.place || `Partai No. ${matchDetails?.matchNumber || 'N/A'}`)}
+                    {matchDetails && matchDetailsLoaded && ` - ${matchDetails.class} (${matchDetails.round})`}
+                </div>
+            </CardContent>
+        </Card>
 
         <div className="flex justify-between items-center mb-4 px-1">
           <div className="text-left">
-            <div className="text-sm font-semibold text-red-600">KONTINGEN {pesilatMerahInfo?.contingent || (isLoadingPage && activeMatchId ? <Skeleton className="h-4 w-16 inline-block" /> : '-')}</div>
-            <div className="text-lg font-bold text-red-600">{pesilatMerahInfo?.name || (isLoadingPage && activeMatchId ? <Skeleton className="h-6 w-32" /> : 'PESILAT MERAH')}</div>
+            <div className="text-sm font-semibold text-red-600 dark:text-red-400">KONTINGEN {pesilatMerahInfo?.contingent || (isLoadingPage && activeMatchId ? <Skeleton className="h-4 w-16 inline-block bg-muted" /> : '-')}</div>
+            <div className="text-lg font-bold text-red-600 dark:text-red-400">{pesilatMerahInfo?.name || (isLoadingPage && activeMatchId ? <Skeleton className="h-6 w-32 bg-muted" /> : 'PESILAT MERAH')}</div>
           </div>
           <div className="text-right">
-            <div className="text-sm font-semibold text-blue-600">KONTINGEN {pesilatBiruInfo?.contingent || (isLoadingPage && activeMatchId ? <Skeleton className="h-4 w-16 inline-block" /> : '-')}</div>
-            <div className="text-lg font-bold text-blue-600">{pesilatBiruInfo?.name || (isLoadingPage && activeMatchId ? <Skeleton className="h-6 w-32" /> : 'PESILAT BIRU')}</div>
+            <div className="text-sm font-semibold text-blue-600 dark:text-blue-400">KONTINGEN {pesilatBiruInfo?.contingent || (isLoadingPage && activeMatchId ? <Skeleton className="h-4 w-16 inline-block bg-muted" /> : '-')}</div>
+            <div className="text-lg font-bold text-blue-600 dark:text-blue-400">{pesilatBiruInfo?.name || (isLoadingPage && activeMatchId ? <Skeleton className="h-6 w-32 bg-muted" /> : 'PESILAT BIRU')}</div>
           </div>
         </div>
 
         <div className="mb-6 overflow-x-auto">
-          <Table className="min-w-full border-collapse border border-gray-300 dark:border-gray-700">
+          <Table className="min-w-full border-collapse border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800">
             <TableHeader>
-              <TableRow className="bg-gray-100 dark:bg-gray-800">
-                <TableHead className="border border-gray-300 dark:border-gray-700 text-center text-red-600 py-2 px-1 text-xs sm:text-sm">Hukuman </TableHead>
-                <TableHead className="border border-gray-300 dark:border-gray-700 text-center text-red-600 py-2 px-1 text-xs sm:text-sm">Binaan </TableHead>
-                <TableHead className="border border-gray-300 dark:border-gray-700 text-center text-red-600 py-2 px-1 text-xs sm:text-sm">Jatuhan </TableHead>
-                <TableHead className="border border-gray-300 dark:border-gray-700 text-center py-2 px-1 text-xs sm:text-sm">Babak</TableHead>
-                <TableHead className="border border-gray-300 dark:border-gray-700 text-center text-blue-600 py-2 px-1 text-xs sm:text-sm">Jatuhan </TableHead>
-                <TableHead className="border border-gray-300 dark:border-gray-700 text-center text-blue-600 py-2 px-1 text-xs sm:text-sm">Binaan </TableHead>
-                <TableHead className="border border-gray-300 dark:border-gray-700 text-center text-blue-600 py-2 px-1 text-xs sm:text-sm">Hukuman </TableHead>
+              <TableRow className="bg-gray-100 dark:bg-gray-700">
+                <TableHead className="border border-gray-300 dark:border-gray-600 text-center text-red-600 dark:text-red-400 py-2 px-1 text-xs sm:text-sm">Hukuman </TableHead>
+                <TableHead className="border border-gray-300 dark:border-gray-600 text-center text-red-600 dark:text-red-400 py-2 px-1 text-xs sm:text-sm">Binaan </TableHead>
+                <TableHead className="border border-gray-300 dark:border-gray-600 text-center text-red-600 dark:text-red-400 py-2 px-1 text-xs sm:text-sm">Jatuhan </TableHead>
+                <TableHead className="border border-gray-300 dark:border-gray-600 text-center py-2 px-1 text-xs sm:text-sm text-gray-700 dark:text-gray-200">Babak</TableHead>
+                <TableHead className="border border-gray-300 dark:border-gray-600 text-center text-blue-600 dark:text-blue-400 py-2 px-1 text-xs sm:text-sm">Jatuhan </TableHead>
+                <TableHead className="border border-gray-300 dark:border-gray-600 text-center text-blue-600 dark:text-blue-400 py-2 px-1 text-xs sm:text-sm">Binaan </TableHead>
+                <TableHead className="border border-gray-300 dark:border-gray-600 text-center text-blue-600 dark:text-blue-400 py-2 px-1 text-xs sm:text-sm">Hukuman </TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -625,14 +633,14 @@ function KetuaPertandinganPageComponent({ gelanggangName }: { gelanggangName: st
                 const scoresMerah = calculateDisplayScoresForTable(ketuaActionsLog, 'merah', round);
                 const scoresBiru = calculateDisplayScoresForTable(ketuaActionsLog, 'biru', round);
                 return (
-                  <TableRow key={`round-display-${round}`} className={dewanTimerStatus.currentRound === round ? 'bg-yellow-100 dark:bg-yellow-900/30' : 'bg-white dark:bg-gray-800/50'}>
-                    <TableCell className="border border-gray-300 dark:border-gray-700 text-center font-medium py-2 px-1">{isLoadingPage && !matchDetailsLoaded ? <Skeleton className="h-5 w-8 mx-auto"/> : scoresMerah.hukuman}</TableCell>
-                    <TableCell className="border border-gray-300 dark:border-gray-700 text-center font-medium py-2 px-1">{isLoadingPage && !matchDetailsLoaded ? <Skeleton className="h-5 w-8 mx-auto"/> : scoresMerah.binaan}</TableCell>
-                    <TableCell className="border border-gray-300 dark:border-gray-700 text-center font-medium py-2 px-1">{isLoadingPage && !matchDetailsLoaded ? <Skeleton className="h-5 w-8 mx-auto"/> : scoresMerah.jatuhan}</TableCell>
-                    <TableCell className="border border-gray-300 dark:border-gray-700 text-center font-bold py-2 px-1">{round === 1 ? 'I' : round === 2 ? 'II' : 'III'}</TableCell>
-                    <TableCell className="border border-gray-300 dark:border-gray-700 text-center font-medium py-2 px-1">{isLoadingPage && !matchDetailsLoaded ? <Skeleton className="h-5 w-8 mx-auto"/> : scoresBiru.jatuhan}</TableCell>
-                    <TableCell className="border border-gray-300 dark:border-gray-700 text-center font-medium py-2 px-1">{isLoadingPage && !matchDetailsLoaded ? <Skeleton className="h-5 w-8 mx-auto"/> : scoresBiru.binaan}</TableCell>
-                    <TableCell className="border border-gray-300 dark:border-gray-700 text-center font-medium py-2 px-1">{isLoadingPage && !matchDetailsLoaded ? <Skeleton className="h-5 w-8 mx-auto"/> : scoresBiru.hukuman}</TableCell>
+                  <TableRow key={`round-display-${round}`} className={dewanTimerStatus.currentRound === round ? 'bg-yellow-100 dark:bg-yellow-900/30' : ''}>
+                    <TableCell className="border border-gray-300 dark:border-gray-600 text-center font-medium py-2 px-1 text-gray-800 dark:text-gray-100">{isLoadingPage && !matchDetailsLoaded ? <Skeleton className="h-5 w-8 mx-auto bg-muted"/> : scoresMerah.hukuman}</TableCell>
+                    <TableCell className="border border-gray-300 dark:border-gray-600 text-center font-medium py-2 px-1 text-gray-800 dark:text-gray-100">{isLoadingPage && !matchDetailsLoaded ? <Skeleton className="h-5 w-8 mx-auto bg-muted"/> : scoresMerah.binaan}</TableCell>
+                    <TableCell className="border border-gray-300 dark:border-gray-600 text-center font-medium py-2 px-1 text-gray-800 dark:text-gray-100">{isLoadingPage && !matchDetailsLoaded ? <Skeleton className="h-5 w-8 mx-auto bg-muted"/> : scoresMerah.jatuhan}</TableCell>
+                    <TableCell className="border border-gray-300 dark:border-gray-600 text-center font-bold py-2 px-1 text-gray-800 dark:text-gray-100">{round === 1 ? 'I' : round === 2 ? 'II' : 'III'}</TableCell>
+                    <TableCell className="border border-gray-300 dark:border-gray-600 text-center font-medium py-2 px-1 text-gray-800 dark:text-gray-100">{isLoadingPage && !matchDetailsLoaded ? <Skeleton className="h-5 w-8 mx-auto bg-muted"/> : scoresBiru.jatuhan}</TableCell>
+                    <TableCell className="border border-gray-300 dark:border-gray-600 text-center font-medium py-2 px-1 text-gray-800 dark:text-gray-100">{isLoadingPage && !matchDetailsLoaded ? <Skeleton className="h-5 w-8 mx-auto bg-muted"/> : scoresBiru.binaan}</TableCell>
+                    <TableCell className="border border-gray-300 dark:border-gray-600 text-center font-medium py-2 px-1 text-gray-800 dark:text-gray-100">{isLoadingPage && !matchDetailsLoaded ? <Skeleton className="h-5 w-8 mx-auto bg-muted"/> : scoresBiru.hukuman}</TableCell>
                   </TableRow>
                 );
               })}
@@ -640,9 +648,9 @@ function KetuaPertandinganPageComponent({ gelanggangName }: { gelanggangName: st
           </Table>
         </div>
         
-        <Card className="mb-6">
+        <Card className="mb-6 bg-white dark:bg-gray-800">
           <CardHeader>
-            <CardTitle className="text-lg">Log Tindakan Ketua</CardTitle>
+            <CardTitle className="text-lg text-gray-800 dark:text-gray-100">Log Tindakan Ketua</CardTitle>
           </CardHeader>
           <CardContent>
             {ketuaActionsLog.length === 0 ? (
@@ -652,16 +660,16 @@ function KetuaPertandinganPageComponent({ gelanggangName }: { gelanggangName: st
                 <Table>
                   <TableHeader>
                     <TableRow>
-                      <TableHead className="w-[100px]">Waktu</TableHead>
-                      <TableHead>Babak</TableHead>
-                      <TableHead>Pesilat</TableHead>
-                      <TableHead>Tindakan</TableHead>
-                      <TableHead className="text-right">Poin</TableHead>
+                      <TableHead className="w-[100px] text-gray-600 dark:text-gray-300">Waktu</TableHead>
+                      <TableHead className="text-gray-600 dark:text-gray-300">Babak</TableHead>
+                      <TableHead className="text-gray-600 dark:text-gray-300">Pesilat</TableHead>
+                      <TableHead className="text-gray-600 dark:text-gray-300">Tindakan</TableHead>
+                      <TableHead className="text-right text-gray-600 dark:text-gray-300">Poin</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
                     {ketuaActionsLog.map((action) => (
-                      <TableRow key={action.id}>
+                      <TableRow key={action.id} className="text-gray-700 dark:text-gray-200">
                         <TableCell>{formatFirestoreTimestamp(action.timestamp)}</TableCell>
                         <TableCell>{action.round}</TableCell>
                         <TableCell>
@@ -694,10 +702,10 @@ function KetuaPertandinganPageComponent({ gelanggangName }: { gelanggangName: st
           </div>
 
           <div className="flex flex-col items-center justify-center space-y-3 md:pt-8 order-first md:order-none">
-             <div className={cn("text-center p-2 rounded-md w-full", 
-                dewanTimerStatus.matchStatus.startsWith('PausedForVerification') ? "bg-orange-100 dark:bg-orange-900" :
-                dewanTimerStatus.isTimerRunning ? "bg-green-100 dark:bg-green-900" : 
-                "bg-gray-100 dark:bg-gray-700"
+             <div className={cn("text-center p-2 rounded-md w-full bg-white dark:bg-gray-800 shadow", 
+                dewanTimerStatus.matchStatus.startsWith('PausedForVerification') ? "border-2 border-orange-500" :
+                dewanTimerStatus.isTimerRunning ? "border-2 border-green-500" : 
+                "border border-gray-300 dark:border-gray-700"
               )}>
                 <div className="text-2xl font-mono font-bold text-gray-800 dark:text-gray-100">
                     {dewanTimerStatus.isTimerRunning ? formatTime(dewanTimerStatus.timerSeconds) : "JEDA"}
@@ -721,16 +729,16 @@ function KetuaPertandinganPageComponent({ gelanggangName }: { gelanggangName: st
                   Mulai Verifikasi
                 </Button>
               </DialogTrigger>
-              <DialogContent className="sm:max-w-[425px]">
+              <DialogContent className="sm:max-w-[425px] bg-white dark:bg-gray-800">
                 <DialogTitle className="sr-only">Mulai Verifikasi Juri</DialogTitle>
                 <DialogHeader>
-                  <DialogTitle>Mulai Verifikasi Juri</DialogTitle>
-                  <DialogDescription>
+                  <DialogTitle className="text-gray-800 dark:text-gray-100">Mulai Verifikasi Juri</DialogTitle>
+                  <DialogDescription className="text-gray-600 dark:text-gray-300">
                     Pilih jenis verifikasi. Ini akan menjeda timer dan mengirim permintaan ke juri. Verifikasi sebelumnya yang masih 'pending' akan dibatalkan.
                   </DialogDescription>
                 </DialogHeader>
                 <div className="py-4">
-                  <RadioGroup value={selectedVerificationTypeForCreation} onValueChange={(value) => setSelectedVerificationTypeForCreation(value as VerificationType)}>
+                  <RadioGroup value={selectedVerificationTypeForCreation} onValueChange={(value) => setSelectedVerificationTypeForCreation(value as VerificationType)} className="text-gray-700 dark:text-gray-200">
                     <div className="flex items-center space-x-2">
                       <RadioGroupItem value="jatuhan" id="v-jatuhan-create" />
                       <Label htmlFor="v-jatuhan-create">Verifikasi Jatuhan</Label>
@@ -770,7 +778,7 @@ function KetuaPertandinganPageComponent({ gelanggangName }: { gelanggangName: st
             </Button>
           </div>
         </div>
-        {error && !isLoadingPage && <div className="text-red-500 text-center mt-4 p-2 bg-red-100 border border-red-500 rounded-md">Error: {error}</div>}
+        {error && !isLoadingPage && <div className="text-red-500 dark:text-red-400 text-center mt-4 p-2 bg-red-100 dark:bg-red-900/30 border border-red-500 dark:border-red-700 rounded-md">Error: {error}</div>}
 
         <Dialog
             open={isVoteResultModalOpen}
@@ -784,36 +792,36 @@ function KetuaPertandinganPageComponent({ gelanggangName }: { gelanggangName: st
             }}
         >
           <DialogContent 
-            className="sm:max-w-lg" 
+            className="sm:max-w-lg bg-white dark:bg-gray-800" 
             onPointerDownOutside={(e) => { if(activeVerificationDetails?.status === 'pending') e.preventDefault(); }} 
             onEscapeKeyDown={(e) => { if(activeVerificationDetails?.status === 'pending') e.preventDefault(); }}
           >
             <DialogTitle className="sr-only">Hasil Verifikasi Juri</DialogTitle>
             <DialogHeader>
-              <DialogTitle className="text-2xl font-bold font-headline text-center">Hasil Verifikasi Juri</DialogTitle>
+              <DialogTitle className="text-2xl font-bold font-headline text-center text-gray-800 dark:text-gray-100">Hasil Verifikasi Juri</DialogTitle>
               {activeVerificationDetails && (
-                <DialogDescription className="text-center text-lg">
+                <DialogDescription className="text-center text-lg text-gray-600 dark:text-gray-300">
                   {activeVerificationDetails.type === 'jatuhan' ? 'Verifikasi Jatuhan' : 'Verifikasi Pelanggaran'} (Babak {activeVerificationDetails.round})
                 </DialogDescription>
               )}
             </DialogHeader>
             
             <div className="my-4 space-y-3">
-              <h3 className="font-semibold text-center text-lg">Vote Juri:</h3>
+              <h3 className="font-semibold text-center text-lg text-gray-700 dark:text-gray-200">Vote Juri:</h3>
               <div className="grid grid-cols-3 gap-3 items-center justify-items-center">
                 {(['juri-1', 'juri-2', 'juri-3'] as const).map((juriKey, index) => (
                   <div key={juriKey} className="flex flex-col items-center space-y-1">
-                    <div className={cn("w-16 h-16 rounded-md border-2 border-gray-400 flex items-center justify-center", getJuriVoteBoxClass(activeVerificationDetails?.votes[juriKey] || null))}>
+                    <div className={cn("w-16 h-16 rounded-md border-2 border-gray-400 dark:border-gray-500 flex items-center justify-center", getJuriVoteBoxClass(activeVerificationDetails?.votes[juriKey] || null))}>
                        
                     </div>
-                    <p className="text-xs font-medium">Juri {index + 1}</p>
+                    <p className="text-xs font-medium text-gray-600 dark:text-gray-300">Juri {index + 1}</p>
                   </div>
                 ))}
               </div>
             </div>
             
             <div className="my-6 space-y-3">
-                <p className="text-center font-semibold text-lg">Keputusan Ketua Pertandingan:</p>
+                <p className="text-center font-semibold text-lg text-gray-700 dark:text-gray-200">Keputusan Ketua Pertandingan:</p>
                 <div className="flex justify-around gap-2">
                     <Button 
                         onClick={() => setKetuaSelectedDecision('merah')} 
@@ -870,7 +878,7 @@ export default function KetuaPertandinganTandingPage() {
   return (
     <Suspense fallback={
       <div className="flex flex-col min-h-screen"> 
-        <Header overrideBackgroundClass="bg-gray-50 dark:bg-black" /> {/* Temporary, may need better loading */}
+        <Header overrideBackgroundClass="bg-gray-50 dark:bg-black" /> 
         <main className="flex-1 container mx-auto p-4 md:p-8 flex flex-col items-center justify-center">
           <Loader2 className="h-12 w-12 animate-spin text-primary mb-4" />
           <p className="text-lg text-muted-foreground">Memuat halaman Ketua Pertandingan...</p>
