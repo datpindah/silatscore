@@ -5,7 +5,7 @@ import { useState, useEffect, useCallback, useRef, Suspense, type PointerEvent }
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
 import { Button } from '@/components/ui/button';
-import { Header } from '@/components/layout/Header'; 
+import { Header } from '@/components/layout/Header';
 import { ArrowLeft, Eye, Loader2, RadioTower, AlertTriangle, Sun, Moon, ChevronsRight } from 'lucide-react';
 import type { ScheduleTanding, TimerStatus, VerificationRequest, JuriVoteValue, KetuaActionLogEntry, PesilatColorIdentity, KetuaActionType } from '@/lib/types';
 import type { ScoreEntry as LibScoreEntryType, RoundScores as LibRoundScoresType } from '@/lib/types';
@@ -81,11 +81,6 @@ function MonitoringSkorPageComponent({ gelanggangName }: { gelanggangName: strin
   const [isDisplayVerificationModalOpen, setIsDisplayVerificationModalOpen] = useState(false);
   const [isNavigatingNextMatch, setIsNavigatingNextMatch] = useState(false);
 
-  const [isHeaderVisible, setIsHeaderVisible] = useState(true);
-  const [isMouseOverPageHeader, setIsMouseOverPageHeader] = useState(false);
-  const PAGE_HEADER_ACTIVATION_THRESHOLD_PX = 50;
-
-
   const resetMatchDisplayData = useCallback(() => {
     setMatchDetails(null);
     setPesilatMerahInfo(null);
@@ -139,7 +134,7 @@ function MonitoringSkorPageComponent({ gelanggangName }: { gelanggangName: strin
     if (configMatchId === undefined) { setIsLoading(true); return; }
     if (configMatchId === null) {
       if (activeScheduleId !== null) { resetMatchDisplayData(); setActiveScheduleId(null); }
-      setIsLoading(false); 
+      setIsLoading(false);
       if (!error && gelanggangName) setError(`Tidak ada jadwal Tanding aktif untuk Gelanggang: ${gelanggangName}.`);
       return;
     }
@@ -377,42 +372,6 @@ function MonitoringSkorPageComponent({ gelanggangName }: { gelanggangName: strin
     prevJuriScoresDataRef.current = currentJuriData;
   }, [juriScoresData, timerStatus.currentRound, timerStatus]);
 
-  useEffect(() => {
-    const handlePageHeaderMouseMove = (event: MouseEvent) => {
-      if (event.clientY < PAGE_HEADER_ACTIVATION_THRESHOLD_PX) {
-        setIsHeaderVisible(true);
-      } else {
-        if (!isMouseOverPageHeader) {
-          setIsHeaderVisible(false);
-        }
-      }
-    };
-    const handlePageHeaderDocumentMouseLeave = () => {
-      if (!isMouseOverPageHeader) {
-        setIsHeaderVisible(false);
-      }
-    };
-    document.addEventListener('mousemove', handlePageHeaderMouseMove);
-    document.documentElement.addEventListener('mouseleave', handlePageHeaderDocumentMouseLeave);
-    return () => {
-      document.removeEventListener('mousemove', handlePageHeaderMouseMove);
-      document.documentElement.removeEventListener('mouseleave', handlePageHeaderDocumentMouseLeave);
-    };
-  }, [isMouseOverPageHeader]);
-
-  const handlePageHeaderMouseEnter = () => {
-    setIsMouseOverPageHeader(true);
-    setIsHeaderVisible(true);
-  };
-
-  const handlePageHeaderMouseLeave = (event: PointerEvent<HTMLElement>) => {
-    setIsMouseOverPageHeader(false);
-    if (event.clientY >= PAGE_HEADER_ACTIVATION_THRESHOLD_PX) {
-      setIsHeaderVisible(false);
-    }
-  };
-
-
   const formatTime = (seconds: number): string => {
     const minutes = Math.floor(seconds / 60);
     const remainingSeconds = seconds % 60;
@@ -561,22 +520,19 @@ function MonitoringSkorPageComponent({ gelanggangName }: { gelanggangName: strin
 
 
   return (
-    <div className="flex flex-col min-h-screen bg-gray-100 dark:bg-gray-900">
+    <div className={cn("flex flex-col min-h-screen bg-gray-100 dark:bg-gray-900")}>
       <Header overrideBackgroundClass="bg-gray-100 dark:bg-gray-900" />
       <div
         className={cn(
           "flex flex-col flex-1 font-sans",
           pageTheme === 'light' ? 'monitoring-theme-light' : 'monitoring-theme-dark',
-          "bg-[var(--monitor-bg)] text-[var(--monitor-text)]" 
+          "bg-[var(--monitor-bg)] text-[var(--monitor-text)]"
         )}
       >
         <Card
-          onMouseEnter={handlePageHeaderMouseEnter}
-          onMouseLeave={handlePageHeaderMouseLeave}
           className={cn(
-            "sticky top-0 z-40 mb-2 md:mb-4 shadow-xl bg-gradient-to-r from-primary to-red-700 text-primary-foreground mx-1 md:mx-2 mt-1 md:mt-2",
-            "transition-transform duration-300 ease-in-out",
-            isHeaderVisible ? "transform-none" : "-translate-y-full"
+            "mb-2 md:mb-4 shadow-xl bg-gradient-to-r from-primary to-red-700 text-primary-foreground mx-1 md:mx-2 mt-1 md:mt-2"
+            // Removed sticky and transform classes for static behavior
           )}
         >
           <CardContent className="p-3 md:p-4 text-center">
@@ -774,7 +730,7 @@ function MonitoringSkorPageComponent({ gelanggangName }: { gelanggangName: strin
               <p className="text-xl text-center text-[var(--monitor-overlay-text-primary)] mb-2">{error || `Tidak ada pertandingan yang aktif untuk dimonitor di Gelanggang: ${gelanggangName}.`}</p>
               <p className="text-sm text-center text-[var(--monitor-overlay-text-secondary)] mb-6">Silakan aktifkan jadwal di panel admin atau tunggu pertandingan dimulai.</p>
               <Button variant="outline" asChild className="bg-[var(--monitor-overlay-button-bg)] border-[var(--monitor-overlay-button-border)] hover:bg-[var(--monitor-overlay-button-hover-bg)] text-[var(--monitor-overlay-button-text)]">
-                <Link href={`/login?redirect=/scoring/tanding/monitoring-skor&gelanggang=${gelanggangName || ''}`}><ArrowLeft className="mr-2 h-4 w-4" /> Kembali ke Login</Link>
+                <Link href={`/login?redirect=/scoring/tanding/monitoring-skor&gelanggang=${gelanggangName || ''}`}><ArrowLeft className="mr-2 h-4 w-4" /> Kembali</Link>
               </Button>
            </div>
         )}
@@ -818,3 +774,4 @@ function PageWithSearchParams() {
   const gelanggangName = searchParams.get('gelanggang');
   return <MonitoringSkorPageComponent gelanggangName={gelanggangName} />;
 }
+
