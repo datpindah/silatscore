@@ -134,7 +134,7 @@ function MonitoringSkorPageComponent({ gelanggangName }: { gelanggangName: strin
     if (configMatchId === undefined) { setIsLoading(true); return; }
     if (configMatchId === null) {
       if (activeScheduleId !== null) { resetMatchDisplayData(); setActiveScheduleId(null); }
-      setIsLoading(false);
+      setIsLoading(false); 
       if (!error && gelanggangName) setError(`Tidak ada jadwal Tanding aktif untuk Gelanggang: ${gelanggangName}.`);
       return;
     }
@@ -532,7 +532,6 @@ function MonitoringSkorPageComponent({ gelanggangName }: { gelanggangName: strin
         <Card
           className={cn(
             "mb-2 md:mb-4 shadow-xl bg-gradient-to-r from-primary to-red-700 text-primary-foreground mx-1 md:mx-2 mt-1 md:mt-2"
-            // Removed sticky and transform classes for static behavior
           )}
         >
           <CardContent className="p-3 md:p-4 text-center">
@@ -580,7 +579,7 @@ function MonitoringSkorPageComponent({ gelanggangName }: { gelanggangName: strin
                         <FoulBox label="P3" isActive={getFoulStatus('biru', 'Peringatan', 3)} />
                     </div>
                 </div>
-                <div className="flex-grow h-full bg-[var(--monitor-skor-biru-bg)] flex items-center justify-center text-5xl md:text-8xl font-bold rounded-md text-[var(--monitor-skor-text)]">
+                <div className="flex-grow h-full bg-gradient-to-b from-blue-500 to-blue-700 flex items-center justify-center text-5xl md:text-8xl font-bold rounded-md text-[var(--monitor-skor-text)]">
                     {isLoading && !matchDetailsLoaded ? <Skeleton className="h-16 w-20 bg-blue-400" /> : confirmedScoreBiru}
                 </div>
               </div>
@@ -616,7 +615,7 @@ function MonitoringSkorPageComponent({ gelanggangName }: { gelanggangName: strin
                 <div className="text-xs md:text-base text-[var(--monitor-pesilat-merah-contingent-text)]">{pesilatMerahInfo?.contingent || <Skeleton className="h-4 w-24 bg-[var(--monitor-skeleton-bg)] mt-1" />}</div>
               </div>
               <div className="flex w-full items-stretch gap-1 md:gap-2 mb-1 md:mb-2 h-56 md:h-72">
-                <div className="flex-grow h-full bg-[var(--monitor-skor-merah-bg)] flex items-center justify-center text-5xl md:text-8xl font-bold rounded-md text-[var(--monitor-skor-text)]">
+                <div className="flex-grow h-full bg-gradient-to-b from-red-500 to-red-700 flex items-center justify-center text-5xl md:text-8xl font-bold rounded-md text-[var(--monitor-skor-text)]">
                     {isLoading && !matchDetailsLoaded ? <Skeleton className="h-16 w-20 bg-red-400" /> : confirmedScoreMerah}
                 </div>
                 <div className="flex flex-col gap-2 p-0.5 w-20 md:w-24 h-full">
