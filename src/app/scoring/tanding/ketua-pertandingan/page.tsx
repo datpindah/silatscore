@@ -4,7 +4,7 @@
 import { useState, useEffect, useCallback, Suspense } from 'react';
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
-import { Header } from '@/components/layout/Header';
+import { Header } from '@/components/layout/Header'; // Ditambahkan
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -536,7 +536,8 @@ function KetuaPertandinganPageComponent({ gelanggangName }: { gelanggangName: st
 
   if (!gelanggangName && !isLoadingPage) {
     return (
-      <div className="flex flex-col min-h-screen"><Header />
+      <div className="flex flex-col min-h-screen">
+        <Header overrideBackgroundClass="bg-gray-50 dark:bg-black" />
         <main className="flex-1 container mx-auto p-4 md:p-8 flex flex-col items-center justify-center text-center">
             <AlertTriangle className="h-12 w-12 text-destructive mb-4" />
             <h1 className="text-xl font-semibold text-destructive">Nama Gelanggang Diperlukan</h1>
@@ -551,7 +552,8 @@ function KetuaPertandinganPageComponent({ gelanggangName }: { gelanggangName: st
   
   if (isLoadingPage && (!activeMatchId || !matchDetailsLoaded)) {
     return (
-      <div className="flex flex-col min-h-screen"><Header />
+      <div className="flex flex-col min-h-screen">
+        <Header overrideBackgroundClass="bg-gray-50 dark:bg-black" />
         <main className="flex-1 container mx-auto p-4 md:p-8 flex flex-col items-center justify-center">
           <Loader2 className="h-12 w-12 animate-spin text-primary mb-4" />
           <p className="text-lg text-muted-foreground">
@@ -567,7 +569,8 @@ function KetuaPertandinganPageComponent({ gelanggangName }: { gelanggangName: st
 
   if (!activeMatchId && !isLoadingPage && configMatchId === null) {
     return (
-      <div className="flex flex-col min-h-screen"><Header />
+      <div className="flex flex-col min-h-screen">
+        <Header overrideBackgroundClass="bg-gray-50 dark:bg-black" />
         <main className="flex-1 container mx-auto px-4 py-8 text-center">
            <h1 className="text-2xl font-bold text-primary mb-2">Ketua Pertandingan (Gel: {gelanggangName || 'N/A'})</h1>
            <div className="text-muted-foreground mb-4">{error || `Tidak ada pertandingan yang aktif untuk Gelanggang: ${gelanggangName}.`}</div>
@@ -583,7 +586,7 @@ function KetuaPertandinganPageComponent({ gelanggangName }: { gelanggangName: st
 
   return (
     <div className="flex flex-col min-h-screen bg-gray-50 dark:bg-black">
-      <Header />
+      <Header overrideBackgroundClass="bg-gray-50 dark:bg-black" />
       <main className="flex-1 container mx-auto px-2 py-4 md:p-6">
         <div className="text-center mb-4">
           <h1 className="text-2xl md:text-3xl font-bold text-gray-800 dark:text-gray-100">Ketua Pertandingan (Gel: {gelanggangName || 'N/A'})</h1>
@@ -866,7 +869,8 @@ function KetuaPertandinganPageComponent({ gelanggangName }: { gelanggangName: st
 export default function KetuaPertandinganTandingPage() {
   return (
     <Suspense fallback={
-      <div className="flex flex-col min-h-screen"> <Header />
+      <div className="flex flex-col min-h-screen"> 
+        <Header overrideBackgroundClass="bg-gray-50 dark:bg-black" /> {/* Temporary, may need better loading */}
         <main className="flex-1 container mx-auto p-4 md:p-8 flex flex-col items-center justify-center">
           <Loader2 className="h-12 w-12 animate-spin text-primary mb-4" />
           <p className="text-lg text-muted-foreground">Memuat halaman Ketua Pertandingan...</p>
