@@ -12,7 +12,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
 import { Header } from '@/components/layout/Header';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'; // Added CardDescription
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow, TableCaption, TableFooter } from "@/components/ui/table";
 
 
@@ -576,7 +576,7 @@ function DewanDuaPageComponent({ gelanggangName }: { gelanggangName: string | nu
         </Card>
          <div className="mt-8 text-center">
             <Button variant="outline" asChild className="bg-card hover:bg-muted text-card-foreground">
-                <Link href={`/login?redirect=/scoring/tanding/dewan-2&gelanggang=${gelanggangName || ''}`}><ArrowLeft className="mr-2 h-4 w-4"/> Kembali ke Login</Link>
+                <Link href="/login"><ArrowLeft className="mr-2 h-4 w-4"/> Kembali ke Login</Link>
             </Button>
         </div>
       </main>
@@ -608,6 +608,7 @@ function PageWithSearchParams() {
     
 
     
+
 
 
 
