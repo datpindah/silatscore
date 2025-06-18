@@ -12,7 +12,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
 import { Header } from '@/components/layout/Header';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'; // Added CardDescription
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow, TableCaption, TableFooter } from "@/components/ui/table";
 
 
@@ -400,7 +400,7 @@ function DewanDuaPageComponent({ gelanggangName }: { gelanggangName: string | nu
 
   if (!gelanggangName && !isLoading) {
     return (
-        <div className="flex flex-col min-h-screen bg-background text-foreground">
+        <div className="flex flex-col min-h-screen bg-blue-100 dark:bg-gray-900 text-foreground">
             <Header overrideBackgroundClass="bg-blue-100 dark:bg-gray-900" />
             <main className="flex-1 container mx-auto p-4 md:p-8 flex flex-col items-center justify-center text-center">
                 <AlertTriangle className="h-12 w-12 text-destructive mb-4" />
@@ -540,19 +540,19 @@ function DewanDuaPageComponent({ gelanggangName }: { gelanggangName: string | nu
                   }
 
                   return (
-                    <TableRow key={rowData.type} className={index % 2 === 0 ? "bg-muted/25" : ""}>
+                    <TableRow key={rowData.type} className={cn("border-b border-gray-200 dark:border-gray-700", index % 2 === 0 ? "bg-white dark:bg-gray-800" : "bg-gray-50 dark:bg-gray-800/50")}>
                       <TableCell className="px-2 py-2.5 md:px-3 md:py-3 text-xs md:text-sm align-top text-gray-700 dark:text-gray-300">{merahLabelText}</TableCell>
                       <TableCell className="text-center px-1 py-2.5 md:px-2 md:py-3 text-xs md:text-sm align-middle text-gray-800 dark:text-gray-100">
-                        {showLoadingSkeleton ? <Skeleton className="h-5 w-8 mx-auto" /> : merahDisplayValue}
+                        {showLoadingSkeleton ? <Skeleton className="h-5 w-8 mx-auto bg-muted" /> : merahDisplayValue}
                       </TableCell>
                       {index === 0 && (
-                        <TableCell rowSpan={tableRowDefinitions.length} className="text-center align-middle font-bold text-xl md:text-3xl text-gray-800 dark:text-gray-100 bg-gray-100 dark:bg-gray-700/50">
-                          {showLoadingSkeleton ? <Skeleton className="h-8 w-8 mx-auto" /> : getRomanRound(timerStatus.currentRound)}
+                        <TableCell rowSpan={tableRowDefinitions.length} className="text-center align-middle font-bold text-xl md:text-3xl text-gray-800 dark:text-gray-100 bg-gray-100 dark:bg-gray-700/50 border-x border-gray-300 dark:border-gray-600">
+                          {showLoadingSkeleton ? <Skeleton className="h-8 w-8 mx-auto bg-muted" /> : getRomanRound(timerStatus.currentRound)}
                         </TableCell>
                       )}
                       <TableCell className="px-2 py-2.5 md:px-3 md:py-3 text-xs md:text-sm align-top text-gray-700 dark:text-gray-300">{biruLabelText}</TableCell>
                       <TableCell className="text-center px-1 py-2.5 md:px-2 md:py-3 text-xs md:text-sm align-middle text-gray-800 dark:text-gray-100">
-                        {showLoadingSkeleton ? <Skeleton className="h-5 w-8 mx-auto" /> : biruDisplayValue}
+                        {showLoadingSkeleton ? <Skeleton className="h-5 w-8 mx-auto bg-muted" /> : biruDisplayValue}
                       </TableCell>
                     </TableRow>
                   );
@@ -562,12 +562,12 @@ function DewanDuaPageComponent({ gelanggangName }: { gelanggangName: string | nu
                 <TableRow className="bg-gray-200 dark:bg-gray-700 font-bold">
                   <TableCell className="px-2 py-2.5 md:px-3 md:py-3 text-xs md:text-sm text-red-700 dark:text-red-400">TOTAL SKOR BABAK (MERAH)</TableCell>
                   <TableCell className="text-center px-1 py-2.5 md:px-2 md:py-3 text-xs md:text-sm text-red-700 dark:text-red-400">
-                    {isLoading ? <Skeleton className="h-5 w-10 mx-auto" /> : calculateRoundTotalScore('merah', timerStatus.currentRound, juriScores, ketuaActionsLog)}
+                    {isLoading ? <Skeleton className="h-5 w-10 mx-auto bg-muted" /> : calculateRoundTotalScore('merah', timerStatus.currentRound, juriScores, ketuaActionsLog)}
                   </TableCell>
                   <TableCell className="text-center"></TableCell> 
                   <TableCell className="px-2 py-2.5 md:px-3 md:py-3 text-xs md:text-sm text-blue-700 dark:text-blue-400">TOTAL SKOR BABAK (BIRU)</TableCell>
                   <TableCell className="text-center px-1 py-2.5 md:px-2 md:py-3 text-xs md:text-sm text-blue-700 dark:text-blue-400">
-                    {isLoading ? <Skeleton className="h-5 w-10 mx-auto" /> : calculateRoundTotalScore('biru', timerStatus.currentRound, juriScores, ketuaActionsLog)}
+                    {isLoading ? <Skeleton className="h-5 w-10 mx-auto bg-muted" /> : calculateRoundTotalScore('biru', timerStatus.currentRound, juriScores, ketuaActionsLog)}
                   </TableCell>
                 </TableRow>
               </TableFooter>
@@ -608,6 +608,7 @@ function PageWithSearchParams() {
     
 
     
+
 
 
 
