@@ -343,10 +343,8 @@ function JuriTGRPageComponent({ juriId, gelanggangName }: { juriId: string; gela
     isSaving ||
     !activeMatchId ||
     !matchDetailsLoaded ||
-    !currentSide || 
-    (currentSideScoreData?.isReady && !(currentCategory === 'Ganda' && (tgrTimerStatus.matchStatus === 'Ongoing' || tgrTimerStatus.matchStatus === 'Paused'))) ||
-    (tgrTimerStatus.matchStatus !== 'Ongoing' && tgrTimerStatus.matchStatus !== 'Paused') || 
-    (tgrTimerStatus.matchStatus === 'Finished' && tgrTimerStatus.currentPerformingSide === currentSide); 
+    !currentSide ||
+    (tgrTimerStatus.matchStatus !== 'Ongoing' && tgrTimerStatus.matchStatus !== 'Paused');
 
   const juriSiapButtonDisabled =
     isLoading ||
@@ -646,7 +644,7 @@ function JuriTGRPageComponent({ juriId, gelanggangName }: { juriId: string; gela
 
 
 export default function JuriTGRPageWithSuspense({ params: paramsPromise }: { params: Promise<{ juriId: string }> }) {
-  const params = use(paramsPromise);
+  const params = use(paramsPromise); 
   const juriId = params.juriId;
 
   return (
