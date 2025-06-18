@@ -536,19 +536,6 @@ function MonitoringSkorTGRPageComponent({ gelanggangName }: { gelanggangName: st
           "bg-[var(--monitor-bg)] text-[var(--monitor-text)]"
         )}
       >
-        <Button
-          variant="outline"
-          size="icon"
-          onClick={() => setPageTheme(prev => prev === 'light' ? 'dark' : 'light')}
-          className="absolute top-2 right-2 z-[100] bg-[var(--monitor-dialog-bg)] text-[var(--monitor-text)] border-[var(--monitor-border)] hover:bg-opacity-80"
-          aria-label={pageTheme === "dark" ? "Ganti ke mode terang" : "Ganti ke mode gelap"}
-        >
-          {pageTheme === 'dark' ? (
-            <Sun className="h-[1.2rem] w-[1.2rem]" />
-          ) : (
-            <Moon className="h-[1.2rem] w-[1.2rem]" />
-          )}
-        </Button>
         
         <Card className="mb-2 md:mb-4 shadow-xl bg-gradient-to-r from-primary to-red-700 text-primary-foreground mx-1 md:mx-2 mt-1 md:mt-2">
           <CardContent className="p-3 md:p-4 text-center">
@@ -778,4 +765,3 @@ export default function MonitoringSkorTGRPageSuspended() {
     </Suspense>
   );
 }
-

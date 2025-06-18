@@ -81,6 +81,10 @@ function MonitoringSkorPageComponent({ gelanggangName }: { gelanggangName: strin
   const [isDisplayVerificationModalOpen, setIsDisplayVerificationModalOpen] = useState(false);
   const [isNavigatingNextMatch, setIsNavigatingNextMatch] = useState(false);
 
+  const [isHeaderVisible, setIsHeaderVisible] = useState(true);
+  const [isMouseOverPageHeader, setIsMouseOverPageHeader] = useState(false);
+  const PAGE_HEADER_ACTIVATION_THRESHOLD_PX = 50;
+
 
   const resetMatchDisplayData = useCallback(() => {
     setMatchDetails(null);
@@ -373,6 +377,41 @@ function MonitoringSkorPageComponent({ gelanggangName }: { gelanggangName: strin
     prevJuriScoresDataRef.current = currentJuriData;
   }, [juriScoresData, timerStatus.currentRound, timerStatus]);
 
+  useEffect(() => {
+    const handlePageHeaderMouseMove = (event: MouseEvent) => {
+      if (event.clientY < PAGE_HEADER_ACTIVATION_THRESHOLD_PX) {
+        setIsHeaderVisible(true);
+      } else {
+        if (!isMouseOverPageHeader) {
+          setIsHeaderVisible(false);
+        }
+      }
+    };
+    const handlePageHeaderDocumentMouseLeave = () => {
+      if (!isMouseOverPageHeader) {
+        setIsHeaderVisible(false);
+      }
+    };
+    document.addEventListener('mousemove', handlePageHeaderMouseMove);
+    document.documentElement.addEventListener('mouseleave', handlePageHeaderDocumentMouseLeave);
+    return () => {
+      document.removeEventListener('mousemove', handlePageHeaderMouseMove);
+      document.documentElement.removeEventListener('mouseleave', handlePageHeaderDocumentMouseLeave);
+    };
+  }, [isMouseOverPageHeader]);
+
+  const handlePageHeaderMouseEnter = () => {
+    setIsMouseOverPageHeader(true);
+    setIsHeaderVisible(true);
+  };
+
+  const handlePageHeaderMouseLeave = (event: PointerEvent<HTMLElement>) => {
+    setIsMouseOverPageHeader(false);
+    if (event.clientY >= PAGE_HEADER_ACTIVATION_THRESHOLD_PX) {
+      setIsHeaderVisible(false);
+    }
+  };
+
 
   const formatTime = (seconds: number): string => {
     const minutes = Math.floor(seconds / 60);
@@ -526,29 +565,20 @@ function MonitoringSkorPageComponent({ gelanggangName }: { gelanggangName: strin
       <Header overrideBackgroundClass="bg-gray-100 dark:bg-gray-900" />
       <div
         className={cn(
-          "flex flex-col flex-1 font-sans", // Changed from min-h-screen to flex-1
+          "flex flex-col flex-1 font-sans",
           pageTheme === 'light' ? 'monitoring-theme-light' : 'monitoring-theme-dark',
-          // bg-gray-100 dark:bg-gray-900 is now handled by parent
-          // explicit bg-[var(--monitor-bg)] is useful if theme class itself doesn't set background
           "bg-[var(--monitor-bg)] text-[var(--monitor-text)]" 
         )}
       >
-        <Button
-          variant="outline"
-          size="icon"
-          onClick={() => setPageTheme(prev => prev === 'light' ? 'dark' : 'light')}
-          className="absolute top-20 right-2 z-[60] bg-card text-card-foreground border-border hover:bg-muted" 
-          aria-label={pageTheme === "dark" ? "Ganti ke mode terang" : "Ganti ke mode gelap"}
-        >
-          {pageTheme === 'dark' ? (
-            <Sun className="h-[1.2rem] w-[1.2rem]" />
-          ) : (
-            <Moon className="h-[1.2rem] w-[1.2rem]" />
+        <Card
+          onMouseEnter={handlePageHeaderMouseEnter}
+          onMouseLeave={handlePageHeaderMouseLeave}
+          className={cn(
+            "sticky top-0 z-40 mb-2 md:mb-4 shadow-xl bg-gradient-to-r from-primary to-red-700 text-primary-foreground mx-1 md:mx-2 mt-1 md:mt-2",
+            "transition-transform duration-300 ease-in-out",
+            isHeaderVisible ? "transform-none" : "-translate-y-full"
           )}
-        </Button>
-
-        {/* Page-specific header (the red gradient card) */}
-        <Card className="mb-2 md:mb-4 shadow-xl bg-gradient-to-r from-primary to-red-700 text-primary-foreground mx-1 md:mx-2 mt-1 md:mt-2">
+        >
           <CardContent className="p-3 md:p-4 text-center">
             <h1 className="text-xl md:text-2xl font-bold font-headline">
               GELANGGANG: {gelanggangName || <Skeleton className="h-6 w-20 inline-block bg-red-400" />}
@@ -788,4 +818,3 @@ function PageWithSearchParams() {
   const gelanggangName = searchParams.get('gelanggang');
   return <MonitoringSkorPageComponent gelanggangName={gelanggangName} />;
 }
-
