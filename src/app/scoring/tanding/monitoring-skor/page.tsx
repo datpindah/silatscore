@@ -15,6 +15,7 @@ import { cn } from '@/lib/utils';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Dialog, DialogContent, DialogHeader, DialogTitle as RadixDialogTitle } from "@/components/ui/dialog";
 import { Card, CardContent } from '@/components/ui/card';
+import { useTheme } from 'next-themes';
 
 
 const ACTIVE_TANDING_MATCHES_BY_GELANGGANG_PATH = 'app_settings/active_tanding_matches_by_gelanggang';
@@ -50,7 +51,7 @@ interface CombinedScoreEntry extends ScoreEntry {
 }
 
 function MonitoringSkorPageComponent({ gelanggangName }: { gelanggangName: string | null }) {
-  const [pageTheme, setPageTheme] = useState<'light' | 'dark'>('light');
+  const { resolvedTheme } = useTheme();
   const [configMatchId, setConfigMatchId] = useState<string | null | undefined>(undefined);
   const [activeScheduleId, setActiveScheduleId] = useState<string | null>(null);
   const [matchDetails, setMatchDetails] = useState<ScheduleTanding | null>(null);
@@ -498,7 +499,7 @@ function MonitoringSkorPageComponent({ gelanggangName }: { gelanggangName: strin
 
   if (!gelanggangName && !isLoading) {
     return (
-      <div className={cn("flex flex-col min-h-screen items-center justify-center", pageTheme === 'light' ? 'monitoring-theme-light' : 'monitoring-theme-dark', "bg-gray-100 dark:bg-gray-900 text-[var(--monitor-text)]")}>
+      <div className={cn("flex flex-col min-h-screen items-center justify-center", resolvedTheme === 'dark' ? 'monitoring-theme-dark' : 'monitoring-theme-light', "bg-gray-100 dark:bg-gray-900 text-[var(--monitor-text)]")}>
         <AlertTriangle className="h-16 w-16 text-[var(--monitor-overlay-accent-text)] mb-4" />
         <p className="text-xl text-center text-[var(--monitor-overlay-text-primary)] mb-2">Gelanggang Tidak Ditemukan</p>
         <p className="text-sm text-center text-[var(--monitor-overlay-text-secondary)] mb-6">Parameter 'gelanggang' tidak ada di URL. Halaman monitor tidak bisa memuat data.</p>
@@ -511,7 +512,7 @@ function MonitoringSkorPageComponent({ gelanggangName }: { gelanggangName: strin
 
   if (isLoading && configMatchId === undefined) {
     return (
-        <div className={cn("flex flex-col min-h-screen items-center justify-center", pageTheme === 'light' ? 'monitoring-theme-light' : 'monitoring-theme-dark', "bg-gray-100 dark:bg-gray-900 text-[var(--monitor-text)]")}>
+        <div className={cn("flex flex-col min-h-screen items-center justify-center", resolvedTheme === 'dark' ? 'monitoring-theme-dark' : 'monitoring-theme-light', "bg-gray-100 dark:bg-gray-900 text-[var(--monitor-text)]")}>
             <Loader2 className="h-16 w-16 animate-spin text-[var(--monitor-overlay-accent-text)] mb-4" />
             <p className="text-xl">Memuat Konfigurasi Monitor untuk Gelanggang: {gelanggangName || '...'}</p>
         </div>
@@ -520,12 +521,12 @@ function MonitoringSkorPageComponent({ gelanggangName }: { gelanggangName: strin
 
 
   return (
-    <div className={cn("flex flex-col min-h-screen bg-gray-100 dark:bg-gray-900")}>
+    <div className="flex flex-col min-h-screen bg-gray-100 dark:bg-gray-900">
       <Header overrideBackgroundClass="bg-gray-100 dark:bg-gray-900" />
       <div
         className={cn(
           "flex flex-col flex-1 font-sans",
-          pageTheme === 'light' ? 'monitoring-theme-light' : 'monitoring-theme-dark',
+          resolvedTheme === 'dark' ? 'monitoring-theme-dark' : 'monitoring-theme-light',
           "bg-[var(--monitor-bg)] text-[var(--monitor-text)]"
         )}
       >
@@ -679,7 +680,7 @@ function MonitoringSkorPageComponent({ gelanggangName }: { gelanggangName: strin
             setIsDisplayVerificationModalOpen(isOpen);
         }}>
            <DialogContent
-              className={cn("sm:max-w-lg md:max-w-xl bg-[var(--monitor-dialog-bg)] border-[var(--monitor-dialog-border)] text-[var(--monitor-dialog-text)]", pageTheme === 'light' ? 'monitoring-theme-light' : 'monitoring-theme-dark')}
+              className={cn("sm:max-w-lg md:max-w-xl bg-[var(--monitor-dialog-bg)] border-[var(--monitor-dialog-border)] text-[var(--monitor-dialog-text)]", resolvedTheme === 'dark' ? 'monitoring-theme-dark' : 'monitoring-theme-light')}
               onPointerDownOutside={(e) => {if (activeDisplayVerificationRequest?.status === 'pending') e.preventDefault();}}
               onEscapeKeyDown={(e) => {if (activeDisplayVerificationRequest?.status === 'pending') e.preventDefault();}}
             >
