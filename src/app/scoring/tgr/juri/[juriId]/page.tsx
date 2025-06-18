@@ -1,7 +1,7 @@
 
 "use client";
 
-import { useState, useEffect, useCallback, use, Suspense } from 'react';
+import { useState, useEffect, useCallback, Suspense, use } from 'react'; // Added use
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
 import { Button } from '@/components/ui/button';
@@ -489,7 +489,7 @@ function JuriTGRPageComponent({ juriId, gelanggangName }: { juriId: string; gela
                 <h1 className="text-xl font-semibold text-destructive">Gelanggang Diperlukan</h1>
                 <p className="text-muted-foreground mt-2">Parameter 'gelanggang' tidak ditemukan di URL. Halaman Juri TGR tidak dapat memuat data.</p>
                 <Button asChild className="mt-6">
-                    <Link href={`/scoring/tgr/login`}><ArrowLeft className="mr-2 h-4 w-4"/> Kembali ke Login</Link>
+                    <Link href={`/scoring/tgr/login`}><ArrowLeft className="mr-2 h-4 w-4"/> Kembali ke Halaman Login</Link>
                 </Button>
             </main>
         </div>
@@ -645,17 +645,22 @@ function JuriTGRPageComponent({ juriId, gelanggangName }: { juriId: string; gela
 }
 
 
-export default function JuriTGRPageWithSuspense({ params }: { params: { juriId: string } }) {
+export default function JuriTGRPageWithSuspense({ params: paramsPromise }: { params: Promise<{ juriId: string }> }) {
+  const params = use(paramsPromise);
+  const juriId = params.juriId;
+
   return (
     <Suspense fallback={
       <div className="flex flex-col min-h-screen"> <Header />
         <main className="flex-1 container mx-auto p-4 md:p-8 flex flex-col items-center justify-center">
           <Loader2 className="h-12 w-12 animate-spin text-primary mb-4" />
-          <p className="text-lg text-muted-foreground">Memuat halaman Juri TGR ({params.juriId})...</p>
+          {/* Use the resolved juriId here */}
+          <p className="text-lg text-muted-foreground">Memuat halaman Juri TGR ({juriId})...</p>
         </main>
       </div>
     }>
-      <JuriTGRPageWithSearchParams juriId={params.juriId} />
+      {/* Pass the resolved juriId here */}
+      <JuriTGRPageWithSearchParams juriId={juriId} />
     </Suspense>
   );
 }
