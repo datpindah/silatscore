@@ -11,6 +11,8 @@ import { cn } from '@/lib/utils';
 import { Skeleton } from '@/components/ui/skeleton';
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
+import { Header } from '@/components/layout/Header'; // Ditambahkan
+import { Card, CardContent } from '@/components/ui/card'; // Ditambahkan
 
 const ACTIVE_TANDING_MATCHES_BY_GELANGGANG_PATH = 'app_settings/active_tanding_matches_by_gelanggang';
 const SCHEDULE_TANDING_COLLECTION = 'schedules_tanding';
@@ -405,7 +407,8 @@ function DewanDuaPageComponent({ gelanggangName }: { gelanggangName: string | nu
 
   if (!gelanggangName && !isLoading) {
     return (
-        <div className="flex flex-col min-h-screen">
+        <div className="flex flex-col min-h-screen bg-blue-100 dark:bg-gray-900 text-gray-800 dark:text-gray-200">
+            <Header overrideBackgroundClass="bg-blue-100 dark:bg-gray-900" />
             <main className="flex-1 container mx-auto p-4 md:p-8 flex flex-col items-center justify-center text-center">
                 <AlertTriangle className="h-12 w-12 text-destructive mb-4" />
                 <h1 className="text-xl font-semibold text-destructive">Gelanggang Diperlukan</h1>
@@ -420,7 +423,8 @@ function DewanDuaPageComponent({ gelanggangName }: { gelanggangName: string | nu
 
   if (isLoading && (!activeScheduleId || !matchDetailsLoaded)) {
     return (
-        <div className="flex flex-col min-h-screen">
+        <div className="flex flex-col min-h-screen bg-blue-100 dark:bg-gray-900 text-gray-800 dark:text-gray-200">
+            <Header overrideBackgroundClass="bg-blue-100 dark:bg-gray-900" />
             <main className="flex-1 container mx-auto p-4 md:p-8 flex flex-col items-center justify-center">
                 <Loader2 className="h-12 w-12 animate-spin text-primary mb-4" />
                 <p className="text-lg text-muted-foreground">
@@ -436,7 +440,8 @@ function DewanDuaPageComponent({ gelanggangName }: { gelanggangName: string | nu
   
   if (!activeScheduleId && !isLoading && configMatchId === null) { 
     return (
-      <div className="flex flex-col min-h-screen">
+      <div className="flex flex-col min-h-screen bg-blue-100 dark:bg-gray-900 text-gray-800 dark:text-gray-200">
+        <Header overrideBackgroundClass="bg-blue-100 dark:bg-gray-900" />
         <main className="flex-1 container mx-auto px-4 py-8">
            <div className="mt-6 shadow-lg bg-card text-card-foreground rounded-lg">
             <div className="p-6 text-center">
@@ -455,28 +460,37 @@ function DewanDuaPageComponent({ gelanggangName }: { gelanggangName: string | nu
 
   return (
     <div className="flex flex-col min-h-screen bg-blue-100 dark:bg-gray-900 text-gray-800 dark:text-gray-200">
-      <div className="bg-blue-700 text-white p-3 md:p-4">
-        <div className="container mx-auto flex items-center justify-between">
-          <Swords className="h-8 w-8 md:h-10 md:w-10" />
-          <div className="text-center">
-            <h1 className="text-xl md:text-3xl font-bold uppercase">
-              {matchDetails?.class || (isLoading ? <Skeleton className="h-8 w-48 inline-block bg-blue-500" /> : "Detail Pertandingan")}
-            </h1>
-            <div className="text-sm md:text-lg">
-              {matchDetails?.round || (isLoading ? <Skeleton className="h-5 w-32 inline-block mt-1 bg-blue-500" /> : "Babak")}
-              {' - '} Gelanggang: {gelanggangName || (isLoading ? <Skeleton className="h-5 w-20 inline-block mt-1 bg-blue-500" /> : 'N/A')}
-            </div>
-          </div>
-          <Shield className="h-8 w-8 md:h-10 md:w-10" />
-        </div>
-      </div>
-
+      <Header overrideBackgroundClass="bg-blue-100 dark:bg-gray-900" />
+      
       <div className="container mx-auto px-2 md:px-4 py-3 md:py-6">
+        <Card className="mb-4 shadow-xl bg-gradient-to-b from-blue-600 to-blue-800 text-white">
+          <CardContent className="p-3 md:p-4 text-center">
+            <h1 className="text-xl md:text-2xl font-bold font-headline">
+              DEWAN JURI 2 - SKOR DETAIL (GEL: {gelanggangName || <Loader2 className="inline h-5 w-5 animate-spin"/>})
+            </h1>
+            {matchDetails && (
+              <p className="text-xs md:text-sm">
+                Partai No. {matchDetails.matchNumber} | {matchDetails.round} | {matchDetails.class}
+              </p>
+            )}
+            {isLoading && !matchDetailsLoaded && activeScheduleId && (
+              <p className="text-xs md:text-sm">
+                <Skeleton className="h-4 w-16 inline-block bg-blue-400" /> | <Skeleton className="h-4 w-12 inline-block bg-blue-400" /> | <Skeleton className="h-4 w-20 inline-block bg-blue-400" />
+              </p>
+            )}
+            {error && !isLoading && !matchDetailsLoaded && (
+              <p className="text-xs md:text-sm text-yellow-300 mt-1">
+                Gagal memuat detail pertandingan. {error}
+              </p>
+            )}
+          </CardContent>
+        </Card>
+
         <div className="grid grid-cols-3 items-center text-center mb-4 md:mb-8">
           <div className="text-left">
-            <div className="text-sm md:text-base font-semibold text-red-600">KONTINGEN {pesilatMerahInfo?.contingent.toUpperCase() || (isLoading ? <Skeleton className="h-5 w-24 bg-gray-300 dark:bg-gray-700" /> : '-')}</div>
-            <div className="text-lg md:text-2xl font-bold text-red-600">{pesilatMerahInfo?.name.toUpperCase() || (isLoading ? <Skeleton className="h-6 w-32 bg-gray-300 dark:bg-gray-700" /> : 'PESILAT MERAH')}</div>
-            <div className="text-3xl md:text-5xl font-bold text-red-600 mt-1">{isLoading ? <Skeleton className="h-10 w-10 bg-gray-300 dark:bg-gray-700"/> : confirmedScoreMerah}</div>
+            <div className="text-sm md:text-base font-semibold text-red-600 dark:text-red-400">KONTINGEN {pesilatMerahInfo?.contingent.toUpperCase() || (isLoading ? <Skeleton className="h-5 w-24 bg-gray-300 dark:bg-gray-700" /> : '-')}</div>
+            <div className="text-lg md:text-2xl font-bold text-red-600 dark:text-red-400">{pesilatMerahInfo?.name.toUpperCase() || (isLoading ? <Skeleton className="h-6 w-32 bg-gray-300 dark:bg-gray-700" /> : 'PESILAT MERAH')}</div>
+            <div className="text-3xl md:text-5xl font-bold text-red-600 dark:text-red-400 mt-1">{isLoading ? <Skeleton className="h-10 w-10 bg-gray-300 dark:bg-gray-700"/> : confirmedScoreMerah}</div>
           </div>
 
           <div className="text-4xl md:text-6xl font-mono font-bold text-gray-700 dark:text-gray-300">
@@ -484,9 +498,9 @@ function DewanDuaPageComponent({ gelanggangName }: { gelanggangName: string | nu
           </div>
 
           <div className="text-right">
-             <div className="text-sm md:text-base font-semibold text-blue-600">KONTINGEN {pesilatBiruInfo?.contingent.toUpperCase() || (isLoading ? <Skeleton className="h-5 w-24 ml-auto bg-gray-300 dark:bg-gray-700" /> : '-')}</div>
-             <div className="text-lg md:text-2xl font-bold text-blue-600">{pesilatBiruInfo?.name.toUpperCase() || (isLoading ? <Skeleton className="h-6 w-32 ml-auto bg-gray-300 dark:bg-gray-700" /> : 'PESILAT BIRU')}</div>
-            <div className="text-3xl md:text-5xl font-bold text-blue-600 mt-1">{isLoading ? <Skeleton className="h-10 w-10 ml-auto bg-gray-300 dark:bg-gray-700"/> : confirmedScoreBiru}</div>
+             <div className="text-sm md:text-base font-semibold text-blue-600 dark:text-blue-400">KONTINGEN {pesilatBiruInfo?.contingent.toUpperCase() || (isLoading ? <Skeleton className="h-5 w-24 ml-auto bg-gray-300 dark:bg-gray-700" /> : '-')}</div>
+             <div className="text-lg md:text-2xl font-bold text-blue-600 dark:text-blue-400">{pesilatBiruInfo?.name.toUpperCase() || (isLoading ? <Skeleton className="h-6 w-32 ml-auto bg-gray-300 dark:bg-gray-700" /> : 'PESILAT BIRU')}</div>
+            <div className="text-3xl md:text-5xl font-bold text-blue-600 dark:text-blue-400 mt-1">{isLoading ? <Skeleton className="h-10 w-10 ml-auto bg-gray-300 dark:bg-gray-700"/> : confirmedScoreBiru}</div>
           </div>
         </div>
 
@@ -567,7 +581,7 @@ function DewanDuaPageComponent({ gelanggangName }: { gelanggangName: string | nu
         </div>
          <div className="mt-8 text-center">
             <Button variant="outline" asChild className="bg-white hover:bg-gray-100 text-gray-700 dark:bg-gray-700 dark:hover:bg-gray-600 dark:text-gray-200">
-                <Link href="/login"><ArrowLeft className="mr-2 h-4 w-4"/> Kembali ke Login</Link>
+                <Link href={`/login?redirect=/scoring/tanding/dewan-2&gelanggang=${gelanggangName || ''}`}><ArrowLeft className="mr-2 h-4 w-4"/> Kembali ke Login</Link>
             </Button>
         </div>
       </div>
@@ -578,7 +592,8 @@ function DewanDuaPageComponent({ gelanggangName }: { gelanggangName: string | nu
 export default function DewanDuaPage() {
   return (
     <Suspense fallback={
-      <div className="flex flex-col min-h-screen">
+      <div className="flex flex-col min-h-screen bg-blue-100 dark:bg-gray-900">
+         <Header overrideBackgroundClass="bg-blue-100 dark:bg-gray-900" />
         <main className="flex-1 container mx-auto p-4 md:p-8 flex flex-col items-center justify-center">
           <Loader2 className="h-12 w-12 animate-spin text-primary mb-4" />
           <p className="text-lg text-muted-foreground">Memuat halaman Dewan 2...</p>
@@ -598,5 +613,6 @@ function PageWithSearchParams() {
     
 
     
+
 
 
