@@ -10,7 +10,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { ArrowLeft, Play, RotateCcw, ChevronsRight, Loader2, PauseIcon, Info, StopCircle } from 'lucide-react';
 import type { ScheduleTGR, TGRTimerStatus } from '@/lib/types';
 import { db } from '@/lib/firebase';
-import { doc, onSnapshot, getDoc, setDoc, updateDoc, collection, query, orderBy, limit, where, getDocs, Timestamp, deleteField } from 'firebase/firestore';
+import { doc, onSnapshot, getDoc, setDoc, updateDoc, collection, query, orderBy, limit, where, getDocs, Timestamp, deleteField, writeBatch } from 'firebase/firestore';
 import { Skeleton } from '@/components/ui/skeleton';
 import { cn } from '@/lib/utils';
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
@@ -18,6 +18,8 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 const ACTIVE_TGR_MATCHES_BY_GELANGGANG_PATH = 'app_settings/active_tgr_matches_by_gelanggang';
 const SCHEDULE_TGR_COLLECTION = 'schedules_tgr';
 const MATCHES_TGR_COLLECTION = 'matches_tgr';
+const JURI_SCORES_TGR_SUBCOLLECTION = 'juri_scores_tgr'; // Added for Juri reset
+const TGR_JURI_IDS = ['juri-1', 'juri-2', 'juri-3', 'juri-4', 'juri-5', 'juri-6'] as const; // Added for Juri reset
 
 const initialGlobalTgrTimerStatus: TGRTimerStatus = {
   timerSeconds: 0,
@@ -42,7 +44,6 @@ function TGRTimerControlPageComponent({ gelanggangName }: { gelanggangName: stri
 
   const timerIntervalRef = useRef<NodeJS.Timeout | null>(null);
 
-  // Effect 1: Listen to gelanggang map to get configMatchId
   useEffect(() => {
     if (!gelanggangName) {
       setError("Nama gelanggang tidak ditemukan di URL.");
@@ -70,9 +71,8 @@ function TGRTimerControlPageComponent({ gelanggangName }: { gelanggangName: stri
     return () => unsubGelanggangMap();
   }, [gelanggangName]);
 
-  // Effect 2: Sync activeMatchId with configMatchId and reset page data
   useEffect(() => {
-    if (configMatchId === undefined) { // Still waiting for configMatchId
+    if (configMatchId === undefined) { 
       setIsLoading(true);
       return;
     }
@@ -80,17 +80,13 @@ function TGRTimerControlPageComponent({ gelanggangName }: { gelanggangName: stri
       setScheduleDetails(null);
       setMatchDetailsLoaded(false);
       setTgrTimerStatus(initialGlobalTgrTimerStatus);
-      setError(null); // Clear previous match-specific errors
-      setActiveMatchId(configMatchId); // This will trigger data loading effects
+      setError(null); 
+      setActiveMatchId(configMatchId); 
     }
-    // If configMatchId is null (no active match), activeMatchId will also become null.
-    // The loading state should reflect this.
-    setIsLoading(!!configMatchId); // True if there's a match ID to load, false otherwise.
-                                 // Further refinement in subsequent effects.
+    setIsLoading(!!configMatchId); 
   }, [configMatchId, activeMatchId]);
 
 
-  // Effect 3: Load Schedule Details when activeMatchId changes
   useEffect(() => {
     if (!activeMatchId) {
       setScheduleDetails(null);
@@ -100,25 +96,25 @@ function TGRTimerControlPageComponent({ gelanggangName }: { gelanggangName: stri
     let mounted = true;
     const loadSchedule = async () => {
       if (!mounted) return;
-      setIsLoading(true); // Start loading schedule details
+      setIsLoading(true); 
       try {
         const scheduleDocRef = doc(db, SCHEDULE_TGR_COLLECTION, activeMatchId);
         const scheduleDocSnap = await getDoc(scheduleDocRef);
         if (!mounted) return;
         if (scheduleDocSnap.exists()) {
           setScheduleDetails(scheduleDocSnap.data() as ScheduleTGR);
-          setMatchDetailsLoaded(true); // Schedule details loaded, next effect can run
+          setMatchDetailsLoaded(true); 
         } else {
           setError(`Detail jadwal TGR ID ${activeMatchId} tidak ditemukan.`);
           setScheduleDetails(null);
           setMatchDetailsLoaded(false);
-          setIsLoading(false); // Stop loading if schedule not found
+          setIsLoading(false); 
         }
       } catch (err) {
         if (mounted) setError("Gagal memuat detail jadwal TGR.");
         setScheduleDetails(null);
         setMatchDetailsLoaded(false);
-        setIsLoading(false); // Stop loading on error
+        setIsLoading(false); 
       }
     };
     loadSchedule();
@@ -126,12 +122,11 @@ function TGRTimerControlPageComponent({ gelanggangName }: { gelanggangName: stri
   }, [activeMatchId]);
 
 
-  // Effect 4: Initialize and Listen to Timer Status from Firestore
   useEffect(() => {
     if (!activeMatchId || !matchDetailsLoaded || !scheduleDetails) {
-        if (!activeMatchId && !isLoading) { /* Already handled by effect 2 */ }
-        else if (activeMatchId && !matchDetailsLoaded && isLoading) { /* Waiting for effect 3 */ }
-        else if (activeMatchId && matchDetailsLoaded && !scheduleDetails && isLoading) { setIsLoading(false); /* Should not happen if matchDetailsLoaded is true */ }
+        if (!activeMatchId && !isLoading) { /* Already handled */ }
+        else if (activeMatchId && !matchDetailsLoaded && isLoading) { /* Waiting */ }
+        else if (activeMatchId && matchDetailsLoaded && !scheduleDetails && isLoading) { setIsLoading(false); }
         return;
     }
 
@@ -155,14 +150,13 @@ function TGRTimerControlPageComponent({ gelanggangName }: { gelanggangName: stri
 
         if (!matchDocSnap.exists()) {
           statusToInitializeWith.currentPerformingSide = initialSideForThisSchedule;
-          statusToInitializeWith.matchStatus = initialSideForThisSchedule ? 'Pending' : 'MatchFinished'; // No participants -> finished
+          statusToInitializeWith.matchStatus = initialSideForThisSchedule ? 'Pending' : 'MatchFinished';
           needsFirestoreWrite = true;
         } else {
           const existingTimerStatus = matchDocSnap.data()?.timerStatus as TGRTimerStatus | undefined;
           if (existingTimerStatus) {
             statusToInitializeWith = { ...initialGlobalTgrTimerStatus, ...existingTimerStatus };
           }
-          // Correct currentPerformingSide if match isn't fully finished and side is not set or inconsistent
           if (initialSideForThisSchedule && 
               statusToInitializeWith.matchStatus !== 'Finished' && 
               statusToInitializeWith.currentPerformingSide === null) {
@@ -177,7 +171,6 @@ function TGRTimerControlPageComponent({ gelanggangName }: { gelanggangName: stri
         
         if (needsFirestoreWrite) {
           await setDoc(matchDataDocRef, { timerStatus: statusToInitializeWith }, { merge: true });
-          // Listener below will pick up this change.
         }
       } catch (e) {
         if (mounted) console.error("Error during TGR timer initialization:", e);
@@ -208,7 +201,6 @@ function TGRTimerControlPageComponent({ gelanggangName }: { gelanggangName: stri
   }, [activeMatchId, matchDetailsLoaded, scheduleDetails, isLoading]);
 
 
-  // Effect for stopwatch interval
   useEffect(() => {
     if (tgrTimerStatus.isTimerRunning && activeMatchId) {
       timerIntervalRef.current = setInterval(async () => {
@@ -242,9 +234,11 @@ function TGRTimerControlPageComponent({ gelanggangName }: { gelanggangName: stri
     return () => { if (timerIntervalRef.current) clearInterval(timerIntervalRef.current); };
   }, [tgrTimerStatus.isTimerRunning, activeMatchId]);
 
-  const updateTimerStatusInFirestore = useCallback(async (newStatusUpdates: Partial<TGRTimerStatus>) => {
-    if (!activeMatchId || !scheduleDetails) { console.warn("Update Firestore aborted: No activeMatchId or scheduleDetails"); return; }
-    setIsSubmitting(true);
+  const updateTimerStatusInFirestoreOnly = useCallback(async (newStatusUpdates: Partial<TGRTimerStatus>) => {
+    if (!activeMatchId || !scheduleDetails) { 
+        console.warn("Update Firestore (timer only) aborted: No activeMatchId or scheduleDetails"); 
+        throw new Error("Update Firestore (timer only) aborted: No activeMatchId or scheduleDetails");
+    }
     try {
       const matchDataDocRef = doc(db, MATCHES_TGR_COLLECTION, activeMatchId);
       const docSnap = await getDoc(matchDataDocRef);
@@ -252,58 +246,111 @@ function TGRTimerControlPageComponent({ gelanggangName }: { gelanggangName: stri
       let currentDBTimerStatus = { ...initialGlobalTgrTimerStatus };
       if (docSnap.exists() && docSnap.data()?.timerStatus) {
         currentDBTimerStatus = docSnap.data()?.timerStatus as TGRTimerStatus;
-      } else {
+      } else { // Initialize if doc or timerStatus doesn't exist
         if (scheduleDetails.pesilatBiruName) currentDBTimerStatus.currentPerformingSide = 'biru';
         else if (scheduleDetails.pesilatMerahName) currentDBTimerStatus.currentPerformingSide = 'merah';
+        currentDBTimerStatus.matchStatus = currentDBTimerStatus.currentPerformingSide ? 'Pending' : 'MatchFinished';
       }
       const newFullStatus: TGRTimerStatus = { ...currentDBTimerStatus, ...newStatusUpdates };
       await setDoc(matchDataDocRef, { timerStatus: newFullStatus }, { merge: true });
     } catch (e) {
-      console.error("Error updating TGR timer status in Firestore:", e);
-      setError("Gagal memperbarui status timer di server.");
-    } finally {
-      setIsSubmitting(false);
+      console.error("Error updating TGR timer status (only) in Firestore:", e);
+      throw e; 
     }
   }, [activeMatchId, scheduleDetails]);
 
-  const handleStartPauseTimer = () => {
-    if (!activeMatchId || !scheduleDetails || !tgrTimerStatus.currentPerformingSide) return;
+
+  const handleStartPauseTimer = async () => {
+    if (!activeMatchId || !scheduleDetails || !tgrTimerStatus.currentPerformingSide || isSubmitting) return;
     if (tgrTimerStatus.matchStatus === 'Finished' && tgrTimerStatus.currentPerformingSide) {
         alert(`Penampilan untuk ${tgrTimerStatus.currentPerformingSide === 'biru' ? 'Sudut Biru' : 'Sudut Merah'} telah Selesai. Gunakan tombol lanjut atau reset.`); return;
     }
     if (tgrTimerStatus.matchStatus === 'Finished' && tgrTimerStatus.currentPerformingSide === null) {
         alert("Partai TGR ini telah Selesai. Gunakan tombol lanjut ke partai berikutnya."); return;
     }
-    if (tgrTimerStatus.isTimerRunning) updateTimerStatusInFirestore({ isTimerRunning: false, matchStatus: 'Paused' });
-    else updateTimerStatusInFirestore({ isTimerRunning: true, matchStatus: 'Ongoing' });
+    
+    setIsSubmitting(true);
+    setError(null);
+    try {
+      if (tgrTimerStatus.isTimerRunning) await updateTimerStatusInFirestoreOnly({ isTimerRunning: false, matchStatus: 'Paused' });
+      else await updateTimerStatusInFirestoreOnly({ isTimerRunning: true, matchStatus: 'Ongoing' });
+    } catch (e) {
+      console.error("Error in handleStartPauseTimer (TGR):", e);
+      setError("Gagal mengubah status timer.");
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
-  const handleStopTimer = () => {
-    if (!activeMatchId || !tgrTimerStatus.currentPerformingSide || !tgrTimerStatus.isTimerRunning) return;
-    const updates: Partial<TGRTimerStatus> = { isTimerRunning: false, matchStatus: 'Finished' };
-    if (tgrTimerStatus.currentPerformingSide === 'biru') updates.performanceDurationBiru = tgrTimerStatus.timerSeconds;
-    else if (tgrTimerStatus.currentPerformingSide === 'merah') updates.performanceDurationMerah = tgrTimerStatus.timerSeconds;
-    updateTimerStatusInFirestore(updates);
+  const handleStopTimer = async () => {
+    if (!activeMatchId || !tgrTimerStatus.currentPerformingSide || !tgrTimerStatus.isTimerRunning || isSubmitting) return;
+    
+    setIsSubmitting(true);
+    setError(null);
+    try {
+      const updates: Partial<TGRTimerStatus> = { isTimerRunning: false, matchStatus: 'Finished' };
+      if (tgrTimerStatus.currentPerformingSide === 'biru') updates.performanceDurationBiru = tgrTimerStatus.timerSeconds;
+      else if (tgrTimerStatus.currentPerformingSide === 'merah') updates.performanceDurationMerah = tgrTimerStatus.timerSeconds;
+      await updateTimerStatusInFirestoreOnly(updates);
+    } catch (e) {
+      console.error("Error in handleStopTimer (TGR):", e);
+      setError("Gagal menghentikan timer dan mencatat waktu.");
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
-  const handleResetTimer = () => {
+  const handleResetTimer = async () => {
     if (!activeMatchId || !scheduleDetails || !tgrTimerStatus.currentPerformingSide) return;
     if (tgrTimerStatus.isTimerRunning) { alert("Jeda timer terlebih dahulu sebelum mereset."); return; }
-    const updates: Partial<TGRTimerStatus> = { timerSeconds: 0, isTimerRunning: false, matchStatus: 'Pending' };
-    if (tgrTimerStatus.currentPerformingSide === 'biru') updates.performanceDurationBiru = 0;
-    else if (tgrTimerStatus.currentPerformingSide === 'merah') updates.performanceDurationMerah = 0;
-    updateTimerStatusInFirestore(updates);
+    if (isSubmitting) return;
+
+    setIsSubmitting(true);
+    setError(null);
+    try {
+      const updates: Partial<TGRTimerStatus> = { timerSeconds: 0, isTimerRunning: false, matchStatus: 'Pending' };
+      const sideToReset = tgrTimerStatus.currentPerformingSide;
+      if (sideToReset === 'biru') updates.performanceDurationBiru = 0;
+      else if (sideToReset === 'merah') updates.performanceDurationMerah = 0;
+      
+      await updateTimerStatusInFirestoreOnly(updates);
+
+      const batch = writeBatch(db);
+      TGR_JURI_IDS.forEach(juriId => {
+          const juriDocRef = doc(db, MATCHES_TGR_COLLECTION, activeMatchId, JURI_SCORES_TGR_SUBCOLLECTION, juriId);
+          batch.update(juriDocRef, { [`${sideToReset}.isReady`]: false });
+      });
+      await batch.commit();
+
+    } catch (e) {
+      console.error("Error in handleResetTimer (TGR):", e);
+      setError("Gagal mereset timer dan status juri.");
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   const handleAdvanceStateOrParticipant = async () => {
     if (!activeMatchId || !scheduleDetails || !gelanggangName) return;
     if (tgrTimerStatus.isTimerRunning) { alert("Harap hentikan atau jeda timer saat ini sebelum melanjutkan."); return; }
+    if (isSubmitting) return;
+
     setIsSubmitting(true);
+    setError(null);
     try {
       if (tgrTimerStatus.currentPerformingSide === 'biru' && scheduleDetails.pesilatMerahName) {
-        await updateTimerStatusInFirestore({ currentPerformingSide: 'merah', matchStatus: 'Pending', timerSeconds: 0, isTimerRunning: false, performanceDurationMerah: 0 });
-      } else {
-        await updateTimerStatusInFirestore({ matchStatus: 'Finished', currentPerformingSide: null, isTimerRunning: false });
+        await updateTimerStatusInFirestoreOnly({ currentPerformingSide: 'merah', matchStatus: 'Pending', timerSeconds: 0, isTimerRunning: false, performanceDurationMerah: 0 });
+        
+        const batch = writeBatch(db);
+        TGR_JURI_IDS.forEach(juriId => {
+            const juriDocRef = doc(db, MATCHES_TGR_COLLECTION, activeMatchId, JURI_SCORES_TGR_SUBCOLLECTION, juriId);
+            batch.update(juriDocRef, { "merah.isReady": false });
+        });
+        await batch.commit();
+
+      } else { 
+        await updateTimerStatusInFirestoreOnly({ matchStatus: 'Finished', currentPerformingSide: null, isTimerRunning: false });
+        
         const schedulesRef = collection(db, SCHEDULE_TGR_COLLECTION);
         const q = query( schedulesRef, where('place', '==', gelanggangName), where('lotNumber', '>', scheduleDetails.lotNumber), orderBy('lotNumber', 'asc'), limit(1));
         const querySnapshot = await getDocs(q);
@@ -316,8 +363,12 @@ function TGRTimerControlPageComponent({ gelanggangName }: { gelanggangName: stri
           await updateDoc(venueMapRef, { [gelanggangName]: nextMatchDoc.id });
         }
       }
-    } catch (err) { console.error("Error advancing TGR state/participant:", err); setError("Gagal memproses kelanjutan.");
-    } finally { setIsSubmitting(false); }
+    } catch (err) { 
+        console.error("Error advancing TGR state/participant:", err); 
+        setError("Gagal memproses kelanjutan.");
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   const formatTime = (seconds: number): string => {
@@ -484,7 +535,6 @@ function TGRTimerControlPageComponent({ gelanggangName }: { gelanggangName: stri
   );
 }
 
-// Wrapper component to handle Suspense for useSearchParams
 export default function TGRTimerControlPageWithSuspense() {
   return (
     <Suspense fallback={
