@@ -1,4 +1,5 @@
 
+
 "use client";
 
 import { useState, useEffect, useCallback, useRef, Suspense } from 'react';
@@ -15,6 +16,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Card, CardContent } from '@/components/ui/card'; // Import Card and CardContent
+import { useTheme } from 'next-themes';
 
 
 const ACTIVE_TGR_MATCHES_BY_GELANGGANG_PATH = 'app_settings/active_tgr_matches_by_gelanggang'; // Path baru
@@ -159,7 +161,7 @@ const TGRSideSummaryTable: React.FC<TGRSideSummaryTableProps> = ({
 
 
 function MonitoringSkorTGRPageComponent({ gelanggangName }: { gelanggangName: string | null }) {
-  const [pageTheme, setPageTheme] = useState<'light' | 'dark'>('light');
+  const { resolvedTheme } = useTheme();
   const [configMatchId, setConfigMatchId] = useState<string | null | undefined>(undefined);
   const [activeScheduleId, setActiveScheduleId] = useState<string | null>(null);
   const [scheduleDetails, setScheduleDetails] = useState<ScheduleTGR | null>(null);
@@ -420,8 +422,8 @@ function MonitoringSkorTGRPageComponent({ gelanggangName }: { gelanggangName: st
 
     if (isLoadingJuriData) {
         return (
-            <div className="w-full py-3 md:py-4 border border-[var(--monitor-border)] flex items-center justify-center text-lg md:text-xl font-semibold bg-[var(--monitor-skor-biru-bg)] text-[var(--monitor-skor-text)] rounded-sm">
-                <Skeleton className="h-6 w-10 bg-[var(--monitor-skeleton-bg)]" />
+            <div className="w-full py-3 md:py-4 border border-[var(--monitor-border)] flex items-center justify-center text-lg md:text-xl font-semibold bg-gradient-to-b from-blue-500 to-blue-700 text-[var(--monitor-skor-text)] rounded-sm">
+                <Skeleton className="h-6 w-10 bg-blue-300" />
             </div>
         );
     }
@@ -452,7 +454,7 @@ function MonitoringSkorTGRPageComponent({ gelanggangName }: { gelanggangName: st
     }
 
     return (
-        <div className="w-full py-3 md:py-4 border border-[var(--monitor-border)] flex items-center justify-center text-lg md:text-xl font-semibold bg-[var(--monitor-skor-biru-bg)] text-[var(--monitor-skor-text)] rounded-sm">
+        <div className="w-full py-3 md:py-4 border border-[var(--monitor-border)] flex items-center justify-center text-lg md:text-xl font-semibold bg-gradient-to-b from-blue-500 to-blue-700 text-[var(--monitor-skor-text)] rounded-sm">
             {displayValue}
         </div>
     );
@@ -519,7 +521,7 @@ function MonitoringSkorTGRPageComponent({ gelanggangName }: { gelanggangName: st
 
   if (isLoading && (configMatchId === undefined || !gelanggangName)) {
     return (
-        <div className={cn("flex flex-col min-h-screen items-center justify-center", pageTheme === 'light' ? 'tgr-monitoring-theme-light' : 'tgr-monitoring-theme-dark', "bg-[var(--monitor-bg)] text-[var(--monitor-text)]")}>
+        <div className={cn("flex flex-col min-h-screen items-center justify-center", resolvedTheme === 'light' ? 'tgr-monitoring-theme-light' : 'tgr-monitoring-theme-dark', "bg-[var(--monitor-bg)] text-[var(--monitor-text)]")}>
             <Loader2 className="h-16 w-16 animate-spin text-[var(--monitor-overlay-accent-text)] mb-4" />
             <p className="text-xl">Memuat Konfigurasi Monitor TGR {gelanggangName ? `untuk Gel. ${gelanggangName}` : '...'}</p>
         </div>
@@ -532,7 +534,7 @@ function MonitoringSkorTGRPageComponent({ gelanggangName }: { gelanggangName: st
       <div
         className={cn(
           "flex flex-col min-h-screen font-sans overflow-hidden relative",
-          pageTheme === 'light' ? 'tgr-monitoring-theme-light' : 'tgr-monitoring-theme-dark',
+          resolvedTheme === 'light' ? 'tgr-monitoring-theme-light' : 'tgr-monitoring-theme-dark',
           "bg-[var(--monitor-bg)] text-[var(--monitor-text)]"
         )}
       >
@@ -637,7 +639,7 @@ function MonitoringSkorTGRPageComponent({ gelanggangName }: { gelanggangName: st
            <Dialog open={isWinnerOverlayOpen} onOpenChange={setIsWinnerOverlayOpen}>
                 <DialogContent className={cn(
                     "max-w-2xl p-0 overflow-hidden",
-                    pageTheme === 'light' ? 'tgr-monitoring-theme-light' : 'tgr-monitoring-theme-dark',
+                    resolvedTheme === 'light' ? 'tgr-monitoring-theme-light' : 'tgr-monitoring-theme-dark',
                     "bg-[var(--monitor-dialog-bg)] text-[var(--monitor-dialog-text)] border-[var(--monitor-dialog-border)]"
                 )}>
                     <DialogHeader className="sr-only">
@@ -754,9 +756,10 @@ function MonitoringSkorTGRPageWithSearchParams() {
 }
 
 export default function MonitoringSkorTGRPageSuspended() {
+  const { resolvedTheme } = useTheme();
   return (
     <Suspense fallback={
-      <div className={cn("flex flex-col min-h-screen items-center justify-center tgr-monitoring-theme-light bg-[var(--monitor-bg)] text-[var(--monitor-text)]")}>
+      <div className={cn("flex flex-col min-h-screen items-center justify-center", resolvedTheme === 'dark' ? 'tgr-monitoring-theme-dark' : 'tgr-monitoring-theme-light', "bg-[var(--monitor-bg)] text-[var(--monitor-text)]")}>
         <Loader2 className="h-16 w-16 animate-spin text-[var(--monitor-overlay-accent-text)] mb-4" />
         <p className="text-xl">Memuat Halaman Monitor Skor TGR...</p>
       </div>
@@ -765,3 +768,4 @@ export default function MonitoringSkorTGRPageSuspended() {
     </Suspense>
   );
 }
+
