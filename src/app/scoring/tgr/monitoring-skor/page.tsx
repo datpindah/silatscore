@@ -1,5 +1,4 @@
 
-
 "use client";
 
 import { useState, useEffect, useCallback, useRef, Suspense } from 'react';
@@ -9,17 +8,17 @@ import { Button } from '@/components/ui/button';
 import { Header } from '@/components/layout/Header';
 import { ArrowLeft, Loader2, Sun, Moon, ChevronsRight, AlertTriangle } from 'lucide-react';
 import type { ScheduleTGR, TGRTimerStatus, TGRJuriScore, SideSpecificTGRScore, TGRDewanPenalty, TGRMatchResult, TGRMatchResultDetail } from '@/lib/types';
+import type { ScoreEntry as LibScoreEntryType, RoundScores as LibRoundScoresType } from '@/lib/types';
 import { db } from '@/lib/firebase';
-import { doc, onSnapshot, getDoc, collection, query, orderBy, Timestamp, where, limit, setDoc, updateDoc, deleteField } from 'firebase/firestore';
+import { doc, onSnapshot, getDoc, collection, query, orderBy, limit, Timestamp, where, getDocs, updateDoc, deleteField } from 'firebase/firestore';
 import { cn } from '@/lib/utils';
 import { Skeleton } from '@/components/ui/skeleton';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Card, CardContent } from '@/components/ui/card'; // Import Card and CardContent
+import { Dialog, DialogContent, DialogHeader, DialogTitle as RadixDialogTitle, DialogDescription as DialogDesc, DialogFooter } from "@/components/ui/dialog"; // DialogDesc for consistency
+import { Card, CardContent } from '@/components/ui/card';
 import { useTheme } from 'next-themes';
 
 
-const ACTIVE_TGR_MATCHES_BY_GELANGGANG_PATH = 'app_settings/active_tgr_matches_by_gelanggang'; // Path baru
+const ACTIVE_TGR_MATCHES_BY_GELANGGANG_PATH = 'app_settings/active_tgr_matches_by_gelanggang';
 const SCHEDULE_TGR_COLLECTION = 'schedules_tgr';
 const MATCHES_TGR_COLLECTION = 'matches_tgr';
 const JURI_SCORES_TGR_SUBCOLLECTION = 'juri_scores_tgr';
@@ -162,6 +161,8 @@ const TGRSideSummaryTable: React.FC<TGRSideSummaryTableProps> = ({
 
 function MonitoringSkorTGRPageComponent({ gelanggangName }: { gelanggangName: string | null }) {
   const { resolvedTheme } = useTheme();
+  const [mounted, setMounted] = useState(false);
+
   const [configMatchId, setConfigMatchId] = useState<string | null | undefined>(undefined);
   const [activeScheduleId, setActiveScheduleId] = useState<string | null>(null);
   const [scheduleDetails, setScheduleDetails] = useState<ScheduleTGR | null>(null);
@@ -180,6 +181,10 @@ function MonitoringSkorTGRPageComponent({ gelanggangName }: { gelanggangName: st
   
   const [winnerData, setWinnerData] = useState<TGRMatchResult | null>(null);
   const [isWinnerOverlayOpen, setIsWinnerOverlayOpen] = useState(false);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
 
 
   const resetPageData = useCallback(() => {
@@ -246,15 +251,15 @@ function MonitoringSkorTGRPageComponent({ gelanggangName }: { gelanggangName: st
     }
 
     setIsLoading(true);
-    let mounted = true;
+    let isMounted = true;
     const unsubscribers: (() => void)[] = [];
 
     const loadData = async (currentMatchId: string) => {
-      if (!mounted || !currentMatchId) return;
+      if (!isMounted || !currentMatchId) return;
       try {
         const scheduleDocRef = doc(db, SCHEDULE_TGR_COLLECTION, currentMatchId);
         const scheduleDocSnap = await getDoc(scheduleDocRef);
-        if (!mounted) return;
+        if (!isMounted) return;
         if (scheduleDocSnap.exists()) {
           const data = scheduleDocSnap.data() as ScheduleTGR;
           setScheduleDetails(data);
@@ -263,13 +268,13 @@ function MonitoringSkorTGRPageComponent({ gelanggangName }: { gelanggangName: st
             setError(`Detail jadwal TGR ID ${currentMatchId} tidak ditemukan.`);
             setScheduleDetails(null);
             setMatchDetailsLoaded(false);
-            setIsLoading(false);
+            if (isMounted) setIsLoading(false);
             return;
         }
 
         const matchDataDocRef = doc(db, MATCHES_TGR_COLLECTION, currentMatchId);
         unsubscribers.push(onSnapshot(matchDataDocRef, (docSnap) => {
-          if (!mounted) return;
+          if (!isMounted) return;
           if (docSnap.exists()) {
             const data = docSnap.data();
             if (data?.timerStatus) setTgrTimerStatus(data.timerStatus as TGRTimerStatus);
@@ -292,7 +297,7 @@ function MonitoringSkorTGRPageComponent({ gelanggangName }: { gelanggangName: st
 
         TGR_JURI_IDS.forEach(juriId => {
           unsubscribers.push(onSnapshot(doc(matchDataDocRef, JURI_SCORES_TGR_SUBCOLLECTION, juriId), (juriScoreDoc) => {
-            if (!mounted) return;
+            if (!isMounted) return;
             setAllJuriScores(prev => ({
               ...prev,
               [juriId]: juriScoreDoc.exists() ? juriScoreDoc.data() as TGRJuriScore : null
@@ -301,19 +306,21 @@ function MonitoringSkorTGRPageComponent({ gelanggangName }: { gelanggangName: st
         });
 
         unsubscribers.push(onSnapshot(query(collection(matchDataDocRef, DEWAN_PENALTIES_TGR_SUBCOLLECTION), orderBy("timestamp", "asc")), (snap) => {
-          if (!mounted) return;
+          if (!isMounted) return;
           setDewanPenalties(snap.docs.map(d => ({ id: d.id, ...d.data() } as TGRDewanPenalty)));
         }, (err) => console.error("[MonitorTGR] Error fetching dewan penalties:", err)));
 
 
       } catch (err) {
-          if (mounted) { console.error("[MonitorTGR] Error in loadData:", err); setError("Gagal memuat data pertandingan TGR."); }
+          if (isMounted) { console.error("[MonitorTGR] Error in loadData:", err); setError("Gagal memuat data pertandingan TGR."); }
+      } finally {
+          if (isMounted && matchDetailsLoaded) setIsLoading(false);
       }
     };
 
     loadData(activeScheduleId);
-    return () => { mounted = false; unsubscribers.forEach(unsub => unsub()); };
-  }, [activeScheduleId]); 
+    return () => { isMounted = false; unsubscribers.forEach(unsub => unsub()); };
+  }, [activeScheduleId, matchDetailsLoaded]); 
 
  useEffect(() => {
     if (isLoading && (matchDetailsLoaded || activeScheduleId === null)) {
@@ -356,7 +363,6 @@ function MonitoringSkorTGRPageComponent({ gelanggangName }: { gelanggangName: st
             hasPerformedForSummary = true;
           }
       }
-
 
       return { median, penalty: totalPenalties, timePerformance, total: finalScore, stdDev, hasPerformed: hasPerformedForSummary };
     };
@@ -406,7 +412,6 @@ function MonitoringSkorTGRPageComponent({ gelanggangName }: { gelanggangName: st
         } else {
             const nextMatchDoc = querySnapshot.docs[0];
             await updateDoc(venueMapRef, { [gelanggangName]: nextMatchDoc.id });
-            // alert(`Berpindah ke Partai TGR No. ${nextMatchDoc.data().lotNumber} di Gelanggang: ${gelanggangName}`);
         }
     } catch (err) {
         console.error("Error navigating to next TGR match:", err);
@@ -496,7 +501,6 @@ function MonitoringSkorTGRPageComponent({ gelanggangName }: { gelanggangName: st
         }
     }
 
-
     if (sideToDisplayDetails === 'biru' && scheduleDetails.pesilatBiruName) {
       name = scheduleDetails.pesilatBiruName;
       contingent = scheduleDetails.pesilatBiruContingent || scheduleDetails.pesilatMerahContingent || "Kontingen";
@@ -519,6 +523,15 @@ function MonitoringSkorTGRPageComponent({ gelanggangName }: { gelanggangName: st
 
   const { name: participantName, contingent: participantContingent, textColorClass: participantTextColorClass } = getParticipantDetails();
 
+  if (!mounted) { // Render nothing or a minimal loader until mounted to avoid hydration issues
+    return (
+      <div className={cn("flex flex-col min-h-screen items-center justify-center", "bg-background text-foreground")}>
+        <Loader2 className="h-16 w-16 animate-spin text-primary mb-4" />
+        <p className="text-xl">Menginisialisasi Monitor TGR...</p>
+      </div>
+    );
+  }
+  
   if (isLoading && (configMatchId === undefined || !gelanggangName)) {
     return (
         <div className={cn("flex flex-col min-h-screen items-center justify-center", resolvedTheme === 'light' ? 'tgr-monitoring-theme-light' : 'tgr-monitoring-theme-dark', "bg-[var(--monitor-bg)] text-[var(--monitor-text)]")}>
@@ -533,9 +546,9 @@ function MonitoringSkorTGRPageComponent({ gelanggangName }: { gelanggangName: st
       <Header />
       <div
         className={cn(
-          "flex flex-col min-h-screen font-sans overflow-hidden relative",
-          resolvedTheme === 'light' ? 'tgr-monitoring-theme-light' : 'tgr-monitoring-theme-dark',
-          "bg-[var(--monitor-bg)] text-[var(--monitor-text)]"
+          "flex flex-col flex-1 font-sans overflow-hidden relative",
+          mounted && (resolvedTheme === 'dark' ? 'tgr-monitoring-theme-dark' : 'tgr-monitoring-theme-light'),
+          mounted && "bg-[var(--monitor-bg)] text-[var(--monitor-text)]"
         )}
       >
         
@@ -639,17 +652,17 @@ function MonitoringSkorTGRPageComponent({ gelanggangName }: { gelanggangName: st
            <Dialog open={isWinnerOverlayOpen} onOpenChange={setIsWinnerOverlayOpen}>
                 <DialogContent className={cn(
                     "max-w-2xl p-0 overflow-hidden",
-                    resolvedTheme === 'light' ? 'tgr-monitoring-theme-light' : 'tgr-monitoring-theme-dark',
-                    "bg-[var(--monitor-dialog-bg)] text-[var(--monitor-dialog-text)] border-[var(--monitor-dialog-border)]"
+                    mounted && (resolvedTheme === 'light' ? 'tgr-monitoring-theme-light' : 'tgr-monitoring-theme-dark'),
+                    mounted && "bg-[var(--monitor-dialog-bg)] text-[var(--monitor-dialog-text)] border-[var(--monitor-dialog-border)]"
                 )}>
                     <DialogHeader className="sr-only">
-                      <DialogTitle>Hasil Akhir Pertandingan TGR</DialogTitle>
-                      <DialogDescription>
+                      <RadixDialogTitle>Hasil Akhir Pertandingan TGR</RadixDialogTitle>
+                      <DialogDesc>
                         Rincian skor dan pemenang pertandingan TGR: Gelanggang {winnerData.gelanggang}, Babak {winnerData.babak}, Kategori {winnerData.kategori}.
                         {winnerData.namaSudutBiru && ` Sudut Biru: ${winnerData.namaSudutBiru} (${winnerData.kontingenBiru}).`}
                         {winnerData.namaSudutMerah && ` Sudut Merah: ${winnerData.namaSudutMerah} (${winnerData.kontingenMerah}).`}
                         Pemenang: {winnerData.winner === 'biru' ? winnerData.namaSudutBiru || 'Biru' : winnerData.winner === 'merah' ? winnerData.namaSudutMerah || 'Merah' : 'Seri'}.
-                      </DialogDescription>
+                      </DialogDesc>
                     </DialogHeader>
                     <div className="bg-blue-600 text-white p-4 rounded-t-lg">
                         <div className="flex justify-around text-center text-sm sm:text-base font-semibold">
@@ -757,6 +770,22 @@ function MonitoringSkorTGRPageWithSearchParams() {
 
 export default function MonitoringSkorTGRPageSuspended() {
   const { resolvedTheme } = useTheme();
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+
+  if (!mounted) {
+    // Render a basic loader or null during SSR and before client-side mount
+    return (
+        <div className="flex flex-col min-h-screen items-center justify-center bg-background text-foreground">
+            <Loader2 className="h-16 w-16 animate-spin text-primary mb-4" />
+            <p className="text-xl">Menginisialisasi...</p>
+        </div>
+    );
+  }
+  
   return (
     <Suspense fallback={
       <div className={cn("flex flex-col min-h-screen items-center justify-center", resolvedTheme === 'dark' ? 'tgr-monitoring-theme-dark' : 'tgr-monitoring-theme-light', "bg-[var(--monitor-bg)] text-[var(--monitor-text)]")}>
