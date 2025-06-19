@@ -534,7 +534,7 @@ function MonitoringSkorTGRPageComponent({ gelanggangName }: { gelanggangName: st
   
   if (isLoading && (configMatchId === undefined || !gelanggangName)) {
     return (
-        <div className={cn("flex flex-col min-h-screen items-center justify-center", resolvedTheme === 'light' ? 'tgr-monitoring-theme-light' : 'tgr-monitoring-theme-dark', "bg-[var(--monitor-bg)] text-[var(--monitor-text)]")}>
+        <div className={cn("flex flex-col min-h-screen items-center justify-center", mounted && (resolvedTheme === 'light' ? 'tgr-monitoring-theme-light' : 'tgr-monitoring-theme-dark'), mounted && "bg-[var(--monitor-bg)] text-[var(--monitor-text)]")}>
             <Loader2 className="h-16 w-16 animate-spin text-[var(--monitor-overlay-accent-text)] mb-4" />
             <p className="text-xl">Memuat Konfigurasi Monitor TGR {gelanggangName ? `untuk Gel. ${gelanggangName}` : '...'}</p>
         </div>
@@ -543,7 +543,7 @@ function MonitoringSkorTGRPageComponent({ gelanggangName }: { gelanggangName: st
 
   return (
     <>
-      <Header overrideBackgroundClass="bg-[hsl(240_5%_96%)] dark:bg-[hsl(222.2_84%_4.9%)]" />
+      <Header overrideBackgroundClass="bg-gray-100 dark:bg-gray-900" />
       <div
         className={cn(
           "flex flex-col flex-1 font-sans overflow-hidden relative",
