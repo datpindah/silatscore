@@ -5,7 +5,7 @@ import { useState, useEffect, useCallback, useRef, Suspense } from 'react';
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation'; // Ditambahkan
 import { Button } from '@/components/ui/button';
-import { Header } from '@/components/layout/Header';
+// import { Header } from '@/components/layout/Header'; // Dihapus
 import { ArrowLeft, Loader2, Sun, Moon, ChevronsRight, AlertTriangle } from 'lucide-react';
 import type { ScheduleTGR, TGRTimerStatus, TGRJuriScore, SideSpecificTGRScore, TGRDewanPenalty, TGRMatchResult, TGRMatchResultDetail } from '@/lib/types';
 import type { ScoreEntry as LibScoreEntryType, RoundScores as LibRoundScoresType } from '@/lib/types';
@@ -525,10 +525,10 @@ function MonitoringSkorTGRPageComponent({ gelanggangName }: { gelanggangName: st
 
   if (!mounted) { // Render nothing or a minimal loader until mounted to avoid hydration issues
     return (
-      <div className={cn("flex flex-col min-h-screen items-center justify-center", "bg-background text-foreground")}>
-        <Loader2 className="h-16 w-16 animate-spin text-primary mb-4" />
-        <p className="text-xl">Menginisialisasi Monitor TGR...</p>
-      </div>
+        <div className={cn("flex flex-col min-h-screen items-center justify-center", "bg-background text-foreground")}>
+            <Loader2 className="h-16 w-16 animate-spin text-primary mb-4" />
+            <p className="text-xl">Menginisialisasi Monitor TGR...</p>
+        </div>
     );
   }
   
@@ -543,10 +543,9 @@ function MonitoringSkorTGRPageComponent({ gelanggangName }: { gelanggangName: st
 
   return (
     <>
-      <Header overrideBackgroundClass="bg-gray-100 dark:bg-gray-900" />
       <div
         className={cn(
-          "flex flex-col flex-1 font-sans overflow-hidden relative",
+          "flex flex-col flex-1 font-sans overflow-hidden relative min-h-screen", // Added min-h-screen
           mounted && (resolvedTheme === 'dark' ? 'tgr-monitoring-theme-dark' : 'tgr-monitoring-theme-light'),
           mounted && "bg-[var(--monitor-bg)] text-[var(--monitor-text)]"
         )}
@@ -779,7 +778,7 @@ export default function MonitoringSkorTGRPageSuspended() {
   if (!mounted) {
     // Render a basic loader or null during SSR and before client-side mount
     return (
-        <div className="flex flex-col min-h-screen items-center justify-center bg-background text-foreground">
+        <div className={cn("flex flex-col min-h-screen items-center justify-center", "bg-background text-foreground")}>
             <Loader2 className="h-16 w-16 animate-spin text-primary mb-4" />
             <p className="text-xl">Menginisialisasi...</p>
         </div>
