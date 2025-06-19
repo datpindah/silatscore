@@ -543,7 +543,7 @@ function MonitoringSkorTGRPageComponent({ gelanggangName }: { gelanggangName: st
 
   return (
     <>
-      <Header />
+      <Header overrideBackgroundClass="bg-[hsl(240_5%_96%)] dark:bg-[hsl(222.2_84%_4.9%)]" />
       <div
         className={cn(
           "flex flex-col flex-1 font-sans overflow-hidden relative",
