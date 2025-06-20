@@ -181,6 +181,47 @@ export interface JuriMatchData {
   lastUpdated?: FirebaseTimestamp | Date | { seconds: number; nanoseconds: number } | null;
 }
 
+// --- TANDING MATCH RESULT TYPES ---
+export type TandingVictoryType =
+  | 'Menang Angka'
+  | 'Menang Teknik'
+  | 'Menang Diskualifikasi'
+  | 'Menang Mutlak'
+  | 'Menang RSC'
+  | 'Menang WO'
+  | 'Seri';
+
+export interface TandingScoreBreakdown {
+  peringatan1: number; // Points from Peringatan 1
+  peringatan2: number; // Points from Peringatan 2
+  teguran1: number;    // Points from Teguran 1
+  teguran2: number;    // Points from Teguran 2
+  jatuhan: number;     // Points from Jatuhan
+  pukulanSah: number;  // Points from valid Juri 1-point strikes
+  tendanganSah: number; // Points from valid Juri 2-point strikes
+  totalAkhir: number;  // Overall final score for this pesilat
+}
+
+export interface MatchResultTanding {
+  winner: PesilatColorIdentity | 'seri' | null;
+  victoryType: TandingVictoryType;
+  reason?: string;
+  gelanggang: string;
+  babak: string;
+  kelas: string;
+  namaSudutBiru?: string;
+  kontingenBiru?: string;
+  namaSudutMerah?: string;
+  kontingenMerah?: string;
+  skorAkhirMerah: number;
+  skorAkhirBiru: number;
+  detailSkorMerah?: TandingScoreBreakdown;
+  detailSkorBiru?: TandingScoreBreakdown;
+  timestamp: FirebaseTimestamp | Date | { seconds: number; nanoseconds: number };
+}
+// --- END TANDING MATCH RESULT TYPES ---
+
+
 // --- TGR Scoring Types ---
 export interface TGRTimerStatus {
   timerSeconds: number; // Elapsed time for stopwatch
@@ -206,11 +247,11 @@ export interface SideSpecificTGRScore {
   externalDeductions: number; // From Dewan penalties (not used directly in Juri page calc)
 
   // For Tunggal/Regu
-  gerakanSalahCount?: number; // For 0.01 deductions
-  staminaKemantapanBonus?: number; // For 0.01-0.10 bonus
+  gerakanSalahCount?: number | null; // For 0.01 deductions
+  staminaKemantapanBonus?: number | null; // For 0.01-0.10 bonus
 
   // For Ganda
-  gandaElements?: GandaElementScores; // Stores the selected 0.01-0.30 for each
+  gandaElements?: GandaElementScores | null; // Stores the selected 0.01-0.30 for each
 }
 
 export const BASE_SCORE_TUNGGAL_REGU = 9.90;
@@ -218,6 +259,7 @@ export const BASE_SCORE_GANDA = 9.10;
 export const GERAKAN_SALAH_DEDUCTION_TGR = 0.01; // Renamed for clarity
 
 export interface TGRJuriScore {
+  baseScore?: number; // Add base score in case it differs per Juri (unlikely for now but good for future)
   biru: SideSpecificTGRScore;
   merah: SideSpecificTGRScore;
   lastUpdated?: FirebaseTimestamp | Date | { seconds: number; nanoseconds: number } | null;
@@ -252,7 +294,7 @@ export interface TGRMatchResult {
   winner: 'biru' | 'merah' | 'seri';
   gelanggang: string;
   babak: string;
-  kategori: TGRCategoryType | string; 
+  kategori: TGRCategoryType | string;
   namaSudutBiru?: string;
   kontingenBiru?: string;
   namaSudutMerah?: string;
@@ -261,7 +303,7 @@ export interface TGRMatchResult {
     biru?: TGRMatchResultDetail;
     merah?: TGRMatchResultDetail;
   };
-  timestamp: FirebaseTimestamp | Date;
+  timestamp: FirebaseTimestamp | Date | { seconds: number; nanoseconds: number };
 }
 
 export interface TGRMatchData {
@@ -275,6 +317,6 @@ export interface TGRMatchData {
   overallScoreBiru?: number;
   overallScoreMerah?: number;
   status: 'Pending' | 'OngoingBiru' | 'OngoingMerah' | 'PausedBiru' | 'PausedMerah' | 'FinishedBiru' | 'FinishedMerah' | 'MatchFinished';
-  matchResult?: TGRMatchResult; 
+  matchResult?: TGRMatchResult;
 }
 // --- End TGR Scoring Types ---
