@@ -1,7 +1,7 @@
 
 "use client";
 
-import { useState, useEffect, useCallback, Suspense } from 'react';
+import { useState, useEffect, useCallback, Suspense, Fragment } from 'react';
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
 import { Header } from '@/components/layout/Header';
@@ -14,7 +14,7 @@ import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
-import type { ScheduleTanding, KetuaActionLogEntry, PesilatColorIdentity, KetuaActionType, VerificationType, VerificationRequest, JuriVoteValue, JuriVotes, TimerStatus as DewanTimerType, TimerMatchStatus, MatchResultTanding, TandingScoreBreakdown, JuriMatchData as LibJuriMatchData, ScoreEntry as LibScoreEntry } from '@/lib/types';
+import type { ScheduleTanding, KetuaActionLogEntry, PesilatColorIdentity, KetuaActionType, VerificationType, VerificationRequest, JuriVoteValue, JuriVotes, TimerStatus as DewanTimerType, TimerMatchStatus, MatchResultTanding, TandingScoreBreakdown, TandingVictoryType, JuriMatchData as LibJuriMatchData, ScoreEntry as LibScoreEntry } from '@/lib/types';
 import { JATUHAN_POINTS, TEGURAN_POINTS, PERINGATAN_POINTS_FIRST_PRESS, PERINGATAN_POINTS_SECOND_PRESS } from '@/lib/types';
 import { db } from '@/lib/firebase';
 import { doc, onSnapshot, getDoc, Timestamp, collection, addDoc, query, orderBy, deleteDoc, limit, getDocs, serverTimestamp, writeBatch, where, updateDoc } from 'firebase/firestore';
@@ -497,24 +497,152 @@ function KetuaPertandinganPageComponent({ gelanggangName }: { gelanggangName: st
     <div className="flex flex-col min-h-screen bg-gray-50 dark:bg-black">
       <Header overrideBackgroundClass="bg-gray-50 dark:bg-black" />
       <main className="flex-1 container mx-auto px-2 py-4 md:p-6">
-        <Card className="bg-primary text-primary-foreground text-center mb-4 shadow-xl"> <CardContent className="p-3 md:p-4"> <h1 className="text-xl md:text-2xl font-bold font-headline">Ketua Pertandingan (Gel: {gelanggangName || 'N/A'})</h1> <div className="text-xs md:text-sm opacity-90"> {isLoadingPage && !matchDetailsLoaded ? <Skeleton className="h-4 w-32 inline-block bg-primary-foreground/30" /> : (matchDetails?.place || `Partai No. ${matchDetails?.matchNumber || 'N/A'}`)} {matchDetails && matchDetailsLoaded && ` - ${matchDetails.class} (${matchDetails.round})`} </div> </CardContent> </Card>
-        <div className="flex justify-between items-center mb-4 px-1"> <div className="text-left"> <div className="text-sm font-semibold text-red-600 dark:text-red-400">KONTINGEN {pesilatMerahInfo?.contingent || (isLoadingPage && activeMatchId ? <Skeleton className="h-4 w-16 inline-block bg-muted" /> : '-')}</div> <div className="text-lg font-bold text-red-600 dark:text-red-400">{pesilatMerahInfo?.name || (isLoadingPage && activeMatchId ? <Skeleton className="h-6 w-32 bg-muted" /> : 'PESILAT MERAH')}</div> </div> <div className="text-right"> <div className="text-sm font-semibold text-blue-600 dark:text-blue-400">KONTINGEN {pesilatBiruInfo?.contingent || (isLoadingPage && activeMatchId ? <Skeleton className="h-4 w-16 inline-block bg-muted" /> : '-')}</div> <div className="text-lg font-bold text-blue-600 dark:text-blue-400">{pesilatBiruInfo?.name || (isLoadingPage && activeMatchId ? <Skeleton className="h-6 w-32 bg-muted" /> : 'PESILAT BIRU')}</div> </div> </div>
+        <Card className="bg-primary text-primary-foreground text-center mb-4 shadow-xl">
+          <CardContent className="p-3 md:p-4">
+            <h1 className="text-xl md:text-2xl font-bold font-headline">Ketua Pertandingan (Gel: {gelanggangName || 'N/A'})</h1>
+            <div className="text-xs md:text-sm opacity-90">
+              {isLoadingPage && !matchDetailsLoaded ? <Skeleton className="h-4 w-32 inline-block bg-primary-foreground/30" /> : (matchDetails?.place || `Partai No. ${matchDetails?.matchNumber || 'N/A'}`)}
+              {matchDetails && matchDetailsLoaded && ` - ${matchDetails.class} (${matchDetails.round})`}
+            </div>
+          </CardContent>
+        </Card>
+        <div className="flex justify-between items-center mb-4 px-1">
+          <div className="text-left">
+            <div className="text-sm font-semibold text-red-600 dark:text-red-400">KONTINGEN {pesilatMerahInfo?.contingent || (isLoadingPage && activeMatchId ? <Skeleton className="h-4 w-16 inline-block bg-muted" /> : '-')}</div>
+            <div className="text-lg font-bold text-red-600 dark:text-red-400">{pesilatMerahInfo?.name || (isLoadingPage && activeMatchId ? <Skeleton className="h-6 w-32 bg-muted" /> : 'PESILAT MERAH')}</div>
+          </div>
+          <div className="text-right">
+            <div className="text-sm font-semibold text-blue-600 dark:text-blue-400">KONTINGEN {pesilatBiruInfo?.contingent || (isLoadingPage && activeMatchId ? <Skeleton className="h-4 w-16 inline-block bg-muted" /> : '-')}</div>
+            <div className="text-lg font-bold text-blue-600 dark:text-blue-400">{pesilatBiruInfo?.name || (isLoadingPage && activeMatchId ? <Skeleton className="h-6 w-32 bg-muted" /> : 'PESILAT BIRU')}</div>
+          </div>
+        </div>
         <div className="mb-6 overflow-x-auto">
           <Table className="min-w-full border-collapse border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800">
-            <TableHeader><TableRow className="bg-gray-100 dark:bg-gray-700"><TableHead className="border border-gray-300 dark:border-gray-600 text-center text-red-600 dark:text-red-400 py-2 px-1 text-xs sm:text-sm">Hukuman </TableHead><TableHead className="border border-gray-300 dark:border-gray-600 text-center text-red-600 dark:text-red-400 py-2 px-1 text-xs sm:text-sm">Binaan </TableHead><TableHead className="border border-gray-300 dark:border-gray-600 text-center text-red-600 dark:text-red-400 py-2 px-1 text-xs sm:text-sm">Jatuhan </TableHead><TableHead className="border border-gray-300 dark:border-gray-600 text-center py-2 px-1 text-xs sm:text-sm text-gray-700 dark:text-gray-200">Babak</TableHead><TableHead className="border border-gray-300 dark:border-gray-600 text-center text-blue-600 dark:text-blue-400 py-2 px-1 text-xs sm:text-sm">Jatuhan </TableHead><TableHead className="border border-gray-300 dark:border-gray-600 text-center text-blue-600 dark:text-blue-400 py-2 px-1 text-xs sm:text-sm">Binaan </TableHead><TableHead className="border border-gray-300 dark:border-gray-600 text-center text-blue-600 dark:text-blue-400 py-2 px-1 text-xs sm:text-sm">Hukuman </TableHead></TableRow></TableHeader>
+            <TableHeader><TableRow className="bg-gray-100 dark:bg-gray-700"><TableHead className="border border-gray-300 dark:border-gray-600 text-center text-red-600 dark:text-red-400 py-2 px-1 text-xs sm:text-sm">Hukuman</TableHead><TableHead className="border border-gray-300 dark:border-gray-600 text-center text-red-600 dark:text-red-400 py-2 px-1 text-xs sm:text-sm">Binaan</TableHead><TableHead className="border border-gray-300 dark:border-gray-600 text-center text-red-600 dark:text-red-400 py-2 px-1 text-xs sm:text-sm">Jatuhan</TableHead><TableHead className="border border-gray-300 dark:border-gray-600 text-center py-2 px-1 text-xs sm:text-sm text-gray-700 dark:text-gray-200">Babak</TableHead><TableHead className="border border-gray-300 dark:border-gray-600 text-center text-blue-600 dark:text-blue-400 py-2 px-1 text-xs sm:text-sm">Jatuhan</TableHead><TableHead className="border border-gray-300 dark:border-gray-600 text-center text-blue-600 dark:text-blue-400 py-2 px-1 text-xs sm:text-sm">Binaan</TableHead><TableHead className="border border-gray-300 dark:border-gray-600 text-center text-blue-600 dark:text-blue-400 py-2 px-1 text-xs sm:text-sm">Hukuman</TableHead></TableRow></TableHeader>
             <TableBody>{ROUNDS.map((round) => { const scoresMerah = calculateDisplayScoresForTable(ketuaActionsLog, 'merah', round); const scoresBiru = calculateDisplayScoresForTable(ketuaActionsLog, 'biru', round); return ( <TableRow key={`round-display-${round}`} className={dewanTimerStatus.currentRound === round ? 'bg-yellow-100 dark:bg-yellow-900/30' : ''}><TableCell className="border border-gray-300 dark:border-gray-600 text-center font-medium py-2 px-1 text-gray-800 dark:text-gray-100">{isLoadingPage && !matchDetailsLoaded ? <Skeleton className="h-5 w-8 mx-auto bg-muted"/> : scoresMerah.hukuman}</TableCell><TableCell className="border border-gray-300 dark:border-gray-600 text-center font-medium py-2 px-1 text-gray-800 dark:text-gray-100">{isLoadingPage && !matchDetailsLoaded ? <Skeleton className="h-5 w-8 mx-auto bg-muted"/> : scoresMerah.binaan}</TableCell><TableCell className="border border-gray-300 dark:border-gray-600 text-center font-medium py-2 px-1 text-gray-800 dark:text-gray-100">{isLoadingPage && !matchDetailsLoaded ? <Skeleton className="h-5 w-8 mx-auto bg-muted"/> : scoresMerah.jatuhan}</TableCell><TableCell className="border border-gray-300 dark:border-gray-600 text-center font-bold py-2 px-1 text-gray-800 dark:text-gray-100">{round === 1 ? 'I' : round === 2 ? 'II' : 'III'}</TableCell><TableCell className="border border-gray-300 dark:border-gray-600 text-center font-medium py-2 px-1 text-gray-800 dark:text-gray-100">{isLoadingPage && !matchDetailsLoaded ? <Skeleton className="h-5 w-8 mx-auto bg-muted"/> : scoresBiru.jatuhan}</TableCell><TableCell className="border border-gray-300 dark:border-gray-600 text-center font-medium py-2 px-1 text-gray-800 dark:text-gray-100">{isLoadingPage && !matchDetailsLoaded ? <Skeleton className="h-5 w-8 mx-auto bg-muted"/> : scoresBiru.binaan}</TableCell><TableCell className="border border-gray-300 dark:border-gray-600 text-center font-medium py-2 px-1 text-gray-800 dark:text-gray-100">{isLoadingPage && !matchDetailsLoaded ? <Skeleton className="h-5 w-8 mx-auto bg-muted"/> : scoresBiru.hukuman}</TableCell></TableRow> ); })}</TableBody>
           </Table>
         </div>
-        <Card className="mb-6 bg-white dark:bg-gray-800"> <CardHeader> <CardTitle className="text-lg text-gray-800 dark:text-gray-100">Log Tindakan Ketua</CardTitle> </CardHeader> <CardContent> {ketuaActionsLog.length === 0 ? ( <p className="text-muted-foreground">Belum ada tindakan tercatat.</p> ) : ( <div className="max-h-48 overflow-y-auto"><Table><TableHeader><TableRow><TableHead className="w-[100px] text-gray-600 dark:text-gray-300">Waktu</TableHead><TableHead className="text-gray-600 dark:text-gray-300">Babak</TableHead><TableHead className="text-gray-600 dark:text-gray-300">Pesilat</TableHead><TableHead className="text-gray-600 dark:text-gray-300">Tindakan</TableHead><TableHead className="text-right text-gray-600 dark:text-gray-300">Poin</TableHead></TableRow></TableHeader><TableBody>{ketuaActionsLog.map((action) => ( <TableRow key={action.id} className="text-gray-700 dark:text-gray-200"><TableCell>{formatFirestoreTimestamp(action.timestamp)}</TableCell><TableCell>{action.round}</TableCell><TableCell><Badge variant={action.pesilatColor === 'merah' ? 'destructive' : 'default'} className={action.pesilatColor === 'biru' ? 'bg-blue-500 text-white' : ''}>{action.pesilatColor === 'merah' ? pesilatMerahInfo?.name || 'Merah' : pesilatBiruInfo?.name || 'Biru'}</Badge></TableCell><TableCell>{action.actionType}{action.originalActionType ? ` (dari ${action.originalActionType})` : ''}</TableCell><TableCell className="text-right">{action.points}</TableCell></TableRow> ))}</TableBody></Table></div> )} </CardContent> </Card>
-        <div className="grid grid-cols-1 md:grid-cols-[1fr_auto_1fr] gap-4 md:gap-8 items-start"> <div className="space-y-2"> <div className="grid grid-cols-2 gap-2"> <Button onClick={() => handleKetuaAction('merah', 'Jatuhan')} className="w-full py-3 text-xs sm:text-sm bg-red-600 hover:bg-red-700 text-white" disabled={isActionButtonDisabled}>Jatuhan</Button> <Button onClick={() => handleKetuaAction('merah', 'Teguran')} className="w-full py-3 text-xs sm:text-sm bg-red-600 hover:bg-red-700 text-white" disabled={isActionButtonDisabled}>Teguran</Button> <Button onClick={() => handleKetuaAction('merah', 'Binaan')} className="w-full py-3 text-xs sm:text-sm bg-red-600 hover:bg-red-700 text-white" disabled={isActionButtonDisabled}>Binaan</Button> <Button onClick={() => handleKetuaAction('merah', 'Peringatan')} className="w-full py-3 text-xs sm:text-sm bg-red-600 hover:bg-red-700 text-white" disabled={isActionButtonDisabled}>Peringatan</Button> </div> <Button onClick={() => handleDeleteLastAction('merah')} className="w-full py-4 text-sm sm:text-base bg-red-800 hover:bg-red-900 text-white" disabled={isActionButtonDisabled || ketuaActionsLog.filter(a => a.pesilatColor === 'merah' && a.round === dewanTimerStatus.currentRound).length === 0}> <Trash2 className="mr-2 h-4 w-4" /> Hapus </Button> </div>
-          <div className="flex flex-col items-center justify-center space-y-3 md:pt-8 order-first md:order-none"> <div className={cn("text-center p-2 rounded-md w-full bg-white dark:bg-gray-800 shadow", dewanTimerStatus.matchStatus.startsWith('PausedForVerification') ? "border-2 border-orange-500" : dewanTimerStatus.isTimerRunning ? "border-2 border-green-500" : "border border-gray-300 dark:border-gray-700" )}> <div className="text-2xl font-mono font-bold text-gray-800 dark:text-gray-100"> {dewanTimerStatus.isTimerRunning ? formatTime(dewanTimerStatus.timerSeconds) : "JEDA"} </div> <div className="text-xs text-gray-500 dark:text-gray-400"> Babak {dewanTimerStatus.currentRound || '?'} - { dewanTimerStatus.matchStatus.startsWith('PausedForVerification') ? `Verifikasi Babak ${dewanTimerStatus.currentRound}` : dewanTimerStatus.matchStatus || 'Menunggu' } </div> </div>
-            <Dialog open={isVerificationCreationDialogOpen} onOpenChange={setIsVerificationCreationDialogOpen}><DialogTrigger asChild><Button className="w-full md:w-auto bg-yellow-500 hover:bg-yellow-600 text-black py-3 text-sm sm:text-base" disabled={isLoadingPage || dewanTimerStatus.matchStatus === 'MatchFinished' || isCreatingVerification || (activeVerificationDetails !== null && activeVerificationDetails.status === 'pending')} onClick={() => setSelectedVerificationTypeForCreation('')}><><span className="flex items-center">{isCreatingVerification ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Vote className="mr-2 h-4 w-4"/>}Mulai Verifikasi</span></></Button></DialogTrigger><DialogContent className="sm:max-w-[425px] bg-white dark:bg-gray-800"> <RadixDialogTitle className="sr-only">Mulai Verifikasi Juri</RadixDialogTitle> <DialogHeader> <RadixDialogTitle className="text-gray-800 dark:text-gray-100">Mulai Verifikasi Juri</RadixDialogTitle> <DialogDescription className="text-gray-600 dark:text-gray-300"> Pilih jenis verifikasi. Ini akan menjeda timer dan mengirim permintaan ke juri. Verifikasi sebelumnya yang masih 'pending' akan dibatalkan. </DialogDescription> </DialogHeader> <div className="py-4"> <RadioGroup value={selectedVerificationTypeForCreation} onValueChange={(value) => setSelectedVerificationTypeForCreation(value as VerificationType)} className="text-gray-700 dark:text-gray-200"> <div className="flex items-center space-x-2"> <RadioGroupItem value="jatuhan" id="v-jatuhan-create" /> <Label htmlFor="v-jatuhan-create">Verifikasi Jatuhan</Label> </div> <div className="flex items-center space-x-2"> <RadioGroupItem value="pelanggaran" id="v-pelanggaran-create" /> <Label htmlFor="v-pelanggaran-create">Verifikasi Pelanggaran</Label> </div> </RadioGroup> </div> <DialogFooter> <DialogClose asChild> <Button type="button" variant="outline" disabled={isCreatingVerification}>Tutup</Button> </DialogClose> <Button type="button" onClick={handleCreateVerificationRequest} className="bg-primary hover:bg-primary/90 text-primary-foreground" disabled={isCreatingVerification || !selectedVerificationTypeForCreation}> {isCreatingVerification ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null} Buat & Jeda Timer </Button> </DialogFooter> </DialogContent> </Dialog>
-            <Button onClick={handleTentukanPemenang} className="w-full md:w-auto bg-green-600 hover:bg-green-700 text-white py-3 text-sm sm:text-base" disabled={isLoadingPage || (dewanTimerStatus.matchStatus !== 'MatchFinished' && !matchResultSaved) || !!matchResultSaved || isSavingResult}><Trophy className="mr-2 h-4 w-4"/>{matchResultSaved ? 'Hasil Telah Disimpan' : 'Tentukan Pemenang'}</Button>
+        <Card className="mb-6 bg-white dark:bg-gray-800">
+          <CardHeader>
+            <CardTitle className="text-lg text-gray-800 dark:text-gray-100">Log Tindakan Ketua</CardTitle>
+          </CardHeader>
+          <CardContent>
+            {ketuaActionsLog.length === 0 ? ( <p className="text-muted-foreground">Belum ada tindakan tercatat.</p> ) : ( <div className="max-h-48 overflow-y-auto"><Table><TableHeader><TableRow><TableHead className="w-[100px] text-gray-600 dark:text-gray-300">Waktu</TableHead><TableHead className="text-gray-600 dark:text-gray-300">Babak</TableHead><TableHead className="text-gray-600 dark:text-gray-300">Pesilat</TableHead><TableHead className="text-gray-600 dark:text-gray-300">Tindakan</TableHead><TableHead className="text-right text-gray-600 dark:text-gray-300">Poin</TableHead></TableRow></TableHeader><TableBody>{ketuaActionsLog.map((action) => ( <TableRow key={action.id} className="text-gray-700 dark:text-gray-200"><TableCell>{formatFirestoreTimestamp(action.timestamp)}</TableCell><TableCell>{action.round}</TableCell><TableCell><Badge variant={action.pesilatColor === 'merah' ? 'destructive' : 'default'} className={action.pesilatColor === 'biru' ? 'bg-blue-500 text-white' : ''}>{action.pesilatColor === 'merah' ? pesilatMerahInfo?.name || 'Merah' : pesilatBiruInfo?.name || 'Biru'}</Badge></TableCell><TableCell>{action.actionType}{action.originalActionType ? ` (dari ${action.originalActionType})` : ''}</TableCell><TableCell className="text-right">{action.points}</TableCell></TableRow> ))}</TableBody></Table></div> )}
+          </CardContent>
+        </Card>
+        <div className="grid grid-cols-1 md:grid-cols-[1fr_auto_1fr] gap-4 md:gap-8 items-start">
+          <div className="space-y-2">
+            <div className="grid grid-cols-2 gap-2">
+              <Button onClick={() => handleKetuaAction('merah', 'Jatuhan')} className="w-full py-3 text-xs sm:text-sm bg-red-600 hover:bg-red-700 text-white" disabled={isActionButtonDisabled}>Jatuhan</Button>
+              <Button onClick={() => handleKetuaAction('merah', 'Teguran')} className="w-full py-3 text-xs sm:text-sm bg-red-600 hover:bg-red-700 text-white" disabled={isActionButtonDisabled}>Teguran</Button>
+              <Button onClick={() => handleKetuaAction('merah', 'Binaan')} className="w-full py-3 text-xs sm:text-sm bg-red-600 hover:bg-red-700 text-white" disabled={isActionButtonDisabled}>Binaan</Button>
+              <Button onClick={() => handleKetuaAction('merah', 'Peringatan')} className="w-full py-3 text-xs sm:text-sm bg-red-600 hover:bg-red-700 text-white" disabled={isActionButtonDisabled}>Peringatan</Button>
+            </div>
+            <Button onClick={() => handleDeleteLastAction('merah')} className="w-full py-4 text-sm sm:text-base bg-red-800 hover:bg-red-900 text-white" disabled={isActionButtonDisabled || ketuaActionsLog.filter(a => a.pesilatColor === 'merah' && a.round === dewanTimerStatus.currentRound).length === 0}>
+              <Trash2 className="mr-2 h-4 w-4" /> Hapus
+            </Button>
           </div>
-          <div className="space-y-2"> <div className="grid grid-cols-2 gap-2"> <Button onClick={() => handleKetuaAction('biru', 'Jatuhan')} className="w-full py-3 text-xs sm:text-sm bg-blue-600 hover:bg-blue-700 text-white" disabled={isActionButtonDisabled}>Jatuhan</Button> <Button onClick={() => handleKetuaAction('biru', 'Teguran')} className="w-full py-3 text-xs sm:text-sm bg-blue-600 hover:bg-blue-700 text-white" disabled={isActionButtonDisabled}>Teguran</Button> <Button onClick={() => handleKetuaAction('biru', 'Binaan')} className="w-full py-3 text-xs sm:text-sm bg-blue-600 hover:bg-blue-700 text-white" disabled={isActionButtonDisabled}>Binaan</Button> <Button onClick={() => handleKetuaAction('biru', 'Peringatan')} className="w-full py-3 text-xs sm:text-sm bg-blue-600 hover:bg-blue-700 text-white" disabled={isActionButtonDisabled}>Peringatan</Button> </div> <Button onClick={() => handleDeleteLastAction('biru')} className="w-full py-4 text-sm sm:text-base bg-blue-800 hover:bg-blue-900 text-white" disabled={isActionButtonDisabled || ketuaActionsLog.filter(a => a.pesilatColor === 'biru' && a.round === dewanTimerStatus.currentRound).length === 0}> <Trash2 className="mr-2 h-4 w-4"/> Hapus </Button> </div> </div>
+          <div className="flex flex-col items-center justify-center space-y-3 md:pt-8 order-first md:order-none">
+            <div className={cn("text-center p-2 rounded-md w-full bg-white dark:bg-gray-800 shadow", dewanTimerStatus.matchStatus.startsWith('PausedForVerification') ? "border-2 border-orange-500" : dewanTimerStatus.isTimerRunning ? "border-2 border-green-500" : "border border-gray-300 dark:border-gray-700" )}>
+              <div className="text-2xl font-mono font-bold text-gray-800 dark:text-gray-100">
+                {dewanTimerStatus.isTimerRunning ? formatTime(dewanTimerStatus.timerSeconds) : "JEDA"}
+              </div>
+              <div className="text-xs text-gray-500 dark:text-gray-400">
+                Babak {dewanTimerStatus.currentRound || '?'} - { dewanTimerStatus.matchStatus.startsWith('PausedForVerification') ? `Verifikasi Babak ${dewanTimerStatus.currentRound}` : dewanTimerStatus.matchStatus || 'Menunggu' }
+              </div>
+            </div>
+            <Dialog open={isVerificationCreationDialogOpen} onOpenChange={setIsVerificationCreationDialogOpen}>
+              <DialogTrigger asChild>
+                <Button className="w-full md:w-auto bg-yellow-500 hover:bg-yellow-600 text-black py-3 text-sm sm:text-base" disabled={isLoadingPage || dewanTimerStatus.matchStatus === 'MatchFinished' || isCreatingVerification || (activeVerificationDetails !== null && activeVerificationDetails.status === 'pending')} onClick={() => setSelectedVerificationTypeForCreation('')}>
+                  <span className="flex items-center justify-center">
+                    {isCreatingVerification ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Vote className="mr-2 h-4 w-4"/>}
+                    Mulai Verifikasi
+                  </span>
+                </Button>
+              </DialogTrigger>
+              <DialogContent className="sm:max-w-[425px] bg-white dark:bg-gray-800">
+                <RadixDialogTitle className="sr-only">Mulai Verifikasi Juri</RadixDialogTitle>
+                <DialogHeader>
+                  <RadixDialogTitle className="text-gray-800 dark:text-gray-100">Mulai Verifikasi Juri</RadixDialogTitle>
+                  <DialogDescription className="text-gray-600 dark:text-gray-300"> Pilih jenis verifikasi. Ini akan menjeda timer dan mengirim permintaan ke juri. Verifikasi sebelumnya yang masih 'pending' akan dibatalkan. </DialogDescription>
+                </DialogHeader>
+                <div className="py-4">
+                  <RadioGroup value={selectedVerificationTypeForCreation} onValueChange={(value) => setSelectedVerificationTypeForCreation(value as VerificationType)} className="text-gray-700 dark:text-gray-200">
+                    <div className="flex items-center space-x-2">
+                      <RadioGroupItem value="jatuhan" id="v-jatuhan-create" />
+                      <Label htmlFor="v-jatuhan-create">Verifikasi Jatuhan</Label>
+                    </div>
+                    <div className="flex items-center space-x-2">
+                      <RadioGroupItem value="pelanggaran" id="v-pelanggaran-create" />
+                      <Label htmlFor="v-pelanggaran-create">Verifikasi Pelanggaran</Label>
+                    </div>
+                  </RadioGroup>
+                </div>
+                <DialogFooter>
+                  <DialogClose asChild>
+                    <Button type="button" variant="outline" disabled={isCreatingVerification}>Tutup</Button>
+                  </DialogClose>
+                  <Button type="button" onClick={handleCreateVerificationRequest} className="bg-primary hover:bg-primary/90 text-primary-foreground" disabled={isCreatingVerification || !selectedVerificationTypeForCreation}>
+                    {isCreatingVerification ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null} Buat & Jeda Timer
+                  </Button>
+                </DialogFooter>
+              </DialogContent>
+            </Dialog>
+            <Button onClick={handleTentukanPemenang} className="w-full md:w-auto bg-green-600 hover:bg-green-700 text-white py-3 text-sm sm:text-base" disabled={isLoadingPage || (dewanTimerStatus.matchStatus !== 'MatchFinished' && !matchResultSaved) || !!matchResultSaved || isSavingResult}>
+                <Trophy className="mr-2 h-4 w-4"/>
+                {matchResultSaved ? 'Hasil Telah Disimpan' : 'Tentukan Pemenang'}
+            </Button>
+          </div>
+          <div className="space-y-2">
+            <div className="grid grid-cols-2 gap-2">
+              <Button onClick={() => handleKetuaAction('biru', 'Jatuhan')} className="w-full py-3 text-xs sm:text-sm bg-blue-600 hover:bg-blue-700 text-white" disabled={isActionButtonDisabled}>Jatuhan</Button>
+              <Button onClick={() => handleKetuaAction('biru', 'Teguran')} className="w-full py-3 text-xs sm:text-sm bg-blue-600 hover:bg-blue-700 text-white" disabled={isActionButtonDisabled}>Teguran</Button>
+              <Button onClick={() => handleKetuaAction('biru', 'Binaan')} className="w-full py-3 text-xs sm:text-sm bg-blue-600 hover:bg-blue-700 text-white" disabled={isActionButtonDisabled}>Binaan</Button>
+              <Button onClick={() => handleKetuaAction('biru', 'Peringatan')} className="w-full py-3 text-xs sm:text-sm bg-blue-600 hover:bg-blue-700 text-white" disabled={isActionButtonDisabled}>Peringatan</Button>
+            </div>
+            <Button onClick={() => handleDeleteLastAction('biru')} className="w-full py-4 text-sm sm:text-base bg-blue-800 hover:bg-blue-900 text-white" disabled={isActionButtonDisabled || ketuaActionsLog.filter(a => a.pesilatColor === 'biru' && a.round === dewanTimerStatus.currentRound).length === 0}>
+              <Trash2 className="mr-2 h-4 w-4" /> Hapus
+            </Button>
+          </div>
+        </div>
         {error && !isLoadingPage && <div className="text-red-500 dark:text-red-400 text-center mt-4 p-2 bg-red-100 dark:bg-red-900/30 border border-red-500 dark:border-red-700 rounded-md">Error: {error}</div>}
 
-        <Dialog open={isVoteResultModalOpen} onOpenChange={(openStateFromDialog) => { if (!openStateFromDialog) { if (!activeVerificationDetails || activeVerificationDetails.status !== 'pending') { setIsVoteResultModalOpen(false); setKetuaSelectedDecision(null); } } }} > <DialogContent className="sm:max-w-lg bg-white dark:bg-gray-800" onPointerDownOutside={(e) => { if(activeVerificationDetails?.status === 'pending') e.preventDefault(); }} onEscapeKeyDown={(e) => { if(activeVerificationDetails?.status === 'pending') e.preventDefault(); }} > <RadixDialogTitle className="sr-only">Hasil Verifikasi Juri</RadixDialogTitle> <DialogHeader> <RadixDialogTitle className="text-2xl font-bold font-headline text-center text-gray-800 dark:text-gray-100">Hasil Verifikasi Juri</RadixDialogTitle> {activeVerificationDetails && ( <DialogDescription className="text-center text-lg text-gray-600 dark:text-gray-300"> {activeVerificationDetails.type === 'jatuhan' ? 'Verifikasi Jatuhan' : 'Verifikasi Pelanggaran'} (Babak {activeVerificationDetails.round}) </DialogDescription> )} </DialogHeader> <div className="my-4 space-y-3"> <h3 className="font-semibold text-center text-lg text-gray-700 dark:text-gray-200">Vote Juri:</h3> <div className="grid grid-cols-3 gap-3 items-center justify-items-center"> {(['juri-1', 'juri-2', 'juri-3'] as const).map((juriKey, index) => ( <div key={juriKey} className="flex flex-col items-center space-y-1"> <div className={cn("w-16 h-16 rounded-md border-2 border-gray-400 dark:border-gray-500 flex items-center justify-center", getJuriVoteBoxClass(activeVerificationDetails?.votes[juriKey] || null))}></div> <p className="text-xs font-medium text-gray-600 dark:text-gray-300">Juri {index + 1}</p> </div> ))} </div> </div> <div className="my-6 space-y-3"> <p className="text-center font-semibold text-lg text-gray-700 dark:text-gray-200">Keputusan Ketua Pertandingan:</p> <div className="flex justify-around gap-2"> <Button onClick={() => setKetuaSelectedDecision('merah')} className={cn("flex-1 text-white py-3 text-base", ketuaSelectedDecision === 'merah' ? "ring-4 ring-offset-2 ring-red-700 bg-red-700" : "bg-red-500 hover:bg-red-600")} disabled={isConfirmingVerification} > SUDUT MERAH </Button> <Button onClick={() => setKetuaSelectedDecision('biru')} className={cn("flex-1 text-white py-3 text-base", ketuaSelectedDecision === 'biru' ? "ring-4 ring-offset-2 ring-blue-700 bg-blue-700" : "bg-blue-500 hover:bg-blue-600")} disabled={isConfirmingVerification} > SUDUT BIRU </Button> <Button onClick={() => setKetuaSelectedDecision('invalid')} className={cn("flex-1 text-black py-3 text-base", ketuaSelectedDecision === 'invalid' ? "ring-4 ring-offset-2 ring-yellow-600 bg-yellow-600" : "bg-yellow-400 hover:bg-yellow-500")} disabled={isConfirmingVerification} > INVALID </Button> </div> </div> <DialogFooter className="sm:justify-between mt-6"> <Button type="button" variant="outline" onClick={handleCancelCurrentVerification} disabled={isConfirmingVerification}> {isConfirmingVerification ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null} Batalkan Verifikasi Ini </Button> <Button type="button" onClick={handleConfirmVerificationDecision} className="bg-primary hover:bg-primary/90 text-primary-foreground" disabled={!ketuaSelectedDecision || isConfirmingVerification} > {isConfirmingVerification ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null} Konfirmasi Keputusan </Button> </DialogFooter> </DialogContent> </Dialog>
+        <Dialog open={isVoteResultModalOpen} onOpenChange={(openStateFromDialog) => { if (!openStateFromDialog) { if (!activeVerificationDetails || activeVerificationDetails.status !== 'pending') { setIsVoteResultModalOpen(false); setKetuaSelectedDecision(null); } } }} >
+            <DialogContent className="sm:max-w-lg bg-white dark:bg-gray-800" onPointerDownOutside={(e) => { if(activeVerificationDetails?.status === 'pending') e.preventDefault(); }} onEscapeKeyDown={(e) => { if(activeVerificationDetails?.status === 'pending') e.preventDefault(); }} >
+                <RadixDialogTitle className="sr-only">Hasil Verifikasi Juri</RadixDialogTitle>
+                <DialogHeader>
+                    <RadixDialogTitle className="text-2xl font-bold font-headline text-center text-gray-800 dark:text-gray-100">Hasil Verifikasi Juri</RadixDialogTitle>
+                    {activeVerificationDetails && ( <DialogDescription className="text-center text-lg text-gray-600 dark:text-gray-300"> {activeVerificationDetails.type === 'jatuhan' ? 'Verifikasi Jatuhan' : 'Verifikasi Pelanggaran'} (Babak {activeVerificationDetails.round}) </DialogDescription> )}
+                </DialogHeader>
+                <div className="my-4 space-y-3">
+                    <h3 className="font-semibold text-center text-lg text-gray-700 dark:text-gray-200">Vote Juri:</h3>
+                    <div className="grid grid-cols-3 gap-3 items-center justify-items-center">
+                        {(['juri-1', 'juri-2', 'juri-3'] as const).map((juriKey, index) => (
+                            <div key={juriKey} className="flex flex-col items-center space-y-1">
+                                <div className={cn("w-16 h-16 rounded-md border-2 border-gray-400 dark:border-gray-500 flex items-center justify-center", getJuriVoteBoxClass(activeVerificationDetails?.votes[juriKey] || null))}></div>
+                                <p className="text-xs font-medium text-gray-600 dark:text-gray-300">Juri {index + 1}</p>
+                            </div>
+                        ))}
+                    </div>
+                </div>
+                <div className="my-6 space-y-3">
+                    <p className="text-center font-semibold text-lg text-gray-700 dark:text-gray-200">Keputusan Ketua Pertandingan:</p>
+                    <div className="flex justify-around gap-2">
+                        <Button onClick={() => setKetuaSelectedDecision('merah')} className={cn("flex-1 text-white py-3 text-base", ketuaSelectedDecision === 'merah' ? "ring-4 ring-offset-2 ring-red-700 bg-red-700" : "bg-red-500 hover:bg-red-600")} disabled={isConfirmingVerification} > SUDUT MERAH </Button>
+                        <Button onClick={() => setKetuaSelectedDecision('biru')} className={cn("flex-1 text-white py-3 text-base", ketuaSelectedDecision === 'biru' ? "ring-4 ring-offset-2 ring-blue-700 bg-blue-700" : "bg-blue-500 hover:bg-blue-600")} disabled={isConfirmingVerification} > SUDUT BIRU </Button>
+                        <Button onClick={() => setKetuaSelectedDecision('invalid')} className={cn("flex-1 text-black py-3 text-base", ketuaSelectedDecision === 'invalid' ? "ring-4 ring-offset-2 ring-yellow-600 bg-yellow-600" : "bg-yellow-400 hover:bg-yellow-500")} disabled={isConfirmingVerification} > INVALID </Button>
+                    </div>
+                </div>
+                <DialogFooter className="sm:justify-between mt-6">
+                    <Button type="button" variant="outline" onClick={handleCancelCurrentVerification} disabled={isConfirmingVerification}>
+                        {isConfirmingVerification ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null} Batalkan Verifikasi Ini
+                    </Button>
+                    <Button type="button" onClick={handleConfirmVerificationDecision} className="bg-primary hover:bg-primary/90 text-primary-foreground" disabled={!ketuaSelectedDecision || isConfirmingVerification} >
+                        {isConfirmingVerification ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null} Konfirmasi Keputusan
+                    </Button>
+                </DialogFooter>
+            </DialogContent>
+        </Dialog>
 
         <Dialog open={isWinnerModalOpen} onOpenChange={setIsWinnerModalOpen}>
           <DialogContent className="sm:max-w-2xl bg-card">
@@ -526,7 +654,39 @@ function KetuaPertandinganPageComponent({ gelanggangName }: { gelanggangName: st
               </DialogDescription>
             </DialogHeader>
             <div className="py-4 space-y-6">
-              <div className="overflow-x-auto"><Table><TableHeader><TableRow>{summaryTableHeaders.map(header => <TableHead key={header} className={header === "Sudut" ? "text-left" : "text-center"}>{header}</TableHead>)}</TableRow></TableHeader><TableBody><TableRow><TableCell className="font-semibold text-red-600">MERAH</TableCell><TableCell className="text-center">{summaryScoresMerah.peringatan1}</TableCell><TableCell className="text-center">{summaryScoresMerah.peringatan2}</TableCell><TableCell className="text-center">{summaryScoresMerah.teguran1}</TableCell><TableCell className="text-center">{summaryScoresMerah.teguran2}</TableCell><TableCell className="text-center">{summaryScoresMerah.jatuhan}</TableCell><TableCell className="text-center">{summaryScoresMerah.tendanganSah}</TableCell><TableCell className="text-center">{summaryScoresMerah.pukulanSah}</TableCell><TableCell className="text-center font-bold text-lg">{summaryScoresMerah.totalAkhir}</TableCell></TableRow><TableRow><TableCell className="font-semibold text-blue-600">BIRU</TableCell><TableCell className="text-center">{summaryScoresBiru.peringatan1}</TableCell><TableCell className="text-center">{summaryScoresBiru.peringatan2}</TableCell><TableCell className="text-center">{summaryScoresBiru.teguran1}</TableCell><TableCell className="text-center">{summaryScoresBiru.teguran2}</TableCell><TableCell className="text-center">{summaryScoresBiru.jatuhan}</TableCell><TableCell className="text-center">{summaryScoresBiru.tendanganSah}</TableCell><TableCell className="text-center">{summaryScoresBiru.pukulanSah}</TableCell><TableCell className="text-center font-bold text-lg">{summaryScoresBiru.totalAkhir}</TableCell></TableRow></TableBody></Table></div>
+              <div className="overflow-x-auto">
+                <Table>
+                    <TableHeader>
+                        <TableRow>
+                            {summaryTableHeaders.map(header => <TableHead key={header} className={header === "Sudut" ? "text-left" : "text-center"}>{header}</TableHead>)}
+                        </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                        <TableRow>
+                            <TableCell className="font-semibold text-red-600">MERAH</TableCell>
+                            <TableCell className="text-center">{summaryScoresMerah.peringatan1}</TableCell>
+                            <TableCell className="text-center">{summaryScoresMerah.peringatan2}</TableCell>
+                            <TableCell className="text-center">{summaryScoresMerah.teguran1}</TableCell>
+                            <TableCell className="text-center">{summaryScoresMerah.teguran2}</TableCell>
+                            <TableCell className="text-center">{summaryScoresMerah.jatuhan}</TableCell>
+                            <TableCell className="text-center">{summaryScoresMerah.tendanganSah}</TableCell>
+                            <TableCell className="text-center">{summaryScoresMerah.pukulanSah}</TableCell>
+                            <TableCell className="text-center font-bold text-lg">{summaryScoresMerah.totalAkhir}</TableCell>
+                        </TableRow>
+                        <TableRow>
+                            <TableCell className="font-semibold text-blue-600">BIRU</TableCell>
+                            <TableCell className="text-center">{summaryScoresBiru.peringatan1}</TableCell>
+                            <TableCell className="text-center">{summaryScoresBiru.peringatan2}</TableCell>
+                            <TableCell className="text-center">{summaryScoresBiru.teguran1}</TableCell>
+                            <TableCell className="text-center">{summaryScoresBiru.teguran2}</TableCell>
+                            <TableCell className="text-center">{summaryScoresBiru.jatuhan}</TableCell>
+                            <TableCell className="text-center">{summaryScoresBiru.tendanganSah}</TableCell>
+                            <TableCell className="text-center">{summaryScoresBiru.pukulanSah}</TableCell>
+                            <TableCell className="text-center font-bold text-lg">{summaryScoresBiru.totalAkhir}</TableCell>
+                        </TableRow>
+                    </TableBody>
+                </Table>
+              </div>
               <div className="space-y-4">
                 <div>
                   <Label className="font-semibold text-foreground">Pesilat yang Menang</Label>
@@ -560,7 +720,16 @@ function KetuaPertandinganPageComponent({ gelanggangName }: { gelanggangName: st
           </DialogContent>
         </Dialog>
 
-        <div className="mt-8 text-center"> <Button variant="outline" asChild> <Link href="/login"><ArrowLeft className="mr-2 h-4 w-4"/> Kembali ke Login</Link> </Button> </div>
+        <div className="mt-8 text-center">
+            <Button variant="outline" asChild>
+                <Link href="/login">
+                    <span className="flex items-center">
+                        <ArrowLeft className="mr-2 h-4 w-4"/>
+                        Kembali ke Login
+                    </span>
+                </Link>
+            </Button>
+        </div>
       </main>
     </div>
   );
