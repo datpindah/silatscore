@@ -6,7 +6,22 @@ import { cn } from "@/lib/utils"
 const Table = React.forwardRef<
   HTMLTableElement,
   React.HTMLAttributes<HTMLTableElement>
->(({ className, children, ...rest }, ref) => (<div className="relative w-full overflow-auto"><table ref={ref} className={cn("w-full caption-bottom text-sm", className)} {...rest}>{children}</table></div>));
+>(({ className, children, ...rest }, ref) => {
+  // Explicitly using React.createElement to avoid JSX whitespace issues
+  return React.createElement(
+    "div",
+    { className: "relative w-full overflow-auto" },
+    React.createElement(
+      "table",
+      {
+        ref: ref,
+        className: cn("w-full caption-bottom text-sm", className),
+        ...rest,
+      },
+      children
+    )
+  );
+});
 Table.displayName = "Table"
 
 const TableHeader = React.forwardRef<
