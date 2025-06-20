@@ -50,7 +50,7 @@ export function SidebarNav() {
                     tooltip={item.label}
                     className={cn(
                       isActive ? 'bg-sidebar-accent text-sidebar-accent-foreground' : 'hover:bg-sidebar-accent hover:text-sidebar-accent-foreground',
-                      'justify-start'
+                      'justify-start text-sidebar-foreground'
                     )}
                   >
                     <item.icon className="h-5 w-5 mr-3 shrink-0" />
@@ -63,12 +63,9 @@ export function SidebarNav() {
         </SidebarMenu>
       </SidebarContent>
       <SidebarFooter className="p-4 group-data-[collapsible=icon]:p-2">
-        {/* Example Footer Item */}
-        <Button variant="outline" className="w-full group-data-[collapsible=icon]:aspect-square group-data-[collapsible=icon]:p-0">
-          <UserCog className="h-5 w-5 group-data-[collapsible=icon]:mx-auto" />
-          <span className="ml-2 group-data-[collapsible=icon]:hidden">Admin Profile</span>
-        </Button>
+        {/* Admin Profile button removed */}
       </SidebarFooter>
     </Sidebar>
   );
 }
+
