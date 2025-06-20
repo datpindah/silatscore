@@ -397,10 +397,12 @@ function MonitoringSkorPageComponent({ gelanggangName }: { gelanggangName: strin
       );
 
       if (count === 1) {
-        return pureBinaanActions.length >= 1;
+        return pureBinaanActions.length >= 1 || convertedBinaanToTeguranActions.length >= 1;
       }
       if (count === 2) {
-        return pureBinaanActions.length >= 1 && convertedBinaanToTeguranActions.length >= 1;
+        return (pureBinaanActions.length >= 2) ||
+               (pureBinaanActions.length >= 1 && convertedBinaanToTeguranActions.length >= 1) ||
+               (convertedBinaanToTeguranActions.length >= 2);
       }
       return false;
     }
@@ -774,4 +776,5 @@ function PageWithSearchParams() {
   const gelanggangName = searchParams.get('gelanggang');
   return <MonitoringSkorPageComponent gelanggangName={gelanggangName} />;
 }
+
 
