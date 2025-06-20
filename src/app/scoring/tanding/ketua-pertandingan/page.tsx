@@ -324,7 +324,7 @@ function KetuaPertandinganPageComponent({ gelanggangName }: { gelanggangName: st
                  typeof log.originalActionType === 'undefined' 
         ).length;
 
-        if (binaanAsliCount < 1) { 
+        if (binaanAsliCount < 2) { // Changed from < 1 to < 2
           actionTypeToLog = 'Binaan';
           pointsToLog = 0; 
         } else { 
