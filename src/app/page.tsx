@@ -16,12 +16,12 @@ export default function HomePage() {
           <div className="grid md:grid-cols-2 gap-8 items-center">
             <div>
               <Image 
-                src="https://images.unsplash.com/photo-1519415796909-70b43f919952?w=600&h=400&auto=format&fit=crop" 
-                alt="Silhouette of a person practicing martial arts" 
+                src="https://placehold.co/600x400.png" 
+                alt="Placeholder image for martial arts achievement" 
                 width={600} 
                 height={400}
                 className="rounded-lg shadow-lg object-cover"
-                data-ai-hint="martial arts"
+                data-ai-hint="achievement sport"
               />
             </div>
             <div className="space-y-6">
