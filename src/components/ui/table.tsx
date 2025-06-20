@@ -17,8 +17,8 @@ const Table = React.forwardRef<
         ref: ref,
         className: cn("w-full caption-bottom text-sm", className),
         ...rest,
-      },
-      children // Children passed directly here
+        children: children, // Pass children as a prop
+      }
     )
   );
 });
