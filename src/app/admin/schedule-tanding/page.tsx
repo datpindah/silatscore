@@ -12,7 +12,7 @@ import { Upload, PlusCircle, PlayCircle, Download } from 'lucide-react'; // Adde
 import type { ScheduleTanding } from '@/lib/types';
 import { TableCell } from '@/components/ui/table';
 import { db } from '@/lib/firebase';
-import { collection, addDoc, getDocs, doc, updateDoc, deleteDoc, onSnapshot, setDoc, getDoc, Timestamp, deleteField } from 'firebase/firestore';
+import { collection, addDoc, getDocs, doc, updateDoc, deleteDoc, onSnapshot, setDoc, getDoc, Timestamp, deleteField, where, query } from 'firebase/firestore';
 import * as XLSX from 'xlsx';
 
 const initialFormState: Omit<ScheduleTanding, 'id'> = {
@@ -29,6 +29,7 @@ const initialFormState: Omit<ScheduleTanding, 'id'> = {
 
 const ACTIVE_TANDING_MATCHES_BY_GELANGGANG_PATH = 'app_settings/active_tanding_matches_by_gelanggang';
 const SCHEDULE_TANDING_COLLECTION = 'schedules_tanding';
+const MATCHES_TANDING_COLLECTION = 'matches_tanding';
 
 const roundOptions = [
   { value: 'Penyisihan', label: 'Penyisihan' },
@@ -61,7 +62,7 @@ export default function ScheduleTandingPage() {
 
   useEffect(() => {
     setIsLoading(true);
-    const unsub = onSnapshot(collection(db, SCHEDULE_TANDING_COLLECTION), (querySnapshot) => {
+    const unsub = onSnapshot(collection(db, SCHEDULE_TANDING_COLLECTION), async (querySnapshot) => {
       const schedulesData: ScheduleTanding[] = [];
       querySnapshot.forEach((docSnap) => {
         const data = docSnap.data();
@@ -96,7 +97,15 @@ export default function ScheduleTandingPage() {
           matchNumber: data.matchNumber,
         });
       });
-      setSchedules(schedulesData.sort((a, b) => a.matchNumber - b.matchNumber));
+      
+      // Fetch matches that have a result and filter them out
+      const finishedMatchesQuery = query(collection(db, MATCHES_TANDING_COLLECTION), where("matchResult", "!=", null));
+      const finishedMatchesSnap = await getDocs(finishedMatchesQuery);
+      const finishedMatchIds = new Set(finishedMatchesSnap.docs.map(doc => doc.id));
+      
+      const unfinishedSchedules = schedulesData.filter(s => !finishedMatchIds.has(s.id));
+
+      setSchedules(unfinishedSchedules.sort((a, b) => a.matchNumber - b.matchNumber));
       setIsLoading(false);
     }, (error) => {
       console.error("Error fetching schedules:", error);
@@ -383,7 +392,7 @@ export default function ScheduleTandingPage() {
             <CardTitle className="font-headline">Daftar Jadwal Tanding</CardTitle>
           </CardHeader>
           <CardContent>
-             <p className="text-center text-muted-foreground py-4">Belum ada jadwal yang ditambahkan.</p>
+             <p className="text-center text-muted-foreground py-4">Belum ada jadwal yang ditambahkan atau semua pertandingan telah selesai.</p>
           </CardContent>
         </Card>
       )}

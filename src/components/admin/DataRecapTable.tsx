@@ -6,6 +6,18 @@ import { Badge } from "@/components/ui/badge";
 import type { ScheduleTanding, ScheduleTGR, AgeCategory } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
+export type RecapStatus =
+  | 'Selesai'
+  | 'Selesai (Pemenang Merah)'
+  | 'Selesai (Pemenang Biru)'
+  | 'Selesai (Seri)'
+  | 'Berlangsung'
+  | 'Berlangsung (Verifikasi)'
+  | 'Berlangsung (Jeda)'
+  | `Selesai (${'biru' | 'merah'})` // from TGR
+  | 'Akan Datang'
+  | 'Menunggu Data';
+
 export interface RecapMatchItem {
   id: string;
   type: 'Tanding' | 'TGR';
@@ -13,7 +25,7 @@ export interface RecapMatchItem {
   categoryDisplay: string; // Kelas Tanding or Kategori TGR
   ageCategoryDerived?: AgeCategory | string; // For filtering, derived from class/category
   participantsDisplay: string; // Pesilat Merah vs Biru or Nama Peserta TGR
-  status: 'Selesai' | 'Berlangsung' | 'Berlangsung (Verifikasi)' | 'Berlangsung (Jeda)' | `Selesai (${'biru' | 'merah'})` | 'Akan Datang' | 'Menunggu Data';
+  status: RecapStatus;
   date: string; // Formatted date
   gelanggang: string;
   originalData: ScheduleTanding | ScheduleTGR; // Keep original for potential detailed view
@@ -26,18 +38,18 @@ interface DataRecapTableProps {
 
 export function DataRecapTable({ matches }: DataRecapTableProps) {
 
-  const getStatusBadgeVariant = (status: RecapMatchItem['status']) => {
-    if (status === 'Selesai' || status.startsWith('Selesai (')) return 'default';
+  const getStatusBadgeVariant = (status: RecapStatus) => {
+    if (status.startsWith('Selesai')) return 'default';
     if (status.startsWith('Berlangsung')) return 'secondary';
     if (status === 'Akan Datang') return 'outline';
     return 'destructive'; // For 'Menunggu Data'
   };
 
-  const getStatusBadgeClass = (status: RecapMatchItem['status']) => {
-     if (status === 'Selesai' || status.startsWith('Selesai (')) return 'bg-green-500 text-white';
+  const getStatusBadgeClass = (status: RecapStatus) => {
+     if (status.startsWith('Selesai')) return 'bg-green-500 text-white';
      if (status.startsWith('Berlangsung')) return 'bg-yellow-500 text-black';
-     if (status === 'Akan Datang') return 'border-blue-500 text-blue-600'; // More distinct than default outline
-     return 'bg-gray-400 text-white'; // Menunggu Data
+     if (status === 'Akan Datang') return 'border-blue-500 text-blue-600';
+     return 'bg-gray-400 text-white';
   };
 
 
@@ -50,7 +62,7 @@ export function DataRecapTable({ matches }: DataRecapTableProps) {
           <TableHead className="w-[100px]">No.</TableHead>
           <TableHead>Kategori/Kelas</TableHead>
           <TableHead>Peserta</TableHead>
-          <TableHead className="w-[150px]">Status</TableHead>
+          <TableHead className="w-[200px]">Status</TableHead>
           <TableHead className="w-[150px]">Tanggal</TableHead>
           <TableHead className="w-[150px]">Gelanggang</TableHead>
         </TableRow>

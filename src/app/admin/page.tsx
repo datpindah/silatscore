@@ -9,7 +9,7 @@ import { DataRecapTable, type RecapMatchItem } from '@/components/admin/DataReca
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Download, Filter, AlertTriangle, Loader2 } from 'lucide-react';
-import { ageCategories, type AgeCategory, type ScheduleTanding, type ScheduleTGR, type TimerStatus, type TGRTimerStatus } from '@/lib/types';
+import { ageCategories, type AgeCategory, type ScheduleTanding, type ScheduleTGR, type TimerStatus, type TGRTimerStatus, type MatchResultTanding } from '@/lib/types';
 import { db } from '@/lib/firebase';
 import { collection, getDocs, doc, getDoc, Timestamp } from 'firebase/firestore';
 
@@ -53,7 +53,19 @@ export default function AdminDashboardPage() {
             if (matchStatusDoc.exists()) {
               matchSpecificData = matchStatusDoc.data();
               const timerStatus = matchSpecificData?.timer_status as TimerStatus | undefined;
-              if (timerStatus) {
+              const matchResult = matchSpecificData?.matchResult as MatchResultTanding | undefined;
+
+              if (matchResult) {
+                  if (matchResult.winner === 'merah') {
+                      status = 'Selesai (Pemenang Merah)';
+                  } else if (matchResult.winner === 'biru') {
+                      status = 'Selesai (Pemenang Biru)';
+                  } else if (matchResult.winner === 'seri') {
+                      status = 'Selesai (Seri)';
+                  } else {
+                      status = 'Selesai';
+                  }
+              } else if (timerStatus) {
                 if (timerStatus.matchStatus === 'MatchFinished') {
                   status = 'Selesai';
                 } else if (timerStatus.matchStatus.startsWith('OngoingRound')) {
@@ -273,4 +285,3 @@ export default function AdminDashboardPage() {
     </>
   );
 }
-
