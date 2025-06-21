@@ -152,6 +152,7 @@ export default function ScheduleTandingPage() {
     if (scheduleToEdit) {
       setFormData({...scheduleToEdit });
       setIsEditing(id);
+      window.scrollTo({ top: 0, behavior: 'smooth' });
     }
   };
 
@@ -160,11 +161,10 @@ export default function ScheduleTandingPage() {
       try {
         await deleteDoc(doc(db, SCHEDULE_TANDING_COLLECTION, scheduleToDelete.id));
         
-        // If this schedule was active for its venue, deactivate it
         if (activeSchedulesByGelanggang[scheduleToDelete.place] === scheduleToDelete.id) {
           const venueMapRef = doc(db, ACTIVE_TANDING_MATCHES_BY_GELANGGANG_PATH);
           await updateDoc(venueMapRef, {
-            [scheduleToDelete.place]: deleteField() // Or set to null
+            [scheduleToDelete.place]: deleteField()
           });
         }
       } catch (error) {
@@ -261,6 +261,18 @@ export default function ScheduleTandingPage() {
 
   const tandingTableHeaders = ["No. Match", "Tanggal", "Gelanggang", "Pesilat Merah", "Pesilat Biru", "Babak", "Kelas"];
 
+  const schedulesByGelanggang = schedules.reduce((acc, schedule) => {
+    const { place } = schedule;
+    if (!acc[place]) {
+      acc[place] = [];
+    }
+    acc[place].push(schedule);
+    return acc;
+  }, {} as Record<string, ScheduleTanding[]>);
+
+  const sortedGelanggangs = Object.keys(schedulesByGelanggang).sort((a, b) => a.localeCompare(b));
+
+
   if (isLoading) {
     return <PageTitle title="Jadwal Pertandingan Tanding" description="Memuat data jadwal..."><div className="flex gap-2"><Button variant="outline" disabled><Download className="mr-2 h-4 w-4" /> Download Template</Button><Button variant="outline" disabled><Upload className="mr-2 h-4 w-4" /> Unggah XLS</Button><PrintScheduleButton scheduleType="Tanding" disabled /></div></PageTitle>;
   }
@@ -321,48 +333,60 @@ export default function ScheduleTandingPage() {
         </form>
       </Card>
 
-      <Card>
-        <CardHeader>
-          <CardTitle className="font-headline">Daftar Jadwal Tanding</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <ScheduleTable<ScheduleTanding>
-            schedules={schedules}
-            caption="Jadwal Pertandingan Tanding Terdaftar"
-            headers={tandingTableHeaders}
-            renderRow={(s) => [
-                <TableCell key={`matchNumber-${s.id}`}>{s.matchNumber}</TableCell>,
-                <TableCell key={`date-${s.id}`}>{new Date(s.date + "T00:00:00").toLocaleDateString('id-ID', { year: 'numeric', month: 'long', day: 'numeric' })}</TableCell>,
-                <TableCell key={`place-${s.id}`}>{s.place}</TableCell>,
-                <TableCell key={`merah-${s.id}`}>{s.pesilatMerahName} ({s.pesilatMerahContingent})</TableCell>,
-                <TableCell key={`biru-${s.id}`}>{s.pesilatBiruName} ({s.pesilatBiruContingent})</TableCell>,
-                <TableCell key={`round-${s.id}`}>{s.round}</TableCell>,
-                <TableCell key={`class-${s.id}`}>{s.class}</TableCell>,
-            ]}
-            onEdit={handleEdit}
-            onDelete={(id) => {
-                const scheduleToDelete = schedules.find(s => s.id === id);
-                if (scheduleToDelete) handleDelete(scheduleToDelete);
-            }}
-            renderCustomActions={(schedule) => (
-              <>
-                {activeSchedulesByGelanggang[schedule.place] === schedule.id ? (
-                  <Button variant="default" size="sm" disabled className="bg-green-500 hover:bg-green-600">
-                    <PlayCircle className="mr-1 h-4 w-4" />
-                    Aktif di {schedule.place}
-                  </Button>
-                ) : (
-                  <Button variant="outline" size="sm" onClick={() => handleActivateSchedule(schedule)} disabled={!schedule.place || schedule.place.trim() === ""}>
-                    <PlayCircle className="mr-1 h-4 w-4" />
-                    Aktifkan
-                  </Button>
+      {sortedGelanggangs.length > 0 ? (
+        sortedGelanggangs.map((gelanggang) => (
+          <Card key={gelanggang} className="mb-8">
+            <CardHeader>
+              <CardTitle className="font-headline">Daftar Jadwal - Gelanggang: {gelanggang}</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <ScheduleTable<ScheduleTanding>
+                schedules={schedulesByGelanggang[gelanggang]}
+                caption={`Jadwal Pertandingan Tanding Terdaftar untuk Gelanggang ${gelanggang}`}
+                headers={tandingTableHeaders}
+                renderRow={(s) => [
+                    <TableCell key={`matchNumber-${s.id}`}>{s.matchNumber}</TableCell>,
+                    <TableCell key={`date-${s.id}`}>{new Date(s.date + "T00:00:00").toLocaleDateString('id-ID', { year: 'numeric', month: 'long', day: 'numeric' })}</TableCell>,
+                    <TableCell key={`place-${s.id}`}>{s.place}</TableCell>,
+                    <TableCell key={`merah-${s.id}`}>{s.pesilatMerahName} ({s.pesilatMerahContingent})</TableCell>,
+                    <TableCell key={`biru-${s.id}`}>{s.pesilatBiruName} ({s.pesilatBiruContingent})</TableCell>,
+                    <TableCell key={`round-${s.id}`}>{s.round}</TableCell>,
+                    <TableCell key={`class-${s.id}`}>{s.class}</TableCell>,
+                ]}
+                onEdit={handleEdit}
+                onDelete={(id) => {
+                    const scheduleToDelete = schedules.find(s => s.id === id);
+                    if (scheduleToDelete) handleDelete(scheduleToDelete);
+                }}
+                renderCustomActions={(schedule) => (
+                  <>
+                    {activeSchedulesByGelanggang[schedule.place] === schedule.id ? (
+                      <Button variant="default" size="sm" disabled className="bg-green-500 hover:bg-green-600">
+                        <PlayCircle className="mr-1 h-4 w-4" />
+                        Aktif di {schedule.place}
+                      </Button>
+                    ) : (
+                      <Button variant="outline" size="sm" onClick={() => handleActivateSchedule(schedule)} disabled={!schedule.place || schedule.place.trim() === ""}>
+                        <PlayCircle className="mr-1 h-4 w-4" />
+                        Aktifkan
+                      </Button>
+                    )}
+                  </>
                 )}
-              </>
-            )}
-          />
-        </CardContent>
-      </Card>
+              />
+            </CardContent>
+          </Card>
+        ))
+      ) : (
+        <Card>
+          <CardHeader>
+            <CardTitle className="font-headline">Daftar Jadwal Tanding</CardTitle>
+          </CardHeader>
+          <CardContent>
+             <p className="text-center text-muted-foreground py-4">Belum ada jadwal yang ditambahkan.</p>
+          </CardContent>
+        </Card>
+      )}
     </>
   );
 }
-
