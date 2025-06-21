@@ -278,6 +278,18 @@ export default function ScheduleTGRPage() {
     Regu: <UserSquare className="h-4 w-4 inline mr-1" />,
     'Jurus Tunggal Bebas': <Swords className="h-4 w-4 inline mr-1" />,
   };
+  
+  const schedulesByGelanggang = schedules.reduce((acc, schedule) => {
+    const { place } = schedule;
+    if (!acc[place]) {
+      acc[place] = [];
+    }
+    acc[place].push(schedule);
+    return acc;
+  }, {} as Record<string, ScheduleTGR[]>);
+
+  const sortedGelanggangs = Object.keys(schedulesByGelanggang).sort((a, b) => a.localeCompare(b));
+
 
   if (isLoading) {
     return (
@@ -360,52 +372,64 @@ export default function ScheduleTGRPage() {
         </form>
       </Card>
 
-      <Card>
-        <CardHeader>
-          <CardTitle className="font-headline">Daftar Jadwal TGR</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <ScheduleTable<ScheduleTGR>
-            schedules={schedules}
-            caption="Jadwal Pertandingan TGR Terdaftar"
-            headers={tableHeaders}
-            renderRow={(s) => [
-                <TableCell key={`lotNumber-${s.id}`}>{s.lotNumber}</TableCell>,
-                <TableCell key={`date-${s.id}`}>{new Date(s.date + "T00:00:00").toLocaleDateString('id-ID', { year: 'numeric', month: 'long', day: 'numeric' })}</TableCell>,
-                <TableCell key={`place-${s.id}`}>{s.place}</TableCell>,
-                <TableCell key={`round-${s.id}`}>{s.round}</TableCell>,
-                <TableCell key={`category-${s.id}`} className="flex items-center">
-                  {categoryIcons[s.category]} {s.category}
-                </TableCell>,
-                <TableCell key={`merahName-${s.id}`}>{s.pesilatMerahName || 'N/A'}</TableCell>,
-                <TableCell key={`merahCont-${s.id}`}>{s.pesilatMerahContingent || 'N/A'}</TableCell>,
-                <TableCell key={`biruName-${s.id}`}>{s.pesilatBiruName || 'N/A'}</TableCell>,
-                <TableCell key={`biruCont-${s.id}`}>{s.pesilatBiruContingent || 'N/A'}</TableCell>,
-            ]}
-            onEdit={handleEdit}
-            onDelete={(id) => {
-                 const scheduleToDelete = schedules.find(s => s.id === id);
-                 if (scheduleToDelete) handleDelete(scheduleToDelete);
-            }}
-            renderCustomActions={(schedule) => (
-              <>
-                {activeTgrSchedulesByGelanggang[schedule.place] === schedule.id ? (
-                  <Button variant="default" size="sm" disabled className="bg-green-500 hover:bg-green-600">
-                    <PlayCircle className="mr-1 h-4 w-4" />
-                    Aktif di {schedule.place}
-                  </Button>
-                ) : (
-                  <Button variant="outline" size="sm" onClick={() => handleActivateTGRSchedule(schedule)} disabled={!schedule.place || schedule.place.trim() === ""}>
-                    <PlayCircle className="mr-1 h-4 w-4" />
-                    Aktifkan
-                  </Button>
+      {sortedGelanggangs.length > 0 ? (
+        sortedGelanggangs.map((gelanggang) => (
+          <Card key={gelanggang} className="mb-8">
+            <CardHeader>
+              <CardTitle className="font-headline">Daftar Jadwal - Gelanggang: {gelanggang}</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <ScheduleTable<ScheduleTGR>
+                schedules={schedulesByGelanggang[gelanggang]}
+                caption={`Jadwal Pertandingan TGR Terdaftar untuk Gelanggang ${gelanggang}`}
+                headers={tableHeaders}
+                renderRow={(s) => [
+                    <TableCell key={`lotNumber-${s.id}`}>{s.lotNumber}</TableCell>,
+                    <TableCell key={`date-${s.id}`}>{new Date(s.date + "T00:00:00").toLocaleDateString('id-ID', { year: 'numeric', month: 'long', day: 'numeric' })}</TableCell>,
+                    <TableCell key={`place-${s.id}`}>{s.place}</TableCell>,
+                    <TableCell key={`round-${s.id}`}>{s.round}</TableCell>,
+                    <TableCell key={`category-${s.id}`} className="flex items-center">
+                      {categoryIcons[s.category]} {s.category}
+                    </TableCell>,
+                    <TableCell key={`merahName-${s.id}`}>{s.pesilatMerahName || 'N/A'}</TableCell>,
+                    <TableCell key={`merahCont-${s.id}`}>{s.pesilatMerahContingent || 'N/A'}</TableCell>,
+                    <TableCell key={`biruName-${s.id}`}>{s.pesilatBiruName || 'N/A'}</TableCell>,
+                    <TableCell key={`biruCont-${s.id}`}>{s.pesilatBiruContingent || 'N/A'}</TableCell>,
+                ]}
+                onEdit={handleEdit}
+                onDelete={(id) => {
+                     const scheduleToDelete = schedules.find(s => s.id === id);
+                     if (scheduleToDelete) handleDelete(scheduleToDelete);
+                }}
+                renderCustomActions={(schedule) => (
+                  <>
+                    {activeTgrSchedulesByGelanggang[schedule.place] === schedule.id ? (
+                      <Button variant="default" size="sm" disabled className="bg-green-500 hover:bg-green-600">
+                        <PlayCircle className="mr-1 h-4 w-4" />
+                        Aktif di {schedule.place}
+                      </Button>
+                    ) : (
+                      <Button variant="outline" size="sm" onClick={() => handleActivateTGRSchedule(schedule)} disabled={!schedule.place || schedule.place.trim() === ""}>
+                        <PlayCircle className="mr-1 h-4 w-4" />
+                        Aktifkan
+                      </Button>
+                    )}
+                  </>
                 )}
-              </>
-            )}
-          />
-        </CardContent>
-      </Card>
+              />
+            </CardContent>
+          </Card>
+        ))
+      ) : (
+        <Card>
+          <CardHeader>
+            <CardTitle className="font-headline">Daftar Jadwal TGR</CardTitle>
+          </CardHeader>
+          <CardContent>
+             <p className="text-center text-muted-foreground py-4">Belum ada jadwal yang ditambahkan.</p>
+          </CardContent>
+        </Card>
+      )}
     </>
   );
 }
-
