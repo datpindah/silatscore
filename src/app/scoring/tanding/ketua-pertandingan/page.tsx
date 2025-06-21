@@ -20,6 +20,7 @@ import { db } from '@/lib/firebase';
 import { doc, onSnapshot, getDoc, Timestamp, collection, addDoc, query, orderBy, deleteDoc, limit, getDocs, serverTimestamp, writeBatch, where, updateDoc } from 'firebase/firestore';
 import { cn } from '@/lib/utils';
 import { Skeleton } from '@/components/ui/skeleton';
+import { Separator } from '@/components/ui/separator';
 
 const ACTIVE_TANDING_MATCHES_BY_GELANGGANG_PATH = 'app_settings/active_tanding_matches_by_gelanggang';
 const SCHEDULE_TANDING_COLLECTION = 'schedules_tanding';
@@ -484,7 +485,7 @@ function KetuaPertandinganPageComponent({ gelanggangName }: { gelanggangName: st
   const summaryTableHeaders = ["Sudut", "Peringatan 1", "Peringatan 2", "Teguran 1", "Teguran 2", "Jatuhan", "Tendangan Sah", "Pukulan Sah", "Total Skor Akhir"];
 
   if (!gelanggangName && !isLoadingPage) {
-    return ( <div className="flex flex-col min-h-screen"> <Header overrideBackgroundClass="bg-gray-50 dark:bg-black" /> <main className="flex-1 container mx-auto p-4 md:p-8 flex flex-col items-center justify-center text-center"> <AlertTriangle className="h-12 w-12 text-destructive mb-4" /> <h1 className="text-xl font-semibold text-destructive">Nama Gelanggang Diperlukan</h1> <p className="text-muted-foreground mt-2">Parameter 'gelanggang' tidak ditemukan di URL. Halaman ini tidak dapat memuat data pertandingan tanpa nama gelanggang.</p> <Button asChild className="mt-6"> <Link href="/login"><ArrowLeft className="mr-2 h-4 w-4"/> Kembali ke Halaman Login</Link> </Button> </main> </div> );
+    return ( <div className="flex flex-col min-h-screen"> <Header overrideBackgroundClass="bg-gray-50 dark:bg-black" /> <main className="flex-1 container mx-auto p-4 md:p-8 flex flex-col items-center justify-center text-center"> <AlertTriangle className="h-12 w-12 text-destructive mb-4" /> <h1 className="text-xl font-semibold text-destructive">Nama Gelanggang Diperlukan</h1> <p className="text-muted-foreground mt-2">Parameter 'gelanggang' tidak ditemukan di URL. Halaman ini tidak dapat memuat data pertandingan.</p> <Button asChild className="mt-6"> <Link href="/login"><ArrowLeft className="mr-2 h-4 w-4"/> Kembali ke Halaman Login</Link> </Button> </main> </div> );
   }
   if (isLoadingPage && (!activeMatchId || !matchDetailsLoaded)) {
     return ( <div className="flex flex-col min-h-screen"> <Header overrideBackgroundClass="bg-gray-50 dark:bg-black" /> <main className="flex-1 container mx-auto p-4 md:p-8 flex flex-col items-center justify-center"> <Loader2 className="h-12 w-12 animate-spin text-primary mb-4" /> <p className="text-lg text-muted-foreground"> {configMatchId === undefined ? `Memuat konfigurasi untuk Gelanggang: ${gelanggangName || '...'}` : !activeMatchId && configMatchId === null ? `Tidak ada jadwal aktif untuk Gelanggang: ${gelanggangName || '...'}` : `Memuat data pertandingan untuk Gelanggang: ${gelanggangName || '...'}`} </p> {error && <p className="text-sm text-red-500 mt-2">Error: {error}</p>} </main> </div> );
@@ -554,7 +555,7 @@ function KetuaPertandinganPageComponent({ gelanggangName }: { gelanggangName: st
             <Dialog open={isVerificationCreationDialogOpen} onOpenChange={setIsVerificationCreationDialogOpen}>
               <DialogTrigger asChild>
                 <Button className="w-full md:w-auto bg-yellow-500 hover:bg-yellow-600 text-black py-3 text-sm sm:text-base" disabled={isLoadingPage || dewanTimerStatus.matchStatus === 'MatchFinished' || isCreatingVerification || (activeVerificationDetails !== null && activeVerificationDetails.status === 'pending')} onClick={() => setSelectedVerificationTypeForCreation('')}>
-                  <span className="flex items-center justify-center">
+                  <span>
                     {isCreatingVerification ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Vote className="mr-2 h-4 w-4"/>}
                     Mulai Verifikasi
                   </span>
@@ -645,72 +646,90 @@ function KetuaPertandinganPageComponent({ gelanggangName }: { gelanggangName: st
         </Dialog>
 
         <Dialog open={isWinnerModalOpen} onOpenChange={setIsWinnerModalOpen}>
-          <DialogContent className="sm:max-w-2xl bg-card">
-            <RadixDialogTitle className="sr-only">Konfirmasi Pemenang Pertandingan</RadixDialogTitle>
+          <DialogContent className="sm:max-w-4xl bg-card">
             <DialogHeader>
-              <RadixDialogTitle className="text-2xl font-headline text-primary text-center">Konfirmasi Pemenang Pertandingan</RadixDialogTitle>
+              <DialogTitle className="text-2xl font-headline text-primary text-center">Konfirmasi Pemenang Pertandingan</DialogTitle>
               <DialogDescription className="text-center text-muted-foreground">
                 Partai No. {matchDetails?.matchNumber} - {matchDetails?.class} ({matchDetails?.round})
               </DialogDescription>
             </DialogHeader>
-            <div className="py-4 space-y-6">
-              <div className="overflow-x-auto">
+            <div className="py-4 space-y-4">
+              <div className="overflow-x-auto rounded-lg border">
                 <Table>
                     <TableHeader>
-                        <TableRow>
-                            {summaryTableHeaders.map(header => <TableHead key={header} className={header === "Sudut" ? "text-left" : "text-center"}>{header}</TableHead>)}
+                        <TableRow className="bg-gray-100 dark:bg-gray-800">
+                            {summaryTableHeaders.map(header => 
+                                <TableHead key={header} className={cn( "p-2 text-xs font-semibold text-center uppercase tracking-wider text-muted-foreground", header === "Sudut" && "text-left w-[100px]")}>
+                                    {header}
+                                </TableHead>
+                            )}
                         </TableRow>
                     </TableHeader>
                     <TableBody>
-                        <TableRow>
-                            <TableCell className="font-semibold text-red-600">MERAH</TableCell>
-                            <TableCell className="text-center">{summaryScoresMerah.peringatan1}</TableCell>
-                            <TableCell className="text-center">{summaryScoresMerah.peringatan2}</TableCell>
-                            <TableCell className="text-center">{summaryScoresMerah.teguran1}</TableCell>
-                            <TableCell className="text-center">{summaryScoresMerah.teguran2}</TableCell>
-                            <TableCell className="text-center">{summaryScoresMerah.jatuhan}</TableCell>
-                            <TableCell className="text-center">{summaryScoresMerah.tendanganSah}</TableCell>
-                            <TableCell className="text-center">{summaryScoresMerah.pukulanSah}</TableCell>
-                            <TableCell className="text-center font-bold text-lg">{summaryScoresMerah.totalAkhir}</TableCell>
+                        <TableRow className="bg-red-100/50 dark:bg-red-900/20">
+                            <TableCell className="font-semibold text-red-600 p-2">MERAH</TableCell>
+                            <TableCell className="text-center p-2">{summaryScoresMerah.peringatan1}</TableCell>
+                            <TableCell className="text-center p-2">{summaryScoresMerah.peringatan2}</TableCell>
+                            <TableCell className="text-center p-2">{summaryScoresMerah.teguran1}</TableCell>
+                            <TableCell className="text-center p-2">{summaryScoresMerah.teguran2}</TableCell>
+                            <TableCell className="text-center p-2">{summaryScoresMerah.jatuhan}</TableCell>
+                            <TableCell className="text-center p-2">{summaryScoresMerah.tendanganSah}</TableCell>
+                            <TableCell className="text-center p-2">{summaryScoresMerah.pukulanSah}</TableCell>
+                            <TableCell className="text-center font-bold text-lg p-2">{summaryScoresMerah.totalAkhir}</TableCell>
                         </TableRow>
-                        <TableRow>
-                            <TableCell className="font-semibold text-blue-600">BIRU</TableCell>
-                            <TableCell className="text-center">{summaryScoresBiru.peringatan1}</TableCell>
-                            <TableCell className="text-center">{summaryScoresBiru.peringatan2}</TableCell>
-                            <TableCell className="text-center">{summaryScoresBiru.teguran1}</TableCell>
-                            <TableCell className="text-center">{summaryScoresBiru.teguran2}</TableCell>
-                            <TableCell className="text-center">{summaryScoresBiru.jatuhan}</TableCell>
-                            <TableCell className="text-center">{summaryScoresBiru.tendanganSah}</TableCell>
-                            <TableCell className="text-center">{summaryScoresBiru.pukulanSah}</TableCell>
-                            <TableCell className="text-center font-bold text-lg">{summaryScoresBiru.totalAkhir}</TableCell>
+                        <TableRow className="bg-blue-100/50 dark:bg-blue-900/20">
+                            <TableCell className="font-semibold text-blue-600 p-2">BIRU</TableCell>
+                            <TableCell className="text-center p-2">{summaryScoresBiru.peringatan1}</TableCell>
+                            <TableCell className="text-center p-2">{summaryScoresBiru.peringatan2}</TableCell>
+                            <TableCell className="text-center p-2">{summaryScoresBiru.teguran1}</TableCell>
+                            <TableCell className="text-center p-2">{summaryScoresBiru.teguran2}</TableCell>
+                            <TableCell className="text-center p-2">{summaryScoresBiru.jatuhan}</TableCell>
+                            <TableCell className="text-center p-2">{summaryScoresBiru.tendanganSah}</TableCell>
+                            <TableCell className="text-center p-2">{summaryScoresBiru.pukulanSah}</TableCell>
+                            <TableCell className="text-center font-bold text-lg p-2">{summaryScoresBiru.totalAkhir}</TableCell>
                         </TableRow>
                     </TableBody>
                 </Table>
               </div>
-              <div className="space-y-4">
-                <div>
-                  <Label className="font-semibold text-foreground">Pesilat yang Menang</Label>
-                  <RadioGroup value={winnerSelectionDialog || ''} onValueChange={(value) => setWinnerSelectionDialog(value as PesilatColorIdentity | 'seri')} className="flex gap-4 mt-2">
-                    <div className="flex items-center space-x-2"> <RadioGroupItem value="merah" id="win-merah" /> <Label htmlFor="win-merah" className="text-red-600">Sudut Merah</Label> </div>
-                    <div className="flex items-center space-x-2"> <RadioGroupItem value="biru" id="win-biru" /> <Label htmlFor="win-biru" className="text-blue-600">Sudut Biru</Label> </div>
-                    <div className="flex items-center space-x-2"> <RadioGroupItem value="seri" id="win-seri" /> <Label htmlFor="win-seri">Seri</Label> </div>
-                  </RadioGroup>
+              <Separator className="my-4"/>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-6">
+                <div className="space-y-6">
+                    <div>
+                        <Label className="font-semibold text-foreground text-base">Pemenang</Label>
+                        <RadioGroup value={winnerSelectionDialog || ''} onValueChange={(value) => setWinnerSelectionDialog(value as PesilatColorIdentity | 'seri')} className="flex gap-6 mt-2">
+                            <div className="flex items-center space-x-2">
+                                <RadioGroupItem value="merah" id="win-merah" className="text-red-600 border-red-600"/>
+                                <Label htmlFor="win-merah" className="text-red-600 font-medium text-lg">Sudut Merah</Label>
+                            </div>
+                            <div className="flex items-center space-x-2">
+                                <RadioGroupItem value="biru" id="win-biru" className="text-blue-600 border-blue-600"/>
+                                <Label htmlFor="win-biru" className="text-blue-600 font-medium text-lg">Sudut Biru</Label>
+                            </div>
+                            <div className="flex items-center space-x-2">
+                                <RadioGroupItem value="seri" id="win-seri" />
+                                <Label htmlFor="win-seri" className="font-medium text-lg">Seri</Label>
+                            </div>
+                        </RadioGroup>
+                    </div>
+                    <div>
+                      <Label htmlFor="victoryReason" className="font-semibold text-foreground">Keterangan (Opsional)</Label>
+                      <Input id="victoryReason" value={victoryReasonDialog} onChange={(e) => setVictoryReasonDialog(e.target.value)} placeholder="cth: Menang Teknik karena lawan tidak dapat melanjutkan" className="mt-2" />
+                    </div>
                 </div>
-                <div>
-                  <Label className="font-semibold text-foreground">Jenis Kemenangan</Label>
-                  <RadioGroup value={victoryTypeDialog} onValueChange={(value) => setVictoryTypeDialog(value as TandingVictoryType)} className="grid grid-cols-2 sm:grid-cols-3 gap-x-4 gap-y-2 mt-2">
-                    {victoryTypeOptions.map(vt => (
-                      <div key={vt} className="flex items-center space-x-2"> <RadioGroupItem value={vt} id={`vt-${vt.replace(/\s+/g, '-')}`} /> <Label htmlFor={`vt-${vt.replace(/\s+/g, '-')}`}>{vt}</Label> </div>
-                    ))}
-                  </RadioGroup>
-                </div>
-                <div>
-                  <Label htmlFor="victoryReason" className="font-semibold text-foreground">Keterangan Kemenangan (Opsional)</Label>
-                  <Input id="victoryReason" value={victoryReasonDialog} onChange={(e) => setVictoryReasonDialog(e.target.value)} placeholder="Contoh: Menang Teknik karena lawan tidak dapat melanjutkan" className="mt-1" />
+                 <div>
+                    <Label className="font-semibold text-foreground text-base">Jenis Kemenangan</Label>
+                    <RadioGroup value={victoryTypeDialog} onValueChange={(value) => setVictoryTypeDialog(value as TandingVictoryType)} className="grid grid-cols-2 gap-x-6 gap-y-3 mt-2">
+                        {victoryTypeOptions.map(vt => (
+                          <div key={vt} className="flex items-center space-x-2">
+                            <RadioGroupItem value={vt} id={`vt-${vt.replace(/\s+/g, '-')}`} />
+                            <Label htmlFor={`vt-${vt.replace(/\s+/g, '-')}`}>{vt}</Label>
+                          </div>
+                        ))}
+                    </RadioGroup>
                 </div>
               </div>
             </div>
-            <DialogFooter>
+            <DialogFooter className="pt-4">
               <Button variant="outline" onClick={() => setIsWinnerModalOpen(false)} disabled={isSavingResult}>Batal</Button>
               <Button onClick={handleConfirmMatchResult} className="bg-green-600 hover:bg-green-700 text-white" disabled={!winnerSelectionDialog || !victoryTypeDialog || isSavingResult}>
                 {isSavingResult ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <ShieldCheck className="mr-2 h-4 w-4" />}
@@ -722,12 +741,10 @@ function KetuaPertandinganPageComponent({ gelanggangName }: { gelanggangName: st
 
         <div className="mt-8 text-center">
             <Button variant="outline" asChild>
-                <Link href="/login">
-                    <span className="flex items-center">
-                        <ArrowLeft className="mr-2 h-4 w-4"/>
-                        Kembali ke Login
-                    </span>
-                </Link>
+                <span>
+                    <ArrowLeft className="mr-2 h-4 w-4"/>
+                    Kembali ke Login
+                </span>
             </Button>
         </div>
       </main>
@@ -743,3 +760,5 @@ function PageWithSearchParams() {
   const gelanggangName = searchParams.get('gelanggang');
   return <KetuaPertandinganPageComponent gelanggangName={gelanggangName} />;
 }
+
+    
