@@ -9,7 +9,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { ArrowLeft, Loader2, Trash2, ShieldCheck, Trophy, Vote, Play, Pause, Info, Eye, AlertTriangle } from 'lucide-react';
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle as RadixDialogTitle, DialogTrigger, DialogClose } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger, DialogClose } from "@/components/ui/dialog";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
@@ -518,10 +518,7 @@ function KetuaPertandinganPageComponent({ gelanggangName }: { gelanggangName: st
           </div>
         </div>
         <div className="mb-6 overflow-x-auto">
-          <Table className="min-w-full border-collapse border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800">
-            <TableHeader><TableRow className="bg-gray-100 dark:bg-gray-700"><TableHead className="border border-gray-300 dark:border-gray-600 text-center text-red-600 dark:text-red-400 py-2 px-1 text-xs sm:text-sm">Hukuman</TableHead><TableHead className="border border-gray-300 dark:border-gray-600 text-center text-red-600 dark:text-red-400 py-2 px-1 text-xs sm:text-sm">Binaan</TableHead><TableHead className="border border-gray-300 dark:border-gray-600 text-center text-red-600 dark:text-red-400 py-2 px-1 text-xs sm:text-sm">Jatuhan</TableHead><TableHead className="border border-gray-300 dark:border-gray-600 text-center py-2 px-1 text-xs sm:text-sm text-gray-700 dark:text-gray-200">Babak</TableHead><TableHead className="border border-gray-300 dark:border-gray-600 text-center text-blue-600 dark:text-blue-400 py-2 px-1 text-xs sm:text-sm">Jatuhan</TableHead><TableHead className="border border-gray-300 dark:border-gray-600 text-center text-blue-600 dark:text-blue-400 py-2 px-1 text-xs sm:text-sm">Binaan</TableHead><TableHead className="border border-gray-300 dark:border-gray-600 text-center text-blue-600 dark:text-blue-400 py-2 px-1 text-xs sm:text-sm">Hukuman</TableHead></TableRow></TableHeader>
-            <TableBody>{ROUNDS.map((round) => { const scoresMerah = calculateDisplayScoresForTable(ketuaActionsLog, 'merah', round); const scoresBiru = calculateDisplayScoresForTable(ketuaActionsLog, 'biru', round); return ( <TableRow key={`round-display-${round}`} className={dewanTimerStatus.currentRound === round ? 'bg-yellow-100 dark:bg-yellow-900/30' : ''}><TableCell className="border border-gray-300 dark:border-gray-600 text-center font-medium py-2 px-1 text-gray-800 dark:text-gray-100">{isLoadingPage && !matchDetailsLoaded ? <Skeleton className="h-5 w-8 mx-auto bg-muted"/> : scoresMerah.hukuman}</TableCell><TableCell className="border border-gray-300 dark:border-gray-600 text-center font-medium py-2 px-1 text-gray-800 dark:text-gray-100">{isLoadingPage && !matchDetailsLoaded ? <Skeleton className="h-5 w-8 mx-auto bg-muted"/> : scoresMerah.binaan}</TableCell><TableCell className="border border-gray-300 dark:border-gray-600 text-center font-medium py-2 px-1 text-gray-800 dark:text-gray-100">{isLoadingPage && !matchDetailsLoaded ? <Skeleton className="h-5 w-8 mx-auto bg-muted"/> : scoresMerah.jatuhan}</TableCell><TableCell className="border border-gray-300 dark:border-gray-600 text-center font-bold py-2 px-1 text-gray-800 dark:text-gray-100">{round === 1 ? 'I' : round === 2 ? 'II' : 'III'}</TableCell><TableCell className="border border-gray-300 dark:border-gray-600 text-center font-medium py-2 px-1 text-gray-800 dark:text-gray-100">{isLoadingPage && !matchDetailsLoaded ? <Skeleton className="h-5 w-8 mx-auto bg-muted"/> : scoresBiru.jatuhan}</TableCell><TableCell className="border border-gray-300 dark:border-gray-600 text-center font-medium py-2 px-1 text-gray-800 dark:text-gray-100">{isLoadingPage && !matchDetailsLoaded ? <Skeleton className="h-5 w-8 mx-auto bg-muted"/> : scoresBiru.binaan}</TableCell><TableCell className="border border-gray-300 dark:border-gray-600 text-center font-medium py-2 px-1 text-gray-800 dark:text-gray-100">{isLoadingPage && !matchDetailsLoaded ? <Skeleton className="h-5 w-8 mx-auto bg-muted"/> : scoresBiru.hukuman}</TableCell></TableRow> ); })}</TableBody>
-          </Table>
+          <Table className="min-w-full border-collapse border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800"><TableHeader><TableRow className="bg-gray-100 dark:bg-gray-700"><TableHead className="border border-gray-300 dark:border-gray-600 text-center text-red-600 dark:text-red-400 py-2 px-1 text-xs sm:text-sm">Hukuman</TableHead><TableHead className="border border-gray-300 dark:border-gray-600 text-center text-red-600 dark:text-red-400 py-2 px-1 text-xs sm:text-sm">Binaan</TableHead><TableHead className="border border-gray-300 dark:border-gray-600 text-center text-red-600 dark:text-red-400 py-2 px-1 text-xs sm:text-sm">Jatuhan</TableHead><TableHead className="border border-gray-300 dark:border-gray-600 text-center py-2 px-1 text-xs sm:text-sm text-gray-700 dark:text-gray-200">Babak</TableHead><TableHead className="border border-gray-300 dark:border-gray-600 text-center text-blue-600 dark:text-blue-400 py-2 px-1 text-xs sm:text-sm">Jatuhan</TableHead><TableHead className="border border-gray-300 dark:border-gray-600 text-center text-blue-600 dark:text-blue-400 py-2 px-1 text-xs sm:text-sm">Binaan</TableHead><TableHead className="border border-gray-300 dark:border-gray-600 text-center text-blue-600 dark:text-blue-400 py-2 px-1 text-xs sm:text-sm">Hukuman</TableHead></TableRow></TableHeader><TableBody>{ROUNDS.map((round) => { const scoresMerah = calculateDisplayScoresForTable(ketuaActionsLog, 'merah', round); const scoresBiru = calculateDisplayScoresForTable(ketuaActionsLog, 'biru', round); return ( <TableRow key={`round-display-${round}`} className={dewanTimerStatus.currentRound === round ? 'bg-yellow-100 dark:bg-yellow-900/30' : ''}><TableCell className="border border-gray-300 dark:border-gray-600 text-center font-medium py-2 px-1 text-gray-800 dark:text-gray-100">{isLoadingPage && !matchDetailsLoaded ? <Skeleton className="h-5 w-8 mx-auto bg-muted"/> : scoresMerah.hukuman}</TableCell><TableCell className="border border-gray-300 dark:border-gray-600 text-center font-medium py-2 px-1 text-gray-800 dark:text-gray-100">{isLoadingPage && !matchDetailsLoaded ? <Skeleton className="h-5 w-8 mx-auto bg-muted"/> : scoresMerah.binaan}</TableCell><TableCell className="border border-gray-300 dark:border-gray-600 text-center font-medium py-2 px-1 text-gray-800 dark:text-gray-100">{isLoadingPage && !matchDetailsLoaded ? <Skeleton className="h-5 w-8 mx-auto bg-muted"/> : scoresMerah.jatuhan}</TableCell><TableCell className="border border-gray-300 dark:border-gray-600 text-center font-bold py-2 px-1 text-gray-800 dark:text-gray-100">{round === 1 ? 'I' : round === 2 ? 'II' : 'III'}</TableCell><TableCell className="border border-gray-300 dark:border-gray-600 text-center font-medium py-2 px-1 text-gray-800 dark:text-gray-100">{isLoadingPage && !matchDetailsLoaded ? <Skeleton className="h-5 w-8 mx-auto bg-muted"/> : scoresBiru.jatuhan}</TableCell><TableCell className="border border-gray-300 dark:border-gray-600 text-center font-medium py-2 px-1 text-gray-800 dark:text-gray-100">{isLoadingPage && !matchDetailsLoaded ? <Skeleton className="h-5 w-8 mx-auto bg-muted"/> : scoresBiru.binaan}</TableCell><TableCell className="border border-gray-300 dark:border-gray-600 text-center font-medium py-2 px-1 text-gray-800 dark:text-gray-100">{isLoadingPage && !matchDetailsLoaded ? <Skeleton className="h-5 w-8 mx-auto bg-muted"/> : scoresBiru.hukuman}</TableCell></TableRow> ); })}</TableBody></Table>
         </div>
         <Card className="mb-6 bg-white dark:bg-gray-800">
           <CardHeader>
@@ -562,9 +559,9 @@ function KetuaPertandinganPageComponent({ gelanggangName }: { gelanggangName: st
                 </Button>
               </DialogTrigger>
               <DialogContent className="sm:max-w-[425px] bg-white dark:bg-gray-800">
-                <RadixDialogTitle className="sr-only">Mulai Verifikasi Juri</RadixDialogTitle>
+                <DialogTitle className="sr-only">Mulai Verifikasi Juri</DialogTitle>
                 <DialogHeader>
-                  <RadixDialogTitle className="text-gray-800 dark:text-gray-100">Mulai Verifikasi Juri</RadixDialogTitle>
+                  <DialogTitle className="text-gray-800 dark:text-gray-100">Mulai Verifikasi Juri</DialogTitle>
                   <DialogDescription className="text-gray-600 dark:text-gray-300"> Pilih jenis verifikasi. Ini akan menjeda timer dan mengirim permintaan ke juri. Verifikasi sebelumnya yang masih 'pending' akan dibatalkan. </DialogDescription>
                 </DialogHeader>
                 <div className="py-4">
@@ -580,9 +577,7 @@ function KetuaPertandinganPageComponent({ gelanggangName }: { gelanggangName: st
                   </RadioGroup>
                 </div>
                 <DialogFooter>
-                  <DialogClose asChild>
-                    <Button type="button" variant="outline" disabled={isCreatingVerification}>Tutup</Button>
-                  </DialogClose>
+                  <DialogClose asChild><Button type="button" variant="outline" disabled={isCreatingVerification}>Tutup</Button></DialogClose>
                   <Button type="button" onClick={handleCreateVerificationRequest} className="bg-primary hover:bg-primary/90 text-primary-foreground" disabled={isCreatingVerification || !selectedVerificationTypeForCreation}>
                     {isCreatingVerification ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null} Buat & Jeda Timer
                   </Button>
@@ -590,8 +585,8 @@ function KetuaPertandinganPageComponent({ gelanggangName }: { gelanggangName: st
               </DialogContent>
             </Dialog>
             <Button onClick={handleTentukanPemenang} className="w-full md:w-auto bg-green-600 hover:bg-green-700 text-white py-3 text-sm sm:text-base" disabled={isLoadingPage || (dewanTimerStatus.matchStatus !== 'MatchFinished' && !matchResultSaved) || !!matchResultSaved || isSavingResult}>
-                <Trophy className="mr-2 h-4 w-4"/>
-                {matchResultSaved ? 'Hasil Telah Disimpan' : 'Tentukan Pemenang'}
+              <Trophy className="mr-2 h-4 w-4"/>
+              {matchResultSaved ? 'Hasil Telah Disimpan' : 'Tentukan Pemenang'}
             </Button>
           </div>
           <div className="space-y-2">
@@ -610,9 +605,9 @@ function KetuaPertandinganPageComponent({ gelanggangName }: { gelanggangName: st
 
         <Dialog open={isVoteResultModalOpen} onOpenChange={(openStateFromDialog) => { if (!openStateFromDialog) { if (!activeVerificationDetails || activeVerificationDetails.status !== 'pending') { setIsVoteResultModalOpen(false); setKetuaSelectedDecision(null); } } }} >
             <DialogContent className="sm:max-w-lg bg-white dark:bg-gray-800" onPointerDownOutside={(e) => { if(activeVerificationDetails?.status === 'pending') e.preventDefault(); }} onEscapeKeyDown={(e) => { if(activeVerificationDetails?.status === 'pending') e.preventDefault(); }} >
-                <RadixDialogTitle className="sr-only">Hasil Verifikasi Juri</RadixDialogTitle>
+                <DialogTitle className="sr-only">Hasil Verifikasi Juri</DialogTitle>
                 <DialogHeader>
-                    <RadixDialogTitle className="text-2xl font-bold font-headline text-center text-gray-800 dark:text-gray-100">Hasil Verifikasi Juri</RadixDialogTitle>
+                    <DialogTitle className="text-2xl font-bold font-headline text-center text-gray-800 dark:text-gray-100">Hasil Verifikasi Juri</DialogTitle>
                     {activeVerificationDetails && ( <DialogDescription className="text-center text-lg text-gray-600 dark:text-gray-300"> {activeVerificationDetails.type === 'jatuhan' ? 'Verifikasi Jatuhan' : 'Verifikasi Pelanggaran'} (Babak {activeVerificationDetails.round}) </DialogDescription> )}
                 </DialogHeader>
                 <div className="my-4 space-y-3">
@@ -741,10 +736,10 @@ function KetuaPertandinganPageComponent({ gelanggangName }: { gelanggangName: st
 
         <div className="mt-8 text-center">
             <Button variant="outline" asChild>
-                <span>
-                    <ArrowLeft className="mr-2 h-4 w-4"/>
-                    Kembali ke Login
-                </span>
+                <Link href="/login">
+                  <ArrowLeft className="mr-2 h-4 w-4"/>
+                  <span>Kembali ke Login</span>
+                </Link>
             </Button>
         </div>
       </main>
@@ -760,5 +755,3 @@ function PageWithSearchParams() {
   const gelanggangName = searchParams.get('gelanggang');
   return <KetuaPertandinganPageComponent gelanggangName={gelanggangName} />;
 }
-
-    
