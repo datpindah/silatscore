@@ -5,7 +5,6 @@ import { useState, useEffect, useCallback, useRef, Suspense, type PointerEvent }
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
 import { Button } from '@/components/ui/button';
-import { Header } from '@/components/layout/Header';
 import { ArrowLeft, Eye, Loader2, RadioTower, AlertTriangle, Sun, Moon, ChevronsRight } from 'lucide-react';
 import type { ScheduleTanding, TimerStatus, VerificationRequest, JuriVoteValue, KetuaActionLogEntry, PesilatColorIdentity, KetuaActionType } from '@/lib/types';
 import type { ScoreEntry as LibScoreEntryType, RoundScores as LibRoundScoresType } from '@/lib/types';
@@ -523,236 +522,233 @@ function MonitoringSkorPageComponent({ gelanggangName }: { gelanggangName: strin
 
 
   return (
-    <div className="flex flex-col min-h-screen bg-gray-100 dark:bg-gray-900">
-      <Header overrideBackgroundClass="bg-gray-100 dark:bg-gray-900" />
-      <div
+    <div
+      className={cn(
+        "flex flex-col min-h-screen font-sans",
+        resolvedTheme === 'dark' ? 'monitoring-theme-dark' : 'monitoring-theme-light',
+        "bg-[var(--monitor-bg)] text-[var(--monitor-text)]"
+      )}
+    >
+      <Card
         className={cn(
-          "flex flex-col flex-1 font-sans",
-          resolvedTheme === 'dark' ? 'monitoring-theme-dark' : 'monitoring-theme-light',
-          "bg-[var(--monitor-bg)] text-[var(--monitor-text)]"
+          "mb-2 md:mb-4 shadow-xl bg-gradient-to-r from-primary to-red-700 text-primary-foreground mx-1 md:mx-2 mt-1 md:mt-2"
         )}
       >
-        <Card
-          className={cn(
-            "mb-2 md:mb-4 shadow-xl bg-gradient-to-r from-primary to-red-700 text-primary-foreground mx-1 md:mx-2 mt-1 md:mt-2"
+        <CardContent className="p-3 md:p-4 text-center">
+          <h1 className="text-xl md:text-2xl font-bold font-headline">
+            GELANGGANG: {gelanggangName || <Skeleton className="h-6 w-20 inline-block bg-red-400" />}
+          </h1>
+          {matchDetails && matchDetailsLoaded && (
+            <div className="text-xs md:text-sm">
+              Partai No. {matchDetails.matchNumber} | {matchDetails.round} | {matchDetails.class}
+            </div>
           )}
-        >
-          <CardContent className="p-3 md:p-4 text-center">
-            <h1 className="text-xl md:text-2xl font-bold font-headline">
-              GELANGGANG: {gelanggangName || <Skeleton className="h-6 w-20 inline-block bg-red-400" />}
-            </h1>
-            {matchDetails && matchDetailsLoaded && (
-              <div className="text-xs md:text-sm">
-                Partai No. {matchDetails.matchNumber} | {matchDetails.round} | {matchDetails.class}
-              </div>
-            )}
-            {isLoading && !matchDetailsLoaded && activeScheduleId && (
-              <div className="text-xs md:text-sm">
-                <Skeleton className="h-4 w-16 inline-block bg-red-400" /> | <Skeleton className="h-4 w-12 inline-block bg-red-400" /> | <Skeleton className="h-4 w-20 inline-block bg-red-400" />
-              </div>
-            )}
-             {error && !isLoading && !matchDetailsLoaded && (
-              <div className="text-xs md:text-sm text-yellow-300 mt-1">
-                Gagal memuat detail pertandingan. {error}
-              </div>
-            )}
-          </CardContent>
-        </Card>
-
-        <div className="flex-grow flex flex-col p-1 md:p-2">
-          <div className="grid grid-cols-[minmax(0,_1fr)_minmax(0,_0.6fr)_minmax(0,_1fr)] gap-1 items-stretch mb-2 md:mb-4">
-            <div className="flex flex-col items-center flex-1">
-              <div className="text-center mb-1 md:mb-2 w-full">
-                <div className="font-bold text-sm md:text-xl text-[var(--monitor-pesilat-biru-name-text)]">{pesilatBiruInfo?.name || <Skeleton className="h-6 w-32 bg-[var(--monitor-skeleton-bg)]" />}</div>
-                <div className="text-xs md:text-base text-[var(--monitor-pesilat-biru-contingent-text)]">{pesilatBiruInfo?.contingent || <Skeleton className="h-4 w-24 bg-[var(--monitor-skeleton-bg)] mt-1" />}</div>
-              </div>
-              <div className="flex w-full items-stretch gap-1 md:gap-2 mb-1 md:mb-2 h-56 md:h-72">
-                <div className="flex flex-col gap-2 p-0.5 w-20 md:w-24 h-full">
-                    <div className="grid grid-cols-2 gap-1 flex-1">
-                        <FoulBox label="B1" isActive={getFoulStatus('biru', 'Binaan', 1)} />
-                        <FoulBox label="B2" isActive={getFoulStatus('biru', 'Binaan', 2)} />
-                    </div>
-                    <div className="grid grid-cols-2 gap-1 flex-1">
-                        <FoulBox label="T1" isActive={getFoulStatus('biru', 'Teguran', 1)} />
-                        <FoulBox label="T2" isActive={getFoulStatus('biru', 'Teguran', 2)} />
-                    </div>
-                    <div className="grid grid-cols-3 gap-1 flex-1">
-                        <FoulBox label="P1" isActive={getFoulStatus('biru', 'Peringatan', 1)} />
-                        <FoulBox label="P2" isActive={getFoulStatus('biru', 'Peringatan', 2)} />
-                        <FoulBox label="P3" isActive={getFoulStatus('biru', 'Peringatan', 3)} />
-                    </div>
-                </div>
-                <div className="flex-grow h-full bg-gradient-to-b from-blue-500 to-blue-700 flex items-center justify-center text-5xl md:text-8xl font-bold rounded-md text-[var(--monitor-skor-text)]">
-                    {isLoading && !matchDetailsLoaded ? <Skeleton className="h-16 w-20 bg-blue-400" /> : confirmedScoreBiru}
-                </div>
-              </div>
+          {isLoading && !matchDetailsLoaded && activeScheduleId && (
+            <div className="text-xs md:text-sm">
+              <Skeleton className="h-4 w-16 inline-block bg-red-400" /> | <Skeleton className="h-4 w-12 inline-block bg-red-400" /> | <Skeleton className="h-4 w-20 inline-block bg-red-400" />
             </div>
+          )}
+           {error && !isLoading && !matchDetailsLoaded && (
+            <div className="text-xs md:text-sm text-yellow-300 mt-1">
+              Gagal memuat detail pertandingan. {error}
+            </div>
+          )}
+        </CardContent>
+      </Card>
 
-            <div className="flex flex-col items-center justify-start space-y-2 md:space-y-3 pt-1 md:pt-2">
-               <div className="text-5xl md:text-7xl font-mono font-bold text-[var(--monitor-timer-text)] mb-2 md:mb-4">
-                {isLoading && !matchDetailsLoaded ? <Skeleton className="h-16 w-48 bg-[var(--monitor-skeleton-bg)]" /> : formatTime(timerStatus.timerSeconds)}
-              </div>
-              <div className="space-y-1 md:space-y-2 w-full max-w-[180px]">
-                {[1, 2, 3].map(b => (
-                  <div
-                    key={`babak-indicator-${b}`}
-                    className={cn(
-                      "w-full py-1.5 md:py-2 border-2 flex items-center justify-center text-xs md:text-sm font-semibold rounded-md",
-                      timerStatus.currentRound === b
-                        ? "bg-[var(--monitor-babak-indicator-active-bg)] text-[var(--monitor-babak-indicator-active-text)] border-[var(--monitor-babak-indicator-active-border)]"
-                        : "bg-[var(--monitor-babak-indicator-inactive-bg)] text-[var(--monitor-babak-indicator-inactive-text)] border-[var(--monitor-babak-indicator-inactive-border)]"
-                    )}
-                  >
-                    {b === 1 ? 'I' : b === 2 ? 'II' : 'III'}
+      <div className="flex-grow flex flex-col p-1 md:p-2">
+        <div className="grid grid-cols-[minmax(0,_1fr)_minmax(0,_0.6fr)_minmax(0,_1fr)] gap-1 items-stretch mb-2 md:mb-4">
+          <div className="flex flex-col items-center flex-1">
+            <div className="text-center mb-1 md:mb-2 w-full">
+              <div className="font-bold text-sm md:text-xl text-[var(--monitor-pesilat-biru-name-text)]">{pesilatBiruInfo?.name || <Skeleton className="h-6 w-32 bg-[var(--monitor-skeleton-bg)]" />}</div>
+              <div className="text-xs md:text-base text-[var(--monitor-pesilat-biru-contingent-text)]">{pesilatBiruInfo?.contingent || <Skeleton className="h-4 w-24 bg-[var(--monitor-skeleton-bg)] mt-1" />}</div>
+            </div>
+            <div className="flex w-full items-stretch gap-1 md:gap-2 mb-1 md:mb-2 h-56 md:h-72">
+              <div className="flex flex-col gap-2 p-0.5 w-20 md:w-24 h-full">
+                  <div className="grid grid-cols-2 gap-1 flex-1">
+                      <FoulBox label="B1" isActive={getFoulStatus('biru', 'Binaan', 1)} />
+                      <FoulBox label="B2" isActive={getFoulStatus('biru', 'Binaan', 2)} />
                   </div>
-                ))}
+                  <div className="grid grid-cols-2 gap-1 flex-1">
+                      <FoulBox label="T1" isActive={getFoulStatus('biru', 'Teguran', 1)} />
+                      <FoulBox label="T2" isActive={getFoulStatus('biru', 'Teguran', 2)} />
+                  </div>
+                  <div className="grid grid-cols-3 gap-1 flex-1">
+                      <FoulBox label="P1" isActive={getFoulStatus('biru', 'Peringatan', 1)} />
+                      <FoulBox label="P2" isActive={getFoulStatus('biru', 'Peringatan', 2)} />
+                      <FoulBox label="P3" isActive={getFoulStatus('biru', 'Peringatan', 3)} />
+                  </div>
               </div>
-              <div className="text-xs md:text-sm text-[var(--monitor-status-text)] mt-1 md:mt-2 text-center">
-                {isLoading && !matchDetailsLoaded ? <Skeleton className="h-4 w-40 bg-[var(--monitor-skeleton-bg)]" /> : getMatchStatusTextForMonitor()}
-              </div>
-            </div>
-
-            <div className="flex flex-col items-center flex-1">
-              <div className="text-center mb-1 md:mb-2 w-full">
-                <div className="font-bold text-sm md:text-xl text-[var(--monitor-pesilat-merah-name-text)]">{pesilatMerahInfo?.name || <Skeleton className="h-6 w-32 bg-[var(--monitor-skeleton-bg)]" />}</div>
-                <div className="text-xs md:text-base text-[var(--monitor-pesilat-merah-contingent-text)]">{pesilatMerahInfo?.contingent || <Skeleton className="h-4 w-24 bg-[var(--monitor-skeleton-bg)] mt-1" />}</div>
-              </div>
-              <div className="flex w-full items-stretch gap-1 md:gap-2 mb-1 md:mb-2 h-56 md:h-72">
-                <div className="flex-grow h-full bg-gradient-to-b from-red-500 to-red-700 flex items-center justify-center text-5xl md:text-8xl font-bold rounded-md text-[var(--monitor-skor-text)]">
-                    {isLoading && !matchDetailsLoaded ? <Skeleton className="h-16 w-20 bg-red-400" /> : confirmedScoreMerah}
-                </div>
-                <div className="flex flex-col gap-2 p-0.5 w-20 md:w-24 h-full">
-                    <div className="grid grid-cols-2 gap-1 flex-1">
-                        <FoulBox label="B1" isActive={getFoulStatus('merah', 'Binaan', 1)} />
-                        <FoulBox label="B2" isActive={getFoulStatus('merah', 'Binaan', 2)} />
-                    </div>
-                    <div className="grid grid-cols-2 gap-1 flex-1">
-                        <FoulBox label="T1" isActive={getFoulStatus('merah', 'Teguran', 1)} />
-                        <FoulBox label="T2" isActive={getFoulStatus('merah', 'Teguran', 2)} />
-                    </div>
-                    <div className="grid grid-cols-3 gap-1 flex-1">
-                        <FoulBox label="P1" isActive={getFoulStatus('merah', 'Peringatan', 1)} />
-                        <FoulBox label="P2" isActive={getFoulStatus('merah', 'Peringatan', 2)} />
-                        <FoulBox label="P3" isActive={getFoulStatus('merah', 'Peringatan', 3)} />
-                    </div>
-                </div>
+              <div className="flex-grow h-full bg-gradient-to-b from-blue-500 to-blue-700 flex items-center justify-center text-5xl md:text-8xl font-bold rounded-md text-[var(--monitor-skor-text)]">
+                  {isLoading && !matchDetailsLoaded ? <Skeleton className="h-16 w-20 bg-blue-400" /> : confirmedScoreBiru}
               </div>
             </div>
           </div>
 
-          <div className="grid grid-cols-[minmax(0,_1fr)_minmax(0,_0.6fr)_minmax(0,_1fr)] gap-1 items-start">
-            <div className="flex flex-col items-center flex-1">
-              <div className="flex flex-col gap-0.5 md:gap-1 w-full">
-                <div className="flex gap-0.5 md:gap-1">
-                  {JURI_IDS.map(id => <JuriInputIndicator key={`biru-pukulan-${id}`} juri={id} type="pukulan" pesilatColor="biru" />)}
-                </div>
-                <div className="flex gap-0.5 md:gap-1">
-                  {JURI_IDS.map(id => <JuriInputIndicator key={`biru-tendangan-${id}`} juri={id} type="tendangan" pesilatColor="biru" />)}
-                </div>
-              </div>
+          <div className="flex flex-col items-center justify-start space-y-2 md:space-y-3 pt-1 md:pt-2">
+             <div className="text-5xl md:text-7xl font-mono font-bold text-[var(--monitor-timer-text)] mb-2 md:mb-4">
+              {isLoading && !matchDetailsLoaded ? <Skeleton className="h-16 w-48 bg-[var(--monitor-skeleton-bg)]" /> : formatTime(timerStatus.timerSeconds)}
             </div>
-
-            <div className="flex flex-col items-center justify-start w-full">
-              <div className="w-full max-w-[180px] flex flex-col space-y-1 md:space-y-2">
-                  <div className="py-1 md:py-2 border border-[var(--monitor-border)] rounded-md flex items-center justify-center text-xs md:text-sm text-[var(--monitor-text)] bg-[var(--monitor-babak-indicator-inactive-bg)] shadow-sm">
-                      Pukulan
-                  </div>
-                  <div className="py-1 md:py-2 border border-[var(--monitor-border)] rounded-md flex items-center justify-center text-xs md:text-sm text-[var(--monitor-text)] bg-[var(--monitor-babak-indicator-inactive-bg)] shadow-sm">
-                      Tendangan
-                  </div>
-              </div>
+            <div className="space-y-1 md:space-y-2 w-full max-w-[180px]">
+              {[1, 2, 3].map(b => (
+                <div
+                  key={`babak-indicator-${b}`}
+                  className={cn(
+                    "w-full py-1.5 md:py-2 border-2 flex items-center justify-center text-xs md:text-sm font-semibold rounded-md",
+                    timerStatus.currentRound === b
+                      ? "bg-[var(--monitor-babak-indicator-active-bg)] text-[var(--monitor-babak-indicator-active-text)] border-[var(--monitor-babak-indicator-active-border)]"
+                      : "bg-[var(--monitor-babak-indicator-inactive-bg)] text-[var(--monitor-babak-indicator-inactive-text)] border-[var(--monitor-babak-indicator-inactive-border)]"
+                  )}
+                >
+                  {b === 1 ? 'I' : b === 2 ? 'II' : 'III'}
+                </div>
+              ))}
             </div>
+            <div className="text-xs md:text-sm text-[var(--monitor-status-text)] mt-1 md:mt-2 text-center">
+              {isLoading && !matchDetailsLoaded ? <Skeleton className="h-4 w-40 bg-[var(--monitor-skeleton-bg)]" /> : getMatchStatusTextForMonitor()}
+            </div>
+          </div>
 
-            <div className="flex flex-col items-center flex-1">
-              <div className="flex flex-col gap-0.5 md:gap-1 w-full">
-                <div className="flex gap-0.5 md:gap-1">
-                  {JURI_IDS.map(id => <JuriInputIndicator key={`merah-pukulan-${id}`} juri={id} type="pukulan" pesilatColor="merah" />)}
-                </div>
-                <div className="flex gap-0.5 md:gap-1">
-                  {JURI_IDS.map(id => <JuriInputIndicator key={`merah-tendangan-${id}`} juri={id} type="tendangan" pesilatColor="merah" />)}
-                </div>
+          <div className="flex flex-col items-center flex-1">
+            <div className="text-center mb-1 md:mb-2 w-full">
+              <div className="font-bold text-sm md:text-xl text-[var(--monitor-pesilat-merah-name-text)]">{pesilatMerahInfo?.name || <Skeleton className="h-6 w-32 bg-[var(--monitor-skeleton-bg)]" />}</div>
+              <div className="text-xs md:text-base text-[var(--monitor-pesilat-merah-contingent-text)]">{pesilatMerahInfo?.contingent || <Skeleton className="h-4 w-24 bg-[var(--monitor-skeleton-bg)] mt-1" />}</div>
+            </div>
+            <div className="flex w-full items-stretch gap-1 md:gap-2 mb-1 md:mb-2 h-56 md:h-72">
+              <div className="flex-grow h-full bg-gradient-to-b from-red-500 to-red-700 flex items-center justify-center text-5xl md:text-8xl font-bold rounded-md text-[var(--monitor-skor-text)]">
+                  {isLoading && !matchDetailsLoaded ? <Skeleton className="h-16 w-20 bg-red-400" /> : confirmedScoreMerah}
+              </div>
+              <div className="flex flex-col gap-2 p-0.5 w-20 md:w-24 h-full">
+                  <div className="grid grid-cols-2 gap-1 flex-1">
+                      <FoulBox label="B1" isActive={getFoulStatus('merah', 'Binaan', 1)} />
+                      <FoulBox label="B2" isActive={getFoulStatus('merah', 'Binaan', 2)} />
+                  </div>
+                  <div className="grid grid-cols-2 gap-1 flex-1">
+                      <FoulBox label="T1" isActive={getFoulStatus('merah', 'Teguran', 1)} />
+                      <FoulBox label="T2" isActive={getFoulStatus('merah', 'Teguran', 2)} />
+                  </div>
+                  <div className="grid grid-cols-3 gap-1 flex-1">
+                      <FoulBox label="P1" isActive={getFoulStatus('merah', 'Peringatan', 1)} />
+                      <FoulBox label="P2" isActive={getFoulStatus('merah', 'Peringatan', 2)} />
+                      <FoulBox label="P3" isActive={getFoulStatus('merah', 'Peringatan', 3)} />
+                  </div>
               </div>
             </div>
           </div>
         </div>
 
-
-        <Dialog open={isDisplayVerificationModalOpen} onOpenChange={(isOpen) => {
-            if (!isOpen && activeDisplayVerificationRequest?.status === 'pending') return;
-            setIsDisplayVerificationModalOpen(isOpen);
-        }}>
-           <DialogContent
-              className={cn("sm:max-w-lg md:max-w-xl bg-[var(--monitor-dialog-bg)] border-[var(--monitor-dialog-border)] text-[var(--monitor-dialog-text)]", resolvedTheme === 'dark' ? 'monitoring-theme-dark' : 'monitoring-theme-light')}
-              onPointerDownOutside={(e) => {if (activeDisplayVerificationRequest?.status === 'pending') e.preventDefault();}}
-              onEscapeKeyDown={(e) => {if (activeDisplayVerificationRequest?.status === 'pending') e.preventDefault();}}
-            >
-              <RadixDialogTitle className="sr-only">Konfirmasi Verifikasi Juri</RadixDialogTitle>
-              <DialogHeader className="text-center">
-                <div className="text-2xl md:text-3xl font-bold font-headline text-[var(--monitor-dialog-title-text)]">
-                  Verifikasi Juri
-                </div>
-              </DialogHeader>
-              <div className="py-4 px-2 md:px-6">
-                  <div className="text-center mt-2">
-                    <div className="text-lg font-semibold text-[var(--monitor-text)]">
-                      {activeDisplayVerificationRequest?.type === 'jatuhan' ? 'Verifikasi Jatuhan' : 'Verifikasi Pelanggaran'}
-                    </div>
-                    <div className="text-sm text-[var(--monitor-text-muted)]">Babak {activeDisplayVerificationRequest?.round}</div>
-                  </div>
-                <div className="mt-6 grid grid-cols-3 gap-3 md:gap-4 items-start justify-items-center text-center">
-                  {JURI_IDS.map((juriKey, index) => {
-                    const vote = activeDisplayVerificationRequest?.votes[juriKey] || null;
-                    let voteText = 'Belum Vote';
-                    let voteBoxColorClass = getJuriVoteDisplayBoxClass(vote);
-                    if (vote === 'merah') { voteText = 'MERAH'; }
-                    else if (vote === 'biru') { voteText = 'BIRU'; }
-                    else if (vote === 'invalid') { voteText = 'INVALID';}
-                    return (
-                      <div key={`vote-display-monitor-${juriKey}`} className="flex flex-col items-center space-y-1 w-full">
-                        <p className="text-base md:text-lg font-bold text-[var(--monitor-text)]">J{index + 1}</p>
-                        <div className={cn("w-full h-12 md:h-16 rounded-md flex items-center justify-center text-[10px] md:text-xs font-bold p-1 shadow-md", voteBoxColorClass)}>
-                          {voteText}
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
+        <div className="grid grid-cols-[minmax(0,_1fr)_minmax(0,_0.6fr)_minmax(0,_1fr)] gap-1 items-start">
+          <div className="flex flex-col items-center flex-1">
+            <div className="flex flex-col gap-0.5 md:gap-1 w-full">
+              <div className="flex gap-0.5 md:gap-1">
+                {JURI_IDS.map(id => <JuriInputIndicator key={`biru-pukulan-${id}`} juri={id} type="pukulan" pesilatColor="biru" />)}
               </div>
-            </DialogContent>
-        </Dialog>
-        {isLoading && activeScheduleId && !matchDetailsLoaded && (
-           <div className="absolute inset-0 bg-[var(--monitor-overlay-bg)] flex flex-col items-center justify-center z-50">
-              <Loader2 className="h-12 w-12 animate-spin text-[var(--monitor-overlay-accent-text)] mb-4" />
-              <p className="text-lg text-[var(--monitor-overlay-text-primary)]">Memuat Data Monitor untuk Gelanggang: {gelanggangName || '...'}</p>
-           </div>
-        )}
-         {!activeScheduleId && !isLoading && gelanggangName && (
-           <div className="absolute inset-0 bg-[var(--monitor-overlay-bg)] flex flex-col items-center justify-center z-50 p-4">
-              <AlertTriangle className="h-16 w-16 text-[var(--monitor-overlay-accent-text)] mb-4" />
-              <p className="text-xl text-center text-[var(--monitor-overlay-text-primary)] mb-2">{error || `Tidak ada pertandingan yang aktif untuk dimonitor di Gelanggang: ${gelanggangName}.`}</p>
-              <p className="text-sm text-center text-[var(--monitor-overlay-text-secondary)] mb-6">Silakan aktifkan jadwal di panel admin atau tunggu pertandingan dimulai.</p>
-              <Button variant="outline" asChild className="bg-[var(--monitor-overlay-button-bg)] border-[var(--monitor-overlay-button-border)] hover:bg-[var(--monitor-overlay-button-hover-bg)] text-[var(--monitor-overlay-button-text)]">
-                <Link href={`/login?redirect=/scoring/tanding/monitoring-skor&gelanggang=${gelanggangName || ''}`}><ArrowLeft className="mr-2 h-4 w-4" /> Kembali</Link>
-              </Button>
-           </div>
-        )}
+              <div className="flex gap-0.5 md:gap-1">
+                {JURI_IDS.map(id => <JuriInputIndicator key={`biru-tendangan-${id}`} juri={id} type="tendangan" pesilatColor="biru" />)}
+              </div>
+            </div>
+          </div>
 
-          {timerStatus.matchStatus === 'MatchFinished' && gelanggangName && (
-              <Button
-                  onClick={handleNextMatchNavigation}
-                  disabled={isNavigatingNextMatch || isLoading}
-                  className="fixed bottom-6 right-6 z-50 shadow-lg bg-green-600 hover:bg-green-700 text-white py-3 px-4 text-sm md:text-base rounded-full"
-                  title="Lanjut ke Partai Berikutnya"
-              >
-                  {isNavigatingNextMatch ? (
-                      <Loader2 className="mr-2 h-5 w-5 animate-spin" />
-                  ) : (
-                      <ChevronsRight className="mr-2 h-5 w-5" />
-                  )}
-                  Partai Berikutnya
-              </Button>
-          )}
+          <div className="flex flex-col items-center justify-start w-full">
+            <div className="w-full max-w-[180px] flex flex-col space-y-1 md:space-y-2">
+                <div className="py-1 md:py-2 border border-[var(--monitor-border)] rounded-md flex items-center justify-center text-xs md:text-sm text-[var(--monitor-text)] bg-[var(--monitor-babak-indicator-inactive-bg)] shadow-sm">
+                    Pukulan
+                </div>
+                <div className="py-1 md:py-2 border border-[var(--monitor-border)] rounded-md flex items-center justify-center text-xs md:text-sm text-[var(--monitor-text)] bg-[var(--monitor-babak-indicator-inactive-bg)] shadow-sm">
+                    Tendangan
+                </div>
+            </div>
+          </div>
+
+          <div className="flex flex-col items-center flex-1">
+            <div className="flex flex-col gap-0.5 md:gap-1 w-full">
+              <div className="flex gap-0.5 md:gap-1">
+                {JURI_IDS.map(id => <JuriInputIndicator key={`merah-pukulan-${id}`} juri={id} type="pukulan" pesilatColor="merah" />)}
+              </div>
+              <div className="flex gap-0.5 md:gap-1">
+                {JURI_IDS.map(id => <JuriInputIndicator key={`merah-tendangan-${id}`} juri={id} type="tendangan" pesilatColor="merah" />)}
+              </div>
+            </div>
+          </div>
+        </div>
       </div>
+
+
+      <Dialog open={isDisplayVerificationModalOpen} onOpenChange={(isOpen) => {
+          if (!isOpen && activeDisplayVerificationRequest?.status === 'pending') return;
+          setIsDisplayVerificationModalOpen(isOpen);
+      }}>
+         <DialogContent
+            className={cn("sm:max-w-lg md:max-w-xl bg-[var(--monitor-dialog-bg)] border-[var(--monitor-dialog-border)] text-[var(--monitor-dialog-text)]", resolvedTheme === 'dark' ? 'monitoring-theme-dark' : 'monitoring-theme-light')}
+            onPointerDownOutside={(e) => {if (activeDisplayVerificationRequest?.status === 'pending') e.preventDefault();}}
+            onEscapeKeyDown={(e) => {if (activeDisplayVerificationRequest?.status === 'pending') e.preventDefault();}}
+          >
+            <RadixDialogTitle className="sr-only">Konfirmasi Verifikasi Juri</RadixDialogTitle>
+            <DialogHeader className="text-center">
+              <div className="text-2xl md:text-3xl font-bold font-headline text-[var(--monitor-dialog-title-text)]">
+                Verifikasi Juri
+              </div>
+            </DialogHeader>
+            <div className="py-4 px-2 md:px-6">
+                <div className="text-center mt-2">
+                  <div className="text-lg font-semibold text-[var(--monitor-text)]">
+                    {activeDisplayVerificationRequest?.type === 'jatuhan' ? 'Verifikasi Jatuhan' : 'Verifikasi Pelanggaran'}
+                  </div>
+                  <div className="text-sm text-[var(--monitor-text-muted)]">Babak {activeDisplayVerificationRequest?.round}</div>
+                </div>
+              <div className="mt-6 grid grid-cols-3 gap-3 md:gap-4 items-start justify-items-center text-center">
+                {JURI_IDS.map((juriKey, index) => {
+                  const vote = activeDisplayVerificationRequest?.votes[juriKey] || null;
+                  let voteText = 'Belum Vote';
+                  let voteBoxColorClass = getJuriVoteDisplayBoxClass(vote);
+                  if (vote === 'merah') { voteText = 'MERAH'; }
+                  else if (vote === 'biru') { voteText = 'BIRU'; }
+                  else if (vote === 'invalid') { voteText = 'INVALID';}
+                  return (
+                    <div key={`vote-display-monitor-${juriKey}`} className="flex flex-col items-center space-y-1 w-full">
+                      <p className="text-base md:text-lg font-bold text-[var(--monitor-text)]">J{index + 1}</p>
+                      <div className={cn("w-full h-12 md:h-16 rounded-md flex items-center justify-center text-[10px] md:text-xs font-bold p-1 shadow-md", voteBoxColorClass)}>
+                        {voteText}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          </DialogContent>
+      </Dialog>
+      {isLoading && activeScheduleId && !matchDetailsLoaded && (
+         <div className="absolute inset-0 bg-[var(--monitor-overlay-bg)] flex flex-col items-center justify-center z-50">
+            <Loader2 className="h-12 w-12 animate-spin text-[var(--monitor-overlay-accent-text)] mb-4" />
+            <p className="text-lg text-[var(--monitor-overlay-text-primary)]">Memuat Data Monitor untuk Gelanggang: {gelanggangName || '...'}</p>
+         </div>
+      )}
+       {!activeScheduleId && !isLoading && gelanggangName && (
+         <div className="absolute inset-0 bg-[var(--monitor-overlay-bg)] flex flex-col items-center justify-center z-50 p-4">
+            <AlertTriangle className="h-16 w-16 text-[var(--monitor-overlay-accent-text)] mb-4" />
+            <p className="text-xl text-center text-[var(--monitor-overlay-text-primary)] mb-2">{error || `Tidak ada pertandingan yang aktif untuk dimonitor di Gelanggang: ${gelanggangName}.`}</p>
+            <p className="text-sm text-center text-[var(--monitor-overlay-text-secondary)] mb-6">Silakan aktifkan jadwal di panel admin atau tunggu pertandingan dimulai.</p>
+            <Button variant="outline" asChild className="bg-[var(--monitor-overlay-button-bg)] border-[var(--monitor-overlay-button-border)] hover:bg-[var(--monitor-overlay-button-hover-bg)] text-[var(--monitor-overlay-button-text)]">
+              <Link href={`/login?redirect=/scoring/tanding/monitoring-skor&gelanggang=${gelanggangName || ''}`}><ArrowLeft className="mr-2 h-4 w-4" /> Kembali</Link>
+            </Button>
+         </div>
+      )}
+
+        {timerStatus.matchStatus === 'MatchFinished' && gelanggangName && (
+            <Button
+                onClick={handleNextMatchNavigation}
+                disabled={isNavigatingNextMatch || isLoading}
+                className="fixed bottom-6 right-6 z-50 shadow-lg bg-green-600 hover:bg-green-700 text-white py-3 px-4 text-sm md:text-base rounded-full"
+                title="Lanjut ke Partai Berikutnya"
+            >
+                {isNavigatingNextMatch ? (
+                    <Loader2 className="mr-2 h-5 w-5 animate-spin" />
+                ) : (
+                    <ChevronsRight className="mr-2 h-5 w-5" />
+                )}
+                Partai Berikutnya
+            </Button>
+        )}
     </div>
   );
 }
@@ -776,5 +772,3 @@ function PageWithSearchParams() {
   const gelanggangName = searchParams.get('gelanggang');
   return <MonitoringSkorPageComponent gelanggangName={gelanggangName} />;
 }
-
-

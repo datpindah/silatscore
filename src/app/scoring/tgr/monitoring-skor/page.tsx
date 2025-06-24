@@ -5,7 +5,6 @@ import { useState, useEffect, useCallback, useRef, Suspense } from 'react';
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation'; // Ditambahkan
 import { Button } from '@/components/ui/button';
-import { Header } from '@/components/layout/Header'; // Ditambahkan kembali
 import { ArrowLeft, Loader2, Sun, Moon, ChevronsRight, AlertTriangle } from 'lucide-react';
 import type { ScheduleTGR, TGRTimerStatus, TGRJuriScore, SideSpecificTGRScore, TGRDewanPenalty, TGRMatchResult, TGRMatchResultDetail } from '@/lib/types';
 import type { ScoreEntry as LibScoreEntryType, RoundScores as LibRoundScoresType } from '@/lib/types';
@@ -542,223 +541,220 @@ function MonitoringSkorTGRPageComponent({ gelanggangName }: { gelanggangName: st
   }
 
   return (
-    <>
-      <Header overrideBackgroundClass="bg-gray-100 dark:bg-gray-900" />
-      <div
-        className={cn(
-          "flex flex-col flex-1 font-sans overflow-hidden relative min-h-screen", 
-          mounted && (resolvedTheme === 'dark' ? 'tgr-monitoring-theme-dark' : 'tgr-monitoring-theme-light'),
-          mounted && "bg-[var(--monitor-bg)] text-[var(--monitor-text)]"
-        )}
-      >
-        
-        <Card className="mb-2 md:mb-4 shadow-xl bg-gradient-to-r from-primary to-red-700 text-primary-foreground mx-1 md:mx-2 mt-1 md:mt-2">
-          <CardContent className="p-3 md:p-4 text-center">
-            <h1 className="text-xl md:text-2xl font-bold font-headline">
-              PENCAK SILAT TGR - GELANGGANG: {gelanggangName || <Loader2 className="inline h-5 w-5 animate-spin"/>}
-            </h1>
-            {scheduleDetails && (
-                <p className="text-xs md:text-sm">
-                    Partai No. {scheduleDetails.lotNumber} | {scheduleDetails.round} | {scheduleDetails.category}
-                </p>
-            )}
-            {error && !isLoading && !scheduleDetails && <p className="text-xs md:text-sm text-yellow-300 mt-1">Gagal memuat detail pertandingan. {error}</p>}
-          </CardContent>
-        </Card>
+    <div
+      className={cn(
+        "flex flex-col flex-1 font-sans overflow-hidden relative min-h-screen", 
+        mounted && (resolvedTheme === 'dark' ? 'tgr-monitoring-theme-dark' : 'tgr-monitoring-theme-light'),
+        mounted && "bg-[var(--monitor-bg)] text-[var(--monitor-text)]"
+      )}
+    >
+      
+      <Card className="mb-2 md:mb-4 shadow-xl bg-gradient-to-r from-primary to-red-700 text-primary-foreground mx-1 md:mx-2 mt-1 md:mt-2">
+        <CardContent className="p-3 md:p-4 text-center">
+          <h1 className="text-xl md:text-2xl font-bold font-headline">
+            PENCAK SILAT TGR - GELANGGANG: {gelanggangName || <Loader2 className="inline h-5 w-5 animate-spin"/>}
+          </h1>
+          {scheduleDetails && (
+              <p className="text-xs md:text-sm">
+                  Partai No. {scheduleDetails.lotNumber} | {scheduleDetails.round} | {scheduleDetails.category}
+              </p>
+          )}
+          {error && !isLoading && !scheduleDetails && <p className="text-xs md:text-sm text-yellow-300 mt-1">Gagal memuat detail pertandingan. {error}</p>}
+        </CardContent>
+      </Card>
 
 
-        <div className="flex-grow flex flex-col p-2 md:p-4">
-          {/* Name/Kontingen and Timer Row */}
-          <div className="flex justify-between items-center px-2 md:px-4 py-3 md:py-4">
-            <div className={cn("text-left", participantTextColorClass)}>
-              <div className="font-bold text-xl md:text-2xl uppercase">{participantName}</div>
-              <div className="text-md md:text-lg uppercase">({participantContingent})</div>
-            </div>
-            <div className="text-right">
-              <div className="text-xs md:text-sm font-medium text-[var(--monitor-text-muted)]">WAKTU PENAMPILAN</div>
-              <div className="text-4xl md:text-6xl font-mono font-bold text-[var(--monitor-timer-text)]">
-                {isLoading && !matchDetailsLoaded ? <Skeleton className="h-12 w-40 bg-[var(--monitor-skeleton-bg)]" /> : formatTime(tgrTimerStatus.timerSeconds)}
-              </div>
+      <div className="flex-grow flex flex-col p-2 md:p-4">
+        {/* Name/Kontingen and Timer Row */}
+        <div className="flex justify-between items-center px-2 md:px-4 py-3 md:py-4">
+          <div className={cn("text-left", participantTextColorClass)}>
+            <div className="font-bold text-xl md:text-2xl uppercase">{participantName}</div>
+            <div className="text-md md:text-lg uppercase">({participantContingent})</div>
+          </div>
+          <div className="text-right">
+            <div className="text-xs md:text-sm font-medium text-[var(--monitor-text-muted)]">WAKTU PENAMPILAN</div>
+            <div className="text-4xl md:text-6xl font-mono font-bold text-[var(--monitor-timer-text)]">
+              {isLoading && !matchDetailsLoaded ? <Skeleton className="h-12 w-40 bg-[var(--monitor-skeleton-bg)]" /> : formatTime(tgrTimerStatus.timerSeconds)}
             </div>
           </div>
+        </div>
 
-          <div className="flex flex-col md:flex-row justify-center items-start md:items-stretch gap-4 my-4">
-            {showBiruSummaryTable && (
-              <TGRSideSummaryTable
-                sideLabel={`Ringkasan Sudut Biru: ${scheduleDetails?.pesilatBiruName || 'N/A'}${summaryDataBiru.hasPerformed ? " (Selesai)" : ""}`}
-                median={summaryDataBiru.median}
-                penalty={summaryDataBiru.penalty}
-                timePerformanceSeconds={summaryDataBiru.timePerformance ?? 0}
-                total={summaryDataBiru.total}
-                stdDev={summaryDataBiru.stdDev}
-                isLoadingData={isLoading && !matchDetailsLoaded}
-              />
-            )}
-            {showMerahSummaryTable && (
-              <TGRSideSummaryTable
-                sideLabel={`Ringkasan Sudut Merah: ${scheduleDetails?.pesilatMerahName || 'N/A'}${summaryDataMerah.hasPerformed ? " (Selesai)" : ""}`}
-                median={summaryDataMerah.median}
-                penalty={summaryDataMerah.penalty}
-                timePerformanceSeconds={summaryDataMerah.timePerformance ?? 0}
-                total={summaryDataMerah.total}
-                stdDev={summaryDataMerah.stdDev}
-                isLoadingData={isLoading && !matchDetailsLoaded}
-              />
-            )}
-          </div>
-
-          <div className="w-full max-w-3xl mx-auto">
-            <div className="grid grid-cols-6 gap-1 md:gap-2 mb-1">
-              {TGR_JURI_IDS.map((juriId, index) => (
-                <JuriLabelCell key={`label-${juriId}`} label={`JURI ${index + 1}`} />
-              ))}
-            </div>
-            <div className="grid grid-cols-6 gap-1 md:gap-2">
-              {TGR_JURI_IDS.map(juriId => (
-                <ScoreCell key={`score-${juriId}`} juriId={juriId} isLoadingJuriData={isLoading && !matchDetailsLoaded} />
-              ))}
-            </div>
-          </div>
-
-          {tgrTimerStatus.matchStatus && (
-            <div className="mt-auto pt-4 text-center text-xs md:text-sm text-[var(--monitor-status-text)]">
-              Status: {tgrTimerStatus.matchStatus}
-              {tgrTimerStatus.isTimerRunning && " (Berjalan)"}
-              {!tgrTimerStatus.isTimerRunning && tgrTimerStatus.timerSeconds > 0 && tgrTimerStatus.matchStatus === 'Paused' && " (Jeda)"}
-              {tgrTimerStatus.matchStatus === 'Finished' && tgrTimerStatus.currentPerformingSide && ` (${tgrTimerStatus.currentPerformingSide === 'biru' ? "Sudut Biru" : "Sudut Merah"} Selesai)`}
-              {tgrTimerStatus.matchStatus === 'Finished' && tgrTimerStatus.currentPerformingSide === null && " (Partai Selesai)"}
-            </div>
+        <div className="flex flex-col md:flex-row justify-center items-start md:items-stretch gap-4 my-4">
+          {showBiruSummaryTable && (
+            <TGRSideSummaryTable
+              sideLabel={`Ringkasan Sudut Biru: ${scheduleDetails?.pesilatBiruName || 'N/A'}${summaryDataBiru.hasPerformed ? " (Selesai)" : ""}`}
+              median={summaryDataBiru.median}
+              penalty={summaryDataBiru.penalty}
+              timePerformanceSeconds={summaryDataBiru.timePerformance ?? 0}
+              total={summaryDataBiru.total}
+              stdDev={summaryDataBiru.stdDev}
+              isLoadingData={isLoading && !matchDetailsLoaded}
+            />
+          )}
+          {showMerahSummaryTable && (
+            <TGRSideSummaryTable
+              sideLabel={`Ringkasan Sudut Merah: ${scheduleDetails?.pesilatMerahName || 'N/A'}${summaryDataMerah.hasPerformed ? " (Selesai)" : ""}`}
+              median={summaryDataMerah.median}
+              penalty={summaryDataMerah.penalty}
+              timePerformanceSeconds={summaryDataMerah.timePerformance ?? 0}
+              total={summaryDataMerah.total}
+              stdDev={summaryDataMerah.stdDev}
+              isLoadingData={isLoading && !matchDetailsLoaded}
+            />
           )}
         </div>
 
-        {isLoading && activeScheduleId && !matchDetailsLoaded && (
-          <div className="absolute inset-0 bg-[var(--monitor-overlay-bg)] flex flex-col items-center justify-center z-50">
-              <Loader2 className="h-12 w-12 animate-spin text-[var(--monitor-overlay-accent-text)] mb-4" />
-              <p className="text-lg text-[var(--monitor-overlay-text-primary)]">Memuat Data Monitor TGR untuk Gel. {gelanggangName || '...'}</p>
+        <div className="w-full max-w-3xl mx-auto">
+          <div className="grid grid-cols-6 gap-1 md:gap-2 mb-1">
+            {TGR_JURI_IDS.map((juriId, index) => (
+              <JuriLabelCell key={`label-${juriId}`} label={`JURI ${index + 1}`} />
+            ))}
           </div>
-        )}
-        {!activeScheduleId && !isLoading && gelanggangName && (
-          <div className="absolute inset-0 bg-[var(--monitor-overlay-bg)] flex flex-col items-center justify-center z-50 p-4">
-              <AlertTriangle className="h-16 w-16 text-[var(--monitor-overlay-accent-text)] mb-4" />
-              <p className="text-xl text-center text-[var(--monitor-overlay-text-primary)] mb-2">{error || `Tidak ada pertandingan TGR yang aktif untuk dimonitor di Gel. ${gelanggangName}.`}</p>
-              <p className="text-sm text-center text-[var(--monitor-overlay-text-secondary)] mb-6">Silakan aktifkan jadwal TGR di panel admin atau tunggu pertandingan dimulai.</p>
-              <Button variant="outline" asChild className="bg-[var(--monitor-overlay-button-bg)] border-[var(--monitor-overlay-button-border)] hover:bg-[var(--monitor-overlay-button-hover-bg)] text-[var(--monitor-overlay-button-text)]">
-                <Link href={`/scoring/tgr/login?redirect=/scoring/tgr/monitoring-skor&gelanggang=${gelanggangName || ''}`}><ArrowLeft className="mr-2 h-4 w-4" /> Kembali</Link>
-              </Button>
+          <div className="grid grid-cols-6 gap-1 md:gap-2">
+            {TGR_JURI_IDS.map(juriId => (
+              <ScoreCell key={`score-${juriId}`} juriId={juriId} isLoadingJuriData={isLoading && !matchDetailsLoaded} />
+            ))}
           </div>
-        )}
+        </div>
 
-        {winnerData && isWinnerOverlayOpen && (
-           <Dialog open={isWinnerOverlayOpen} onOpenChange={setIsWinnerOverlayOpen}>
-                <DialogContent className={cn(
-                    "max-w-2xl p-0 overflow-hidden",
-                    mounted && (resolvedTheme === 'light' ? 'tgr-monitoring-theme-light' : 'tgr-monitoring-theme-dark'),
-                    mounted && "bg-[var(--monitor-dialog-bg)] text-[var(--monitor-dialog-text)] border-[var(--monitor-dialog-border)]"
-                )}>
-                    <DialogHeader className="sr-only">
-                      <RadixDialogTitle>Hasil Akhir Pertandingan TGR</RadixDialogTitle>
-                      <DialogDesc>
-                        Rincian skor dan pemenang pertandingan TGR: Gelanggang {winnerData.gelanggang}, Babak {winnerData.babak}, Kategori {winnerData.kategori}.
-                        {winnerData.namaSudutBiru && ` Sudut Biru: ${winnerData.namaSudutBiru} (${winnerData.kontingenBiru}).`}
-                        {winnerData.namaSudutMerah && ` Sudut Merah: ${winnerData.namaSudutMerah} (${winnerData.kontingenMerah}).`}
-                        Pemenang: {winnerData.winner === 'biru' ? winnerData.namaSudutBiru || 'Biru' : winnerData.winner === 'merah' ? winnerData.namaSudutMerah || 'Merah' : 'Seri'}.
-                      </DialogDesc>
-                    </DialogHeader>
-                    <div className="bg-blue-600 text-white p-4 rounded-t-lg">
-                        <div className="flex justify-around text-center text-sm sm:text-base font-semibold">
-                            <span>GLG: {winnerData.gelanggang}</span>
-                            <span>BABAK: {winnerData.babak}</span>
-                            <span>KATEGORI: {winnerData.kategori}</span>
-                        </div>
-                    </div>
-
-                    <div className="p-6 space-y-6">
-                        <div className="flex justify-between items-start text-center">
-                             <div className="w-2/5">
-                                <div className="text-lg sm:text-xl font-bold text-blue-700 dark:text-blue-400">{winnerData.namaSudutBiru || (scheduleDetails?.pesilatBiruName ? "SUDUT BIRU" : "")}</div>
-                                <div className="text-xs sm:text-sm text-blue-600 dark:text-blue-500">{winnerData.kontingenBiru || (scheduleDetails?.pesilatBiruName ? (scheduleDetails.pesilatBiruContingent || scheduleDetails.pesilatMerahContingent || "-") : "")}</div>
-                            </div>
-                            <div className="w-1/5 flex flex-col items-center pt-2">
-                                <p className="text-sm font-medium text-gray-600 dark:text-gray-400">Pemenang</p>
-                                <p className={cn(
-                                    "text-2xl sm:text-3xl font-bold",
-                                    winnerData.winner === 'biru' ? "text-blue-700 dark:text-blue-400" :
-                                    winnerData.winner === 'merah' ? "text-red-700 dark:text-red-400" :
-                                    "text-gray-700 dark:text-gray-300"
-                                )}>
-                                    {winnerData.winner === 'biru' ? (winnerData.namaSudutBiru || "BIRU") : 
-                                     winnerData.winner === 'merah' ? (winnerData.namaSudutMerah || "MERAH") : "SERI"}
-                                </p>
-                            </div>
-                             <div className="w-2/5">
-                                <div className="text-lg sm:text-xl font-bold text-red-700 dark:text-red-400">{winnerData.namaSudutMerah || (scheduleDetails?.pesilatMerahName ? "SUDUT MERAH" : "")}</div>
-                                <div className="text-xs sm:text-sm text-red-600 dark:text-red-500">{winnerData.kontingenMerah || (scheduleDetails?.pesilatMerahName ? (scheduleDetails.pesilatMerahContingent || "-") : "")}</div>
-                            </div>
-                        </div>
-
-                        <div className="overflow-x-auto border border-gray-300 dark:border-gray-600 rounded-md">
-                           <Table className="min-w-full text-sm">
-                                <TableHeader>
-                                    <TableRow className="bg-gray-200 dark:bg-gray-700">
-                                        <TableHead className="w-[35%] p-2 text-gray-700 dark:text-gray-300">Detail Point</TableHead>
-                                        <TableHead className="w-[32.5%] text-center p-2 bg-blue-500 text-white">Biru</TableHead>
-                                        <TableHead className="w-[32.5%] text-center p-2 bg-red-500 text-white">Merah</TableHead>
-                                    </TableRow>
-                                </TableHeader>
-                                <TableBody className="bg-white dark:bg-gray-800 text-[var(--monitor-text)]">
-                                    {[
-                                        { label: "Standar Deviasi", key: "standarDeviasi", precision: 3 },
-                                        { label: "Waktu Penampilan (detik)", key: "waktuPenampilan", precision: 0 },
-                                        { label: "Pelanggaran", key: "pelanggaran", precision: 2 },
-                                    ].map(item => (
-                                        <TableRow key={item.label}>
-                                            <TableCell className="font-medium p-2">{item.label}</TableCell>
-                                            <TableCell className="text-center p-2">
-                                                {winnerData.detailPoint.biru ? winnerData.detailPoint.biru[item.key as keyof TGRMatchResultDetail].toFixed(item.precision) : '-'}
-                                            </TableCell>
-                                            <TableCell className="text-center p-2">
-                                                 {winnerData.detailPoint.merah ? winnerData.detailPoint.merah[item.key as keyof TGRMatchResultDetail].toFixed(item.precision) : '-'}
-                                            </TableCell>
-                                        </TableRow>
-                                    ))}
-                                    <TableRow className="bg-gray-100 dark:bg-gray-700">
-                                        <TableCell className="font-bold text-base p-2">Poin Kemenangan</TableCell>
-                                        <TableCell className="text-center font-bold text-base p-2 text-blue-700 dark:text-blue-400">
-                                            {winnerData.detailPoint.biru ? winnerData.detailPoint.biru.poinKemenangan.toFixed(2) : '-'}
-                                        </TableCell>
-                                        <TableCell className="text-center font-bold text-base p-2 text-red-700 dark:text-red-400">
-                                            {winnerData.detailPoint.merah ? winnerData.detailPoint.merah.poinKemenangan.toFixed(2) : '-'}
-                                        </TableCell>
-                                    </TableRow>
-                                </TableBody>
-                            </Table>
-                        </div>
-                    </div>
-                    <DialogFooter className="p-4 bg-gray-100 dark:bg-gray-800 rounded-b-lg border-t border-gray-300 dark:border-gray-600">
-                        <Button onClick={() => setIsWinnerOverlayOpen(false)} variant="outline" className="bg-[var(--monitor-overlay-button-bg)] text-[var(--monitor-overlay-button-text)] border-[var(--monitor-overlay-button-border)]">Tutup</Button>
-                    </DialogFooter>
-                </DialogContent>
-            </Dialog>
-        )}
-
-
-        {(tgrTimerStatus.matchStatus === 'Finished' && tgrTimerStatus.currentPerformingSide === null && !isLoading && activeScheduleId && gelanggangName) && (
-            <Button
-                onClick={handleNextMatchNavigation}
-                disabled={isNavigatingNextMatch}
-                className="fixed bottom-6 right-6 z-50 shadow-lg bg-green-600 hover:bg-green-700 text-white py-3 px-4 text-sm md:text-base rounded-full"
-                title="Lanjut ke Partai TGR Berikutnya"
-            >
-                {isNavigatingNextMatch ? (
-                    <Loader2 className="mr-2 h-5 w-5 animate-spin" />
-                ) : (
-                    <ChevronsRight className="mr-2 h-5 w-5" />
-                )}
-                Partai Berikutnya
-            </Button>
+        {tgrTimerStatus.matchStatus && (
+          <div className="mt-auto pt-4 text-center text-xs md:text-sm text-[var(--monitor-status-text)]">
+            Status: {tgrTimerStatus.matchStatus}
+            {tgrTimerStatus.isTimerRunning && " (Berjalan)"}
+            {!tgrTimerStatus.isTimerRunning && tgrTimerStatus.timerSeconds > 0 && tgrTimerStatus.matchStatus === 'Paused' && " (Jeda)"}
+            {tgrTimerStatus.matchStatus === 'Finished' && tgrTimerStatus.currentPerformingSide && ` (${tgrTimerStatus.currentPerformingSide === 'biru' ? "Sudut Biru" : "Sudut Merah"} Selesai)`}
+            {tgrTimerStatus.matchStatus === 'Finished' && tgrTimerStatus.currentPerformingSide === null && " (Partai Selesai)"}
+          </div>
         )}
       </div>
-    </>
+
+      {isLoading && activeScheduleId && !matchDetailsLoaded && (
+        <div className="absolute inset-0 bg-[var(--monitor-overlay-bg)] flex flex-col items-center justify-center z-50">
+            <Loader2 className="h-12 w-12 animate-spin text-[var(--monitor-overlay-accent-text)] mb-4" />
+            <p className="text-lg text-[var(--monitor-overlay-text-primary)]">Memuat Data Monitor TGR untuk Gel. {gelanggangName || '...'}</p>
+        </div>
+      )}
+      {!activeScheduleId && !isLoading && gelanggangName && (
+        <div className="absolute inset-0 bg-[var(--monitor-overlay-bg)] flex flex-col items-center justify-center z-50 p-4">
+            <AlertTriangle className="h-16 w-16 text-[var(--monitor-overlay-accent-text)] mb-4" />
+            <p className="text-xl text-center text-[var(--monitor-overlay-text-primary)] mb-2">{error || `Tidak ada pertandingan TGR yang aktif untuk dimonitor di Gel. ${gelanggangName}.`}</p>
+            <p className="text-sm text-center text-[var(--monitor-overlay-text-secondary)] mb-6">Silakan aktifkan jadwal TGR di panel admin atau tunggu pertandingan dimulai.</p>
+            <Button variant="outline" asChild className="bg-[var(--monitor-overlay-button-bg)] border-[var(--monitor-overlay-button-border)] hover:bg-[var(--monitor-overlay-button-hover-bg)] text-[var(--monitor-overlay-button-text)]">
+              <Link href={`/scoring/tgr/login?redirect=/scoring/tgr/monitoring-skor&gelanggang=${gelanggangName || ''}`}><ArrowLeft className="mr-2 h-4 w-4" /> Kembali</Link>
+            </Button>
+        </div>
+      )}
+
+      {winnerData && isWinnerOverlayOpen && (
+         <Dialog open={isWinnerOverlayOpen} onOpenChange={setIsWinnerOverlayOpen}>
+              <DialogContent className={cn(
+                  "max-w-2xl p-0 overflow-hidden",
+                  mounted && (resolvedTheme === 'light' ? 'tgr-monitoring-theme-light' : 'tgr-monitoring-theme-dark'),
+                  mounted && "bg-[var(--monitor-dialog-bg)] text-[var(--monitor-dialog-text)] border-[var(--monitor-dialog-border)]"
+              )}>
+                  <DialogHeader className="sr-only">
+                    <RadixDialogTitle>Hasil Akhir Pertandingan TGR</RadixDialogTitle>
+                    <DialogDesc>
+                      Rincian skor dan pemenang pertandingan TGR: Gelanggang {winnerData.gelanggang}, Babak {winnerData.babak}, Kategori {winnerData.kategori}.
+                      {winnerData.namaSudutBiru && ` Sudut Biru: ${winnerData.namaSudutBiru} (${winnerData.kontingenBiru}).`}
+                      {winnerData.namaSudutMerah && ` Sudut Merah: ${winnerData.namaSudutMerah} (${winnerData.kontingenMerah}).`}
+                      Pemenang: {winnerData.winner === 'biru' ? winnerData.namaSudutBiru || 'Biru' : winnerData.winner === 'merah' ? winnerData.namaSudutMerah || 'Merah' : 'Seri'}.
+                    </DialogDesc>
+                  </DialogHeader>
+                  <div className="bg-blue-600 text-white p-4 rounded-t-lg">
+                      <div className="flex justify-around text-center text-sm sm:text-base font-semibold">
+                          <span>GLG: {winnerData.gelanggang}</span>
+                          <span>BABAK: {winnerData.babak}</span>
+                          <span>KATEGORI: {winnerData.kategori}</span>
+                      </div>
+                  </div>
+
+                  <div className="p-6 space-y-6">
+                      <div className="flex justify-between items-start text-center">
+                           <div className="w-2/5">
+                              <div className="text-lg sm:text-xl font-bold text-blue-700 dark:text-blue-400">{winnerData.namaSudutBiru || (scheduleDetails?.pesilatBiruName ? "SUDUT BIRU" : "")}</div>
+                              <div className="text-xs sm:text-sm text-blue-600 dark:text-blue-500">{winnerData.kontingenBiru || (scheduleDetails?.pesilatBiruName ? (scheduleDetails.pesilatBiruContingent || scheduleDetails.pesilatMerahContingent || "-") : "")}</div>
+                          </div>
+                          <div className="w-1/5 flex flex-col items-center pt-2">
+                              <p className="text-sm font-medium text-gray-600 dark:text-gray-400">Pemenang</p>
+                              <p className={cn(
+                                  "text-2xl sm:text-3xl font-bold",
+                                  winnerData.winner === 'biru' ? "text-blue-700 dark:text-blue-400" :
+                                  winnerData.winner === 'merah' ? "text-red-700 dark:text-red-400" :
+                                  "text-gray-700 dark:text-gray-300"
+                              )}>
+                                  {winnerData.winner === 'biru' ? (winnerData.namaSudutBiru || "BIRU") : 
+                                   winnerData.winner === 'merah' ? (winnerData.namaSudutMerah || "MERAH") : "SERI"}
+                              </p>
+                          </div>
+                           <div className="w-2/5">
+                              <div className="text-lg sm:text-xl font-bold text-red-700 dark:text-red-400">{winnerData.namaSudutMerah || (scheduleDetails?.pesilatMerahName ? "SUDUT MERAH" : "")}</div>
+                              <div className="text-xs sm:text-sm text-red-600 dark:text-red-500">{winnerData.kontingenMerah || (scheduleDetails?.pesilatMerahName ? (scheduleDetails.pesilatMerahContingent || "-") : "")}</div>
+                          </div>
+                      </div>
+
+                      <div className="overflow-x-auto border border-gray-300 dark:border-gray-600 rounded-md">
+                         <Table className="min-w-full text-sm">
+                              <TableHeader>
+                                  <TableRow className="bg-gray-200 dark:bg-gray-700">
+                                      <TableHead className="w-[35%] p-2 text-gray-700 dark:text-gray-300">Detail Point</TableHead>
+                                      <TableHead className="w-[32.5%] text-center p-2 bg-blue-500 text-white">Biru</TableHead>
+                                      <TableHead className="w-[32.5%] text-center p-2 bg-red-500 text-white">Merah</TableHead>
+                                  </TableRow>
+                              </TableHeader>
+                              <TableBody className="bg-white dark:bg-gray-800 text-[var(--monitor-text)]">
+                                  {[
+                                      { label: "Standar Deviasi", key: "standarDeviasi", precision: 3 },
+                                      { label: "Waktu Penampilan (detik)", key: "waktuPenampilan", precision: 0 },
+                                      { label: "Pelanggaran", key: "pelanggaran", precision: 2 },
+                                  ].map(item => (
+                                      <TableRow key={item.label}>
+                                          <TableCell className="font-medium p-2">{item.label}</TableCell>
+                                          <TableCell className="text-center p-2">
+                                              {winnerData.detailPoint.biru ? winnerData.detailPoint.biru[item.key as keyof TGRMatchResultDetail].toFixed(item.precision) : '-'}
+                                          </TableCell>
+                                          <TableCell className="text-center p-2">
+                                               {winnerData.detailPoint.merah ? winnerData.detailPoint.merah[item.key as keyof TGRMatchResultDetail].toFixed(item.precision) : '-'}
+                                          </TableCell>
+                                      </TableRow>
+                                  ))}
+                                  <TableRow className="bg-gray-100 dark:bg-gray-700">
+                                      <TableCell className="font-bold text-base p-2">Poin Kemenangan</TableCell>
+                                      <TableCell className="text-center font-bold text-base p-2 text-blue-700 dark:text-blue-400">
+                                          {winnerData.detailPoint.biru ? winnerData.detailPoint.biru.poinKemenangan.toFixed(2) : '-'}
+                                      </TableCell>
+                                      <TableCell className="text-center font-bold text-base p-2 text-red-700 dark:text-red-400">
+                                          {winnerData.detailPoint.merah ? winnerData.detailPoint.merah.poinKemenangan.toFixed(2) : '-'}
+                                      </TableCell>
+                                  </TableRow>
+                              </TableBody>
+                          </Table>
+                      </div>
+                  </div>
+                  <DialogFooter className="p-4 bg-gray-100 dark:bg-gray-800 rounded-b-lg border-t border-gray-300 dark:border-gray-600">
+                      <Button onClick={() => setIsWinnerOverlayOpen(false)} variant="outline" className="bg-[var(--monitor-overlay-button-bg)] text-[var(--monitor-overlay-button-text)] border-[var(--monitor-overlay-button-border)]">Tutup</Button>
+                  </DialogFooter>
+              </DialogContent>
+          </Dialog>
+      )}
+
+
+      {(tgrTimerStatus.matchStatus === 'Finished' && tgrTimerStatus.currentPerformingSide === null && !isLoading && activeScheduleId && gelanggangName) && (
+          <Button
+              onClick={handleNextMatchNavigation}
+              disabled={isNavigatingNextMatch}
+              className="fixed bottom-6 right-6 z-50 shadow-lg bg-green-600 hover:bg-green-700 text-white py-3 px-4 text-sm md:text-base rounded-full"
+              title="Lanjut ke Partai TGR Berikutnya"
+          >
+              {isNavigatingNextMatch ? (
+                  <Loader2 className="mr-2 h-5 w-5 animate-spin" />
+              ) : (
+                  <ChevronsRight className="mr-2 h-5 w-5" />
+              )}
+              Partai Berikutnya
+          </Button>
+      )}
+    </div>
   );
 }
 
@@ -797,4 +793,3 @@ export default function MonitoringSkorTGRPageSuspended() {
     </Suspense>
   );
 }
-
