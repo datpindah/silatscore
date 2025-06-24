@@ -8,16 +8,17 @@ import { Card, CardContent, CardHeader, CardTitle, CardFooter } from '@/componen
 import { FormField } from '@/components/admin/ScheduleFormFields';
 import { ScheduleTable } from '@/components/admin/ScheduleTable';
 import { PrintScheduleButton } from '@/components/admin/PrintScheduleButton';
-import { Upload, PlusCircle, User, Users, UserSquare, Swords, PlayCircle, Loader2, Download } from 'lucide-react'; // Added Download
+import { Upload, PlusCircle, User, Users, UserSquare, Swords, PlayCircle, Loader2, Download } from 'lucide-react';
 import type { ScheduleTGR, TGRCategoryType } from '@/lib/types';
 import { tgrCategoriesList } from '@/lib/types';
 import { TableCell } from '@/components/ui/table';
 import { cn } from '@/lib/utils';
 import { db } from '@/lib/firebase';
-import { collection, addDoc, getDocs, doc, updateDoc, deleteDoc, onSnapshot, setDoc, query, orderBy, Timestamp, deleteField } from 'firebase/firestore';
+import { collection, addDoc, getDocs, doc, updateDoc, deleteDoc, onSnapshot, setDoc, query, orderBy, Timestamp, deleteField, where } from 'firebase/firestore';
 import * as XLSX from 'xlsx'; 
 
 const SCHEDULE_TGR_COLLECTION = 'schedules_tgr';
+const MATCHES_TGR_COLLECTION = 'matches_tgr';
 const ACTIVE_TGR_MATCHES_BY_GELANGGANG_PATH = 'app_settings/active_tgr_matches_by_gelanggang';
 
 const initialFormState: Omit<ScheduleTGR, 'id'> = {
@@ -64,7 +65,7 @@ export default function ScheduleTGRPage() {
   useEffect(() => {
     setIsLoading(true);
     const q = query(collection(db, SCHEDULE_TGR_COLLECTION), orderBy("lotNumber", "asc"));
-    const unsub = onSnapshot(q, (querySnapshot) => {
+    const unsub = onSnapshot(q, async (querySnapshot) => {
       const schedulesData: ScheduleTGR[] = [];
       querySnapshot.forEach((docSnap) => {
         const data = docSnap.data();
@@ -99,7 +100,14 @@ export default function ScheduleTGRPage() {
           pesilatBiruContingent: (data.pesilatBiruContingent as string | undefined) || '',
         });
       });
-      setSchedules(schedulesData);
+
+      const finishedMatchesQuery = query(collection(db, MATCHES_TGR_COLLECTION), where("matchResult", "!=", null));
+      const finishedMatchesSnap = await getDocs(finishedMatchesQuery);
+      const finishedMatchIds = new Set(finishedMatchesSnap.docs.map(doc => doc.id));
+      
+      const unfinishedSchedules = schedulesData.filter(s => !finishedMatchIds.has(s.id));
+
+      setSchedules(unfinishedSchedules);
       setIsLoading(false);
     }, (error) => {
       console.error("Error fetching TGR schedules:", error);
@@ -426,7 +434,7 @@ export default function ScheduleTGRPage() {
             <CardTitle className="font-headline">Daftar Jadwal TGR</CardTitle>
           </CardHeader>
           <CardContent>
-             <p className="text-center text-muted-foreground py-4">Belum ada jadwal yang ditambahkan.</p>
+             <p className="text-center text-muted-foreground py-4">Belum ada jadwal yang ditambahkan atau semua pertandingan telah selesai.</p>
           </CardContent>
         </Card>
       )}

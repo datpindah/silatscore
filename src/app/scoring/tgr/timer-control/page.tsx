@@ -18,8 +18,8 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 const ACTIVE_TGR_MATCHES_BY_GELANGGANG_PATH = 'app_settings/active_tgr_matches_by_gelanggang';
 const SCHEDULE_TGR_COLLECTION = 'schedules_tgr';
 const MATCHES_TGR_COLLECTION = 'matches_tgr';
-const JURI_SCORES_TGR_SUBCOLLECTION = 'juri_scores_tgr'; // Added for Juri reset
-const TGR_JURI_IDS = ['juri-1', 'juri-2', 'juri-3', 'juri-4', 'juri-5', 'juri-6'] as const; // Added for Juri reset
+const JURI_SCORES_TGR_SUBCOLLECTION = 'juri_scores_tgr';
+const TGR_JURI_IDS = ['juri-1', 'juri-2', 'juri-3', 'juri-4', 'juri-5', 'juri-6'] as const;
 
 const initialGlobalTgrTimerStatus: TGRTimerStatus = {
   timerSeconds: 0,
@@ -331,15 +331,27 @@ function TGRTimerControlPageComponent({ gelanggangName }: { gelanggangName: stri
   };
 
   const handleAdvanceStateOrParticipant = async () => {
-    if (!activeMatchId || !scheduleDetails || !gelanggangName) return;
-    if (tgrTimerStatus.isTimerRunning) { alert("Harap hentikan atau jeda timer saat ini sebelum melanjutkan."); return; }
+    if (!activeMatchId || !scheduleDetails || !gelanggangName) {
+      alert("Detail pertandingan atau gelanggang tidak valid.");
+      return;
+    }
+    if (tgrTimerStatus.isTimerRunning) {
+      alert("Harap hentikan atau jeda timer saat ini sebelum melanjutkan.");
+      return;
+    }
     if (isSubmitting) return;
 
     setIsSubmitting(true);
     setError(null);
     try {
       if (tgrTimerStatus.currentPerformingSide === 'biru' && scheduleDetails.pesilatMerahName) {
-        await updateTimerStatusInFirestoreOnly({ currentPerformingSide: 'merah', matchStatus: 'Pending', timerSeconds: 0, isTimerRunning: false, performanceDurationMerah: 0 });
+        await updateTimerStatusInFirestoreOnly({
+          currentPerformingSide: 'merah',
+          matchStatus: 'Pending',
+          timerSeconds: 0,
+          isTimerRunning: false,
+          performanceDurationMerah: 0,
+        });
         
         const batch = writeBatch(db);
         TGR_JURI_IDS.forEach(juriId => {
@@ -347,25 +359,32 @@ function TGRTimerControlPageComponent({ gelanggangName }: { gelanggangName: stri
             batch.update(juriDocRef, { "merah.isReady": false });
         });
         await batch.commit();
-
-      } else { 
+      } else {
         await updateTimerStatusInFirestoreOnly({ matchStatus: 'Finished', currentPerformingSide: null, isTimerRunning: false });
-        
+
         const schedulesRef = collection(db, SCHEDULE_TGR_COLLECTION);
-        const q = query( schedulesRef, where('place', '==', gelanggangName), where('lotNumber', '>', scheduleDetails.lotNumber), orderBy('lotNumber', 'asc'), limit(1));
+        const q = query(
+          schedulesRef,
+          where('place', '==', gelanggangName),
+          where('lotNumber', '>', scheduleDetails.lotNumber),
+          orderBy('lotNumber', 'asc'),
+          limit(1)
+        );
         const querySnapshot = await getDocs(q);
         const venueMapRef = doc(db, ACTIVE_TGR_MATCHES_BY_GELANGGANG_PATH);
+
         if (querySnapshot.empty) {
-          alert(`Tidak ada partai TGR berikutnya untuk Gelanggang: ${gelanggangName}.`);
+          alert(`Tidak ada partai TGR berikutnya untuk Gelanggang: ${gelanggangName}. Mengosongkan gelanggang.`);
           await updateDoc(venueMapRef, { [gelanggangName]: deleteField() });
         } else {
           const nextMatchDoc = querySnapshot.docs[0];
           await updateDoc(venueMapRef, { [gelanggangName]: nextMatchDoc.id });
+          alert(`Berpindah ke Partai No. ${nextMatchDoc.data().lotNumber} (${nextMatchDoc.data().pesilatMerahName}) di ${gelanggangName}.`);
         }
       }
-    } catch (err) { 
-        console.error("Error advancing TGR state/participant:", err); 
-        setError("Gagal memproses kelanjutan.");
+    } catch (err) {
+      console.error("Error advancing TGR state/participant:", err);
+      setError("Gagal memproses kelanjutan.");
     } finally {
       setIsSubmitting(false);
     }

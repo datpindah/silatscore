@@ -119,7 +119,16 @@ export default function AdminDashboardPage() {
             if (matchStatusDoc.exists()) {
                 matchSpecificData = matchStatusDoc.data();
                 if (matchSpecificData?.matchResult) {
-                    status = 'Selesai';
+                    const winner = matchSpecificData.matchResult.winner;
+                    if (winner === 'merah') {
+                        status = 'Selesai (Pemenang Merah)';
+                    } else if (winner === 'biru') {
+                        status = 'Selesai (Pemenang Biru)';
+                    } else if (winner === 'seri') {
+                        status = 'Selesai (Seri)';
+                    } else {
+                        status = 'Selesai';
+                    }
                 } else {
                     const timerStatus = matchSpecificData?.timerStatus as TGRTimerStatus | undefined;
                     if (timerStatus) {
