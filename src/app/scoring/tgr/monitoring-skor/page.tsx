@@ -5,11 +5,11 @@ import { useState, useEffect, useCallback, useRef, Suspense } from 'react';
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation'; // Ditambahkan
 import { Button } from '@/components/ui/button';
-import { ArrowLeft, Loader2, Sun, Moon, ChevronsRight, AlertTriangle } from 'lucide-react';
+import { ArrowLeft, Loader2, Sun, Moon, AlertTriangle } from 'lucide-react';
 import type { ScheduleTGR, TGRTimerStatus, TGRJuriScore, SideSpecificTGRScore, TGRDewanPenalty, TGRMatchResult, TGRMatchResultDetail } from '@/lib/types';
 import type { ScoreEntry as LibScoreEntryType, RoundScores as LibRoundScoresType } from '@/lib/types';
 import { db } from '@/lib/firebase';
-import { doc, onSnapshot, getDoc, collection, query, orderBy, limit, Timestamp, where, getDocs, updateDoc, deleteField } from 'firebase/firestore';
+import { doc, onSnapshot, getDoc, collection, query, orderBy, limit, Timestamp } from 'firebase/firestore';
 import { cn } from '@/lib/utils';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Dialog, DialogContent, DialogHeader, DialogTitle as RadixDialogTitle, DialogDescription as DialogDesc, DialogFooter } from "@/components/ui/dialog"; // DialogDesc for consistency
@@ -174,7 +174,6 @@ function MonitoringSkorTGRPageComponent({ gelanggangName }: { gelanggangName: st
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [matchDetailsLoaded, setMatchDetailsLoaded] = useState(false);
-  const [isNavigatingNextMatch, setIsNavigatingNextMatch] = useState(false);
 
   const [summaryDataBiru, setSummaryDataBiru] = useState(initialSideSummary);
   const [summaryDataMerah, setSummaryDataMerah] = useState(initialSideSummary);
@@ -194,7 +193,6 @@ function MonitoringSkorTGRPageComponent({ gelanggangName }: { gelanggangName: st
     setDewanPenalties([]);
     setMatchDetailsLoaded(false);
     setError(null);
-    setIsNavigatingNextMatch(false);
     setSummaryDataBiru(initialSideSummary);
     setSummaryDataMerah(initialSideSummary);
     setWinnerData(null);
@@ -385,40 +383,6 @@ function MonitoringSkorTGRPageComponent({ gelanggangName }: { gelanggangName: st
     const minutes = Math.floor(seconds / 60);
     const remainingSeconds = Math.round(seconds % 60); // Round to nearest second for display
     return `${minutes.toString().padStart(2, '0')}:${remainingSeconds.toString().padStart(2, '0')}`;
-  };
-
-  const handleNextMatchNavigation = async () => {
-    if (!activeScheduleId || !scheduleDetails || !(tgrTimerStatus.matchStatus === 'Finished' && tgrTimerStatus.currentPerformingSide === null) || !gelanggangName) {
-        alert("Pertandingan TGR saat ini belum selesai, detail tidak tersedia, atau nama gelanggang tidak valid.");
-        return;
-    }
-    setIsNavigatingNextMatch(true);
-    try {
-        const currentLotNumber = scheduleDetails.lotNumber;
-        const schedulesRef = collection(db, SCHEDULE_TGR_COLLECTION);
-        const q = query(
-            schedulesRef,
-            where('place', '==', gelanggangName), // Filter by current gelanggang
-            where('lotNumber', '>', currentLotNumber),
-            orderBy('lotNumber', 'asc'),
-            limit(1)
-        );
-        const querySnapshot = await getDocs(q);
-        const venueMapRef = doc(db, ACTIVE_TGR_MATCHES_BY_GELANGGANG_PATH);
-
-        if (querySnapshot.empty) {
-            alert(`Ini adalah partai TGR terakhir untuk Gelanggang: ${gelanggangName}. Tidak ada partai berikutnya.`);
-            await updateDoc(venueMapRef, { [gelanggangName]: deleteField() }); // Clear the active match for this venue
-        } else {
-            const nextMatchDoc = querySnapshot.docs[0];
-            await updateDoc(venueMapRef, { [gelanggangName]: nextMatchDoc.id });
-        }
-    } catch (err) {
-        console.error("Error navigating to next TGR match:", err);
-        alert("Gagal berpindah ke partai TGR berikutnya.");
-    } finally {
-        setIsNavigatingNextMatch(false);
-    }
   };
 
   const ScoreCell = ({ juriId, isLoadingJuriData }: { juriId: typeof TGR_JURI_IDS[number], isLoadingJuriData?: boolean }) => {
@@ -737,23 +701,6 @@ function MonitoringSkorTGRPageComponent({ gelanggangName }: { gelanggangName: st
                   </DialogFooter>
               </DialogContent>
           </Dialog>
-      )}
-
-
-      {(tgrTimerStatus.matchStatus === 'Finished' && tgrTimerStatus.currentPerformingSide === null && !isLoading && activeScheduleId && gelanggangName) && (
-          <Button
-              onClick={handleNextMatchNavigation}
-              disabled={isNavigatingNextMatch}
-              className="fixed bottom-6 right-6 z-50 shadow-lg bg-green-600 hover:bg-green-700 text-white py-3 px-4 text-sm md:text-base rounded-full"
-              title="Lanjut ke Partai TGR Berikutnya"
-          >
-              {isNavigatingNextMatch ? (
-                  <Loader2 className="mr-2 h-5 w-5 animate-spin" />
-              ) : (
-                  <ChevronsRight className="mr-2 h-5 w-5" />
-              )}
-              Partai Berikutnya
-          </Button>
       )}
     </div>
   );
