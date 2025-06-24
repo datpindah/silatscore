@@ -308,8 +308,8 @@ function TGRTimerControlPageComponent({ gelanggangName }: { gelanggangName: stri
     setIsSubmitting(true);
     setError(null);
     try {
-      const updates: Partial<TGRTimerStatus> = { timerSeconds: 0, isTimerRunning: false, matchStatus: 'Pending' };
       const sideToReset = tgrTimerStatus.currentPerformingSide;
+      const updates: Partial<TGRTimerStatus> = { timerSeconds: 0, isTimerRunning: false, matchStatus: 'Pending' };
       if (sideToReset === 'biru') updates.performanceDurationBiru = 0;
       else if (sideToReset === 'merah') updates.performanceDurationMerah = 0;
       
@@ -318,7 +318,7 @@ function TGRTimerControlPageComponent({ gelanggangName }: { gelanggangName: stri
       const batch = writeBatch(db);
       TGR_JURI_IDS.forEach(juriId => {
           const juriDocRef = doc(db, MATCHES_TGR_COLLECTION, activeMatchId, JURI_SCORES_TGR_SUBCOLLECTION, juriId);
-          batch.update(juriDocRef, { [`${sideToReset}.isReady`]: false });
+          batch.set(juriDocRef, { [sideToReset]: { isReady: false } }, { merge: true });
       });
       await batch.commit();
 
@@ -356,7 +356,7 @@ function TGRTimerControlPageComponent({ gelanggangName }: { gelanggangName: stri
         const batch = writeBatch(db);
         TGR_JURI_IDS.forEach(juriId => {
             const juriDocRef = doc(db, MATCHES_TGR_COLLECTION, activeMatchId, JURI_SCORES_TGR_SUBCOLLECTION, juriId);
-            batch.update(juriDocRef, { "merah.isReady": false });
+            batch.set(juriDocRef, { merah: { isReady: false } }, { merge: true });
         });
         await batch.commit();
       } else {
