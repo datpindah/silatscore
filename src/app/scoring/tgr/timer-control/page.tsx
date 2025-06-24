@@ -8,7 +8,7 @@ import { Header } from '@/components/layout/Header';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { ArrowLeft, Play, RotateCcw, ChevronsRight, Loader2, PauseIcon, Info, StopCircle } from 'lucide-react';
-import type { ScheduleTGR, TGRTimerStatus } from '@/lib/types';
+import type { ScheduleTGR, TGRTimerStatus, TGRMatchResult } from '@/lib/types';
 import { db } from '@/lib/firebase';
 import { doc, onSnapshot, getDoc, setDoc, updateDoc, collection, query, orderBy, limit, where, getDocs, Timestamp, deleteField, writeBatch } from 'firebase/firestore';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -36,6 +36,7 @@ function TGRTimerControlPageComponent({ gelanggangName }: { gelanggangName: stri
   const [scheduleDetails, setScheduleDetails] = useState<ScheduleTGR | null>(null);
 
   const [tgrTimerStatus, setTgrTimerStatus] = useState<TGRTimerStatus>(initialGlobalTgrTimerStatus);
+  const [matchResultSaved, setMatchResultSaved] = useState<TGRMatchResult | null>(null);
 
   const [isLoading, setIsLoading] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -80,6 +81,7 @@ function TGRTimerControlPageComponent({ gelanggangName }: { gelanggangName: stri
       setScheduleDetails(null);
       setMatchDetailsLoaded(false);
       setTgrTimerStatus(initialGlobalTgrTimerStatus);
+      setMatchResultSaved(null);
       setError(null); 
       setActiveMatchId(configMatchId); 
     }
@@ -178,13 +180,22 @@ function TGRTimerControlPageComponent({ gelanggangName }: { gelanggangName: stri
 
       unsubTimer = onSnapshot(matchDataDocRef, (snap) => {
         if (!mounted) return;
-        if (snap.exists() && snap.data()?.timerStatus) {
-          setTgrTimerStatus(snap.data()?.timerStatus as TGRTimerStatus);
+        if (snap.exists()) {
+          const data = snap.data();
+            if (data?.timerStatus) {
+                setTgrTimerStatus(data.timerStatus as TGRTimerStatus);
+            }
+            if (data?.matchResult) {
+                setMatchResultSaved(data.matchResult as TGRMatchResult);
+            } else {
+                setMatchResultSaved(null);
+            }
         } else {
           let fallbackSide: 'biru' | 'merah' | null = null;
           if (scheduleDetails?.pesilatBiruName) fallbackSide = 'biru';
           else if (scheduleDetails?.pesilatMerahName) fallbackSide = 'merah';
           setTgrTimerStatus(prev => ({ ...initialGlobalTgrTimerStatus, currentPerformingSide: fallbackSide, matchStatus: fallbackSide ? 'Pending' : 'MatchFinished' }));
+          setMatchResultSaved(null);
         }
         if (isLoading) setIsLoading(false);
       }, (err) => {
@@ -416,12 +427,10 @@ function TGRTimerControlPageComponent({ gelanggangName }: { gelanggangName: stri
     return "Lanjut Partai Berikutnya";
   };
   const getAdvanceButtonDisabled = () => {
-    if (getButtonDisabledState() || tgrTimerStatus.isTimerRunning || tgrTimerStatus.matchStatus !== 'Finished') return true;
-    if (tgrTimerStatus.currentPerformingSide === 'biru' && scheduleDetails?.pesilatMerahName) return false;
-    if (tgrTimerStatus.currentPerformingSide === 'merah') return false;
-    if (tgrTimerStatus.currentPerformingSide === 'biru' && !scheduleDetails?.pesilatMerahName) return false;
-    if (tgrTimerStatus.matchStatus === 'Finished' && tgrTimerStatus.currentPerformingSide === null) return false;
-    return true;
+    if (getButtonDisabledState() || tgrTimerStatus.isTimerRunning) return true;
+    if (tgrTimerStatus.matchStatus !== 'Finished' || tgrTimerStatus.currentPerformingSide !== null) return true;
+    if (!matchResultSaved) return true; // <-- This is the new logic
+    return false;
   };
 
   const displayPerformingSideInfo = () => {
@@ -446,6 +455,18 @@ function TGRTimerControlPageComponent({ gelanggangName }: { gelanggangName: stri
     if (side === 'biru' && tgrTimerStatus.performanceDurationBiru && tgrTimerStatus.performanceDurationBiru > 0) return formatTime(tgrTimerStatus.performanceDurationBiru);
     if (side === 'merah' && tgrTimerStatus.performanceDurationMerah && tgrTimerStatus.performanceDurationMerah > 0) return formatTime(tgrTimerStatus.performanceDurationMerah);
     return null;
+  }
+
+  const getStatusText = () => {
+    if (tgrTimerStatus.matchStatus === 'Finished' && tgrTimerStatus.currentPerformingSide === null) {
+      return matchResultSaved ? "Partai Selesai, Siap Lanjut" : "Menunggu Keputusan Ketua Pertandingan";
+    }
+    if (tgrTimerStatus.isTimerRunning) return "Berjalan";
+    if (!tgrTimerStatus.isTimerRunning && tgrTimerStatus.matchStatus === 'Paused') return "Jeda";
+    if (tgrTimerStatus.matchStatus === 'Finished' && tgrTimerStatus.currentPerformingSide) {
+      return `Penampilan ${tgrTimerStatus.currentPerformingSide === 'biru' ? "Sudut Biru" : "Sudut Merah"} Selesai`;
+    }
+    return tgrTimerStatus.matchStatus;
   }
 
   if (!gelanggangName && !isLoading) {
@@ -507,11 +528,7 @@ function TGRTimerControlPageComponent({ gelanggangName }: { gelanggangName: stri
               {formatTime(tgrTimerStatus.timerSeconds)}
             </CardTitle>
             <p className="text-sm text-muted-foreground">
-              Status: {tgrTimerStatus.matchStatus}
-              {tgrTimerStatus.isTimerRunning && " (Berjalan)"}
-              {!tgrTimerStatus.isTimerRunning && tgrTimerStatus.matchStatus === 'Paused' && " (Jeda)"}
-              {tgrTimerStatus.matchStatus === 'Finished' && tgrTimerStatus.currentPerformingSide && ` (${tgrTimerStatus.currentPerformingSide === 'biru' ? "Sudut Biru" : "Sudut Merah"} Selesai)`}
-              {tgrTimerStatus.matchStatus === 'Finished' && tgrTimerStatus.currentPerformingSide === null && " (Partai Selesai)"}
+              Status: {getStatusText()}
             </p>
             {scheduleDetails?.pesilatBiruName && recordedDurationForSide('biru') && (
                 <p className={cn("text-xs", tgrTimerStatus.currentPerformingSide === 'biru' && tgrTimerStatus.matchStatus === 'Finished' ? "text-green-600 font-semibold" : "text-gray-500")}>
