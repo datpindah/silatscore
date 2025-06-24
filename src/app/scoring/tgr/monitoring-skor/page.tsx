@@ -15,6 +15,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { Dialog, DialogContent, DialogHeader, DialogTitle as RadixDialogTitle, DialogDescription as DialogDesc, DialogFooter } from "@/components/ui/dialog"; // DialogDesc for consistency
 import { Card, CardContent } from '@/components/ui/card';
 import { useTheme } from 'next-themes';
+import { Header } from '@/components/layout/Header';
 
 
 const ACTIVE_TGR_MATCHES_BY_GELANGGANG_PATH = 'app_settings/active_tgr_matches_by_gelanggang';
@@ -548,8 +549,8 @@ function MonitoringSkorTGRPageComponent({ gelanggangName }: { gelanggangName: st
         mounted && "bg-[var(--monitor-bg)] text-[var(--monitor-text)]"
       )}
     >
-      
-      <Card className="mb-2 md:mb-4 shadow-xl bg-gradient-to-r from-primary to-red-700 text-primary-foreground mx-1 md:mx-2 mt-1 md:mt-2">
+      <Header overrideBackgroundClass="bg-[var(--monitor-bg)]" />
+      <Card className="mb-2 md:mb-4 shadow-xl bg-gradient-to-r from-primary to-red-700 text-primary-foreground mx-1 md:mx-2">
         <CardContent className="p-3 md:p-4 text-center">
           <h1 className="text-xl md:text-2xl font-bold font-headline">
             PENCAK SILAT TGR - GELANGGANG: {gelanggangName || <Loader2 className="inline h-5 w-5 animate-spin"/>}

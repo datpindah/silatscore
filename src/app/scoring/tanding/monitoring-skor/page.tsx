@@ -15,6 +15,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { Dialog, DialogContent, DialogHeader, DialogTitle as RadixDialogTitle } from "@/components/ui/dialog";
 import { Card, CardContent } from '@/components/ui/card';
 import { useTheme } from 'next-themes';
+import { Header } from '@/components/layout/Header';
 
 
 const ACTIVE_TANDING_MATCHES_BY_GELANGGANG_PATH = 'app_settings/active_tanding_matches_by_gelanggang';
@@ -529,9 +530,10 @@ function MonitoringSkorPageComponent({ gelanggangName }: { gelanggangName: strin
         "bg-[var(--monitor-bg)] text-[var(--monitor-text)]"
       )}
     >
+      <Header overrideBackgroundClass="bg-[var(--monitor-bg)]" />
       <Card
         className={cn(
-          "mb-2 md:mb-4 shadow-xl bg-gradient-to-r from-primary to-red-700 text-primary-foreground mx-1 md:mx-2 mt-1 md:mt-2"
+          "mb-2 md:mb-4 shadow-xl bg-gradient-to-r from-primary to-red-700 text-primary-foreground mx-1 md:mx-2"
         )}
       >
         <CardContent className="p-3 md:p-4 text-center">
