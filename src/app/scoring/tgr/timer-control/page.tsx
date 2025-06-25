@@ -294,14 +294,29 @@ function TGRTimerControlPageComponent({ gelanggangName }: { gelanggangName: stri
   };
 
   const handleStopTimer = async () => {
-    if (!activeMatchId || !tgrTimerStatus.currentPerformingSide || !tgrTimerStatus.isTimerRunning || isSubmitting) return;
+    if (!activeMatchId || !tgrTimerStatus.currentPerformingSide || !tgrTimerStatus.isTimerRunning || isSubmitting || !scheduleDetails) return;
     
     setIsSubmitting(true);
     setError(null);
     try {
-      const updates: Partial<TGRTimerStatus> = { isTimerRunning: false, matchStatus: 'Finished' };
-      if (tgrTimerStatus.currentPerformingSide === 'biru') updates.performanceDurationBiru = tgrTimerStatus.timerSeconds;
-      else if (tgrTimerStatus.currentPerformingSide === 'merah') updates.performanceDurationMerah = tgrTimerStatus.timerSeconds;
+      const currentSide = tgrTimerStatus.currentPerformingSide;
+      const updates: Partial<TGRTimerStatus> = {
+        isTimerRunning: false,
+        matchStatus: 'Finished',
+      };
+
+      if (currentSide === 'biru') {
+        updates.performanceDurationBiru = tgrTimerStatus.timerSeconds;
+      } else if (currentSide === 'merah') {
+        updates.performanceDurationMerah = tgrTimerStatus.timerSeconds;
+      }
+
+      const isLastParticipant = (currentSide === 'merah') || (currentSide === 'biru' && !scheduleDetails.pesilatMerahName);
+      
+      if (isLastParticipant) {
+        updates.currentPerformingSide = null;
+      }
+
       await updateTimerStatusInFirestoreOnly(updates);
     } catch (e) {
       console.error("Error in handleStopTimer (TGR):", e);
@@ -434,7 +449,7 @@ function TGRTimerControlPageComponent({ gelanggangName }: { gelanggangName: stri
   const showAdvanceToMerahButton = tgrTimerStatus.matchStatus === 'Finished' && tgrTimerStatus.currentPerformingSide === 'biru' && !!scheduleDetails?.pesilatMerahName;
   const getAdvanceToMerahButtonDisabled = () => getButtonDisabledState() || tgrTimerStatus.isTimerRunning;
   
-  const showAdvanceToNextMatchButton = tgrTimerStatus.matchStatus === 'Finished' && !tgrTimerStatus.currentPerformingSide;
+  const showAdvanceToNextMatchButton = tgrTimerStatus.matchStatus === 'Finished' && tgrTimerStatus.currentPerformingSide === null;
   const getAdvanceToNextMatchButtonDisabled = () => getButtonDisabledState() || tgrTimerStatus.isTimerRunning || !matchResultSaved;
   
 
