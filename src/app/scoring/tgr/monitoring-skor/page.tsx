@@ -28,10 +28,11 @@ const DEWAN_PENALTIES_TGR_SUBCOLLECTION = 'dewan_penalties_tgr';
 const TGR_JURI_IDS = ['juri-1', 'juri-2', 'juri-3', 'juri-4', 'juri-5', 'juri-6'] as const;
 
 const initialTgrTimerStatus: TGRTimerStatus = {
-  timerSeconds: 0,
   isTimerRunning: false,
   matchStatus: 'Pending',
   currentPerformingSide: null,
+  startTimeMs: null,
+  accumulatedDurationMs: 0,
   performanceDurationBiru: 0,
   performanceDurationMerah: 0,
 };
@@ -83,14 +84,15 @@ interface TGRSideSummaryTableProps {
   isLoadingData: boolean;
 }
 
-const TGRSideSummaryTable: React.FC<TGRSideSummaryTableProps> = ({
-  sideLabel, median, penalty, timePerformanceSeconds, total, stdDev, isLoadingData
-}) => {
-  const formatTimePerformance = (seconds: number) => {
+const formatTimeForTable = (seconds: number) => {
     const minutes = Math.floor(seconds / 60);
     const remainingSeconds = Math.round(seconds % 60);
     return `${String(minutes).padStart(2, '0')}.${String(remainingSeconds).padStart(2, '0')}`;
-  };
+};
+
+const TGRSideSummaryTable: React.FC<TGRSideSummaryTableProps> = ({
+  sideLabel, median, penalty, timePerformanceSeconds, total, stdDev, isLoadingData
+}) => {
 
   if (isLoadingData) {
     return (
@@ -142,7 +144,7 @@ const TGRSideSummaryTable: React.FC<TGRSideSummaryTableProps> = ({
             <tr>
               <td className="p-1.5 border border-gray-400 dark:border-gray-600 text-center">{median.toFixed(3)}</td>
               <td className="p-1.5 border border-gray-400 dark:border-gray-600 text-center">{Math.abs(penalty).toFixed(2)}</td>
-              <td className="p-1.5 border border-gray-400 dark:border-gray-600 text-center">{formatTimePerformance(timePerformanceSeconds)}</td>
+              <td className="p-1.5 border border-gray-400 dark:border-gray-600 text-center">{formatTimeForTable(timePerformanceSeconds)}</td>
               <td className="p-1.5 border border-gray-400 dark:border-gray-600 text-center">{total.toFixed(3)}</td>
             </tr>
             <tr>
@@ -158,6 +160,13 @@ const TGRSideSummaryTable: React.FC<TGRSideSummaryTableProps> = ({
   );
 };
 
+const formatTime = (ms: number): string => {
+  const totalSeconds = Math.floor(ms / 1000);
+  const minutes = Math.floor(totalSeconds / 60).toString().padStart(2, '0');
+  const seconds = (totalSeconds % 60).toString().padStart(2, '0');
+  const hundredths = Math.floor((ms % 1000) / 10).toString().padStart(2, '0');
+  return `${minutes}:${seconds}.${hundredths}`;
+};
 
 function MonitoringSkorTGRPageComponent({ gelanggangName }: { gelanggangName: string | null }) {
   const { resolvedTheme } = useTheme();
@@ -171,8 +180,8 @@ function MonitoringSkorTGRPageComponent({ gelanggangName }: { gelanggangName: st
   const [allJuriScores, setAllJuriScores] = useState<Record<string, TGRJuriScore | null>>(initialAllJuriScores);
   const [dewanPenalties, setDewanPenalties] = useState<TGRDewanPenalty[]>([]);
   
-  const [displaySeconds, setDisplaySeconds] = useState(0);
-  const timerIntervalRef = useRef<NodeJS.Timeout | null>(null);
+  const [displayTime, setDisplayTime] = useState(0); // Local state for smooth animation
+  const animationFrameRef = useRef<number>();
 
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -188,30 +197,26 @@ function MonitoringSkorTGRPageComponent({ gelanggangName }: { gelanggangName: st
     setMounted(true);
   }, []);
 
+  // Effect for smooth timer animation
   useEffect(() => {
-    setDisplaySeconds(tgrTimerStatus.timerSeconds);
-  }, [tgrTimerStatus.timerSeconds]);
+    const animate = () => {
+      if (tgrTimerStatus.isTimerRunning && tgrTimerStatus.startTimeMs) {
+        const elapsed = Date.now() - tgrTimerStatus.startTimeMs;
+        setDisplayTime(tgrTimerStatus.accumulatedDurationMs + elapsed);
+      } else {
+        setDisplayTime(tgrTimerStatus.accumulatedDurationMs);
+      }
+      animationFrameRef.current = requestAnimationFrame(animate);
+    };
 
-  useEffect(() => {
-    if (tgrTimerStatus.isTimerRunning) {
-      if (!timerIntervalRef.current) {
-        timerIntervalRef.current = setInterval(() => {
-          setDisplaySeconds(prev => prev + 1);
-        }, 1000);
-      }
-    } else {
-      if (timerIntervalRef.current) {
-        clearInterval(timerIntervalRef.current);
-        timerIntervalRef.current = null;
-      }
-      setDisplaySeconds(tgrTimerStatus.timerSeconds);
-    }
+    animationFrameRef.current = requestAnimationFrame(animate);
+
     return () => {
-      if (timerIntervalRef.current) {
-        clearInterval(timerIntervalRef.current);
+      if (animationFrameRef.current) {
+        cancelAnimationFrame(animationFrameRef.current);
       }
     };
-  }, [tgrTimerStatus.isTimerRunning, tgrTimerStatus.timerSeconds]);
+  }, [tgrTimerStatus]);
 
 
   const resetPageData = useCallback(() => {
@@ -390,7 +395,7 @@ function MonitoringSkorTGRPageComponent({ gelanggangName }: { gelanggangName: st
           }
       }
 
-      return { median, penalty: totalPenalties, timePerformance, total: finalScore, stdDev, hasPerformed: hasPerformedForSummary };
+      return { median, penalty: totalPenalties, timePerformance: timePerformance / 1000, total: finalScore, stdDev, hasPerformed: hasPerformedForSummary };
     };
 
     if (scheduleDetails.pesilatBiruName) {
@@ -405,13 +410,6 @@ function MonitoringSkorTGRPageComponent({ gelanggangName }: { gelanggangName: st
     }
 
   }, [allJuriScores, dewanPenalties, tgrTimerStatus, scheduleDetails]);
-
-
-  const formatTime = (seconds: number): string => {
-    const minutes = Math.floor(seconds / 60);
-    const remainingSeconds = Math.round(seconds % 60); // Round to nearest second for display
-    return `${minutes.toString().padStart(2, '0')}:${remainingSeconds.toString().padStart(2, '0')}`;
-  };
 
   const ScoreCell = ({ juriId, isLoadingJuriData }: { juriId: typeof TGR_JURI_IDS[number], isLoadingJuriData?: boolean }) => {
     const juriScoreData = allJuriScores[juriId];
@@ -515,7 +513,7 @@ function MonitoringSkorTGRPageComponent({ gelanggangName }: { gelanggangName: st
 
   const { name: participantName, contingent: participantContingent, textColorClass: participantTextColorClass } = getParticipantDetails();
 
-  if (!mounted) { // Render nothing or a minimal loader until mounted to avoid hydration issues
+  if (!mounted) {
     return (
         <div className={cn("flex flex-col min-h-screen items-center justify-center", "bg-background text-foreground")}>
             <Loader2 className="h-16 w-16 animate-spin text-primary mb-4" />
@@ -566,8 +564,8 @@ function MonitoringSkorTGRPageComponent({ gelanggangName }: { gelanggangName: st
           </div>
           <div className="text-right">
             <div className="text-xs md:text-sm font-medium text-[var(--monitor-text-muted)]">WAKTU PENAMPILAN</div>
-            <div className="text-4xl md:text-6xl font-mono font-bold text-[var(--monitor-timer-text)]">
-              {isLoading && !matchDetailsLoaded ? <Skeleton className="h-12 w-40 bg-[var(--monitor-skeleton-bg)]" /> : formatTime(displaySeconds)}
+            <div className="text-4xl md:text-6xl font-mono font-bold text-[var(--monitor-timer-text)] tracking-tighter">
+              {isLoading && !matchDetailsLoaded ? <Skeleton className="h-12 w-48 bg-[var(--monitor-skeleton-bg)]" /> : formatTime(displayTime)}
             </div>
           </div>
         </div>
@@ -614,7 +612,7 @@ function MonitoringSkorTGRPageComponent({ gelanggangName }: { gelanggangName: st
           <div className="mt-auto pt-4 text-center text-xs md:text-sm text-[var(--monitor-status-text)]">
             Status: {tgrTimerStatus.matchStatus}
             {tgrTimerStatus.isTimerRunning && " (Berjalan)"}
-            {!tgrTimerStatus.isTimerRunning && tgrTimerStatus.timerSeconds > 0 && tgrTimerStatus.matchStatus === 'Paused' && " (Jeda)"}
+            {!tgrTimerStatus.isTimerRunning && tgrTimerStatus.accumulatedDurationMs > 0 && tgrTimerStatus.matchStatus === 'Paused' && " (Jeda)"}
             {tgrTimerStatus.matchStatus === 'Finished' && tgrTimerStatus.currentPerformingSide && ` (${tgrTimerStatus.currentPerformingSide === 'biru' ? "Sudut Biru" : "Sudut Merah"} Selesai)`}
             {tgrTimerStatus.matchStatus === 'Finished' && tgrTimerStatus.currentPerformingSide === null && " (Partai Selesai)"}
           </div>

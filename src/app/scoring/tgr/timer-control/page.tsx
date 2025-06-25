@@ -22,12 +22,22 @@ const JURI_SCORES_TGR_SUBCOLLECTION = 'juri_scores_tgr';
 const TGR_JURI_IDS = ['juri-1', 'juri-2', 'juri-3', 'juri-4', 'juri-5', 'juri-6'] as const;
 
 const initialGlobalTgrTimerStatus: TGRTimerStatus = {
-  timerSeconds: 0,
   isTimerRunning: false,
   matchStatus: 'Pending',
   currentPerformingSide: null,
+  startTimeMs: null,
+  accumulatedDurationMs: 0,
   performanceDurationBiru: 0,
   performanceDurationMerah: 0,
+};
+
+// High-precision timer format
+const formatTime = (ms: number): string => {
+  const totalSeconds = Math.floor(ms / 1000);
+  const minutes = Math.floor(totalSeconds / 60).toString().padStart(2, '0');
+  const seconds = (totalSeconds % 60).toString().padStart(2, '0');
+  const hundredths = Math.floor((ms % 1000) / 10).toString().padStart(2, '0');
+  return `${minutes}:${seconds}.${hundredths}`;
 };
 
 function TGRTimerControlPageComponent({ gelanggangName }: { gelanggangName: string | null }) {
@@ -36,7 +46,7 @@ function TGRTimerControlPageComponent({ gelanggangName }: { gelanggangName: stri
   const [scheduleDetails, setScheduleDetails] = useState<ScheduleTGR | null>(null);
 
   const [tgrTimerStatus, setTgrTimerStatus] = useState<TGRTimerStatus>(initialGlobalTgrTimerStatus);
-  const [displaySeconds, setDisplaySeconds] = useState(0);
+  const [displayTime, setDisplayTime] = useState(0); // Local state for smooth animation, in ms
   const [matchResultSaved, setMatchResultSaved] = useState<TGRMatchResult | null>(null);
 
   const [isLoading, setIsLoading] = useState(true);
@@ -44,37 +54,28 @@ function TGRTimerControlPageComponent({ gelanggangName }: { gelanggangName: stri
   const [error, setError] = useState<string | null>(null);
   const [matchDetailsLoaded, setMatchDetailsLoaded] = useState(false);
 
-  const timerIntervalRef = useRef<NodeJS.Timeout | null>(null);
+  const animationFrameRef = useRef<number>();
 
+  // Effect for smooth timer animation
   useEffect(() => {
-    // Sync local display with Firestore state, especially on load or when another client pauses.
-    setDisplaySeconds(tgrTimerStatus.timerSeconds);
-  }, [tgrTimerStatus.timerSeconds]);
-
-  useEffect(() => {
-    // This effect runs the timer locally for a smooth display and syncs with Firestore periodically.
-    if (tgrTimerStatus.isTimerRunning) {
-      timerIntervalRef.current = setInterval(() => {
-        setDisplaySeconds(prev => {
-          const newSeconds = prev + 1;
-          // Periodically sync with Firestore so monitoring page is updated
-          if (newSeconds % 2 === 0 && activeMatchId) {
-            const matchDocRef = doc(db, MATCHES_TGR_COLLECTION, activeMatchId);
-            updateDoc(matchDocRef, { "timerStatus.timerSeconds": newSeconds }).catch(err => {
-              console.error("Periodic TGR timer sync failed:", err);
-            });
-          }
-          return newSeconds;
-        });
-      }, 1000);
-    } else {
-      if (timerIntervalRef.current) {
-        clearInterval(timerIntervalRef.current);
-        timerIntervalRef.current = null;
+    const animate = () => {
+      if (tgrTimerStatus.isTimerRunning && tgrTimerStatus.startTimeMs) {
+        const elapsed = Date.now() - tgrTimerStatus.startTimeMs;
+        setDisplayTime(tgrTimerStatus.accumulatedDurationMs + elapsed);
+      } else {
+        setDisplayTime(tgrTimerStatus.accumulatedDurationMs);
       }
-    }
-    return () => { if (timerIntervalRef.current) clearInterval(timerIntervalRef.current); };
-  }, [tgrTimerStatus.isTimerRunning, activeMatchId]);
+      animationFrameRef.current = requestAnimationFrame(animate);
+    };
+
+    animationFrameRef.current = requestAnimationFrame(animate);
+
+    return () => {
+      if (animationFrameRef.current) {
+        cancelAnimationFrame(animationFrameRef.current);
+      }
+    };
+  }, [tgrTimerStatus]);
 
 
   useEffect(() => {
@@ -196,7 +197,7 @@ function TGRTimerControlPageComponent({ gelanggangName }: { gelanggangName: stri
               statusToInitializeWith.currentPerformingSide === null) {
             statusToInitializeWith.currentPerformingSide = initialSideForThisSchedule;
             statusToInitializeWith.matchStatus = 'Pending';
-            statusToInitializeWith.timerSeconds = 0;
+            statusToInitializeWith.accumulatedDurationMs = 0;
             if(initialSideForThisSchedule === 'biru') statusToInitializeWith.performanceDurationBiru = 0;
             if(initialSideForThisSchedule === 'merah') statusToInitializeWith.performanceDurationMerah = 0;
             needsFirestoreWrite = true;
@@ -256,7 +257,7 @@ function TGRTimerControlPageComponent({ gelanggangName }: { gelanggangName: stri
       let currentDBTimerStatus = { ...initialGlobalTgrTimerStatus };
       if (docSnap.exists() && docSnap.data()?.timerStatus) {
         currentDBTimerStatus = docSnap.data()?.timerStatus as TGRTimerStatus;
-      } else { // Initialize if doc or timerStatus doesn't exist
+      } else {
         if (scheduleDetails.pesilatBiruName) currentDBTimerStatus.currentPerformingSide = 'biru';
         else if (scheduleDetails.pesilatMerahName) currentDBTimerStatus.currentPerformingSide = 'merah';
         currentDBTimerStatus.matchStatus = currentDBTimerStatus.currentPerformingSide ? 'Pending' : 'MatchFinished';
@@ -282,16 +283,19 @@ function TGRTimerControlPageComponent({ gelanggangName }: { gelanggangName: stri
     setIsSubmitting(true);
     setError(null);
     try {
-      if (tgrTimerStatus.isTimerRunning) {
+      if (tgrTimerStatus.isTimerRunning) { // Pausing
+        const elapsed = Date.now() - (tgrTimerStatus.startTimeMs || Date.now());
         await updateTimerStatusInFirestoreOnly({ 
             isTimerRunning: false, 
             matchStatus: 'Paused',
-            timerSeconds: displaySeconds,
+            startTimeMs: null,
+            accumulatedDurationMs: tgrTimerStatus.accumulatedDurationMs + elapsed,
         });
-      } else {
+      } else { // Starting/Resuming
         await updateTimerStatusInFirestoreOnly({ 
             isTimerRunning: true, 
-            matchStatus: 'Ongoing' 
+            matchStatus: 'Ongoing',
+            startTimeMs: Date.now(),
         });
       }
     } catch (e) {
@@ -309,16 +313,20 @@ function TGRTimerControlPageComponent({ gelanggangName }: { gelanggangName: stri
     setError(null);
     try {
       const currentSide = tgrTimerStatus.currentPerformingSide;
+      const elapsed = Date.now() - (tgrTimerStatus.startTimeMs || Date.now());
+      const finalDuration = tgrTimerStatus.accumulatedDurationMs + elapsed;
+
       const updates: Partial<TGRTimerStatus> = {
         isTimerRunning: false,
         matchStatus: 'Finished',
-        timerSeconds: displaySeconds,
+        startTimeMs: null,
+        accumulatedDurationMs: finalDuration,
       };
 
       if (currentSide === 'biru') {
-        updates.performanceDurationBiru = displaySeconds;
+        updates.performanceDurationBiru = finalDuration;
       } else if (currentSide === 'merah') {
-        updates.performanceDurationMerah = displaySeconds;
+        updates.performanceDurationMerah = finalDuration;
       }
 
       const isLastParticipant = (currentSide === 'merah') || (currentSide === 'biru' && !scheduleDetails.pesilatMerahName);
@@ -345,13 +353,17 @@ function TGRTimerControlPageComponent({ gelanggangName }: { gelanggangName: stri
     setError(null);
     try {
       const sideToReset = tgrTimerStatus.currentPerformingSide;
-      const updates: Partial<TGRTimerStatus> = { timerSeconds: 0, isTimerRunning: false, matchStatus: 'Pending' };
+      const updates: Partial<TGRTimerStatus> = { 
+          isTimerRunning: false, 
+          matchStatus: 'Pending',
+          startTimeMs: null,
+          accumulatedDurationMs: 0,
+      };
       if (sideToReset === 'biru') updates.performanceDurationBiru = 0;
       else if (sideToReset === 'merah') updates.performanceDurationMerah = 0;
       
       await updateTimerStatusInFirestoreOnly(updates);
-      setDisplaySeconds(0);
-
+      
       const batch = writeBatch(db);
       TGR_JURI_IDS.forEach(juriId => {
           const juriDocRef = doc(db, MATCHES_TGR_COLLECTION, activeMatchId, JURI_SCORES_TGR_SUBCOLLECTION, juriId);
@@ -380,8 +392,9 @@ function TGRTimerControlPageComponent({ gelanggangName }: { gelanggangName: stri
       await updateTimerStatusInFirestoreOnly({
         currentPerformingSide: 'merah',
         matchStatus: 'Pending',
-        timerSeconds: 0,
         isTimerRunning: false,
+        startTimeMs: null,
+        accumulatedDurationMs: 0,
         performanceDurationMerah: 0,
       });
 
@@ -406,7 +419,7 @@ function TGRTimerControlPageComponent({ gelanggangName }: { gelanggangName: stri
     setIsSubmitting(true);
     setError(null);
     try {
-      await updateTimerStatusInFirestoreOnly({ matchStatus: 'Finished', currentPerformingSide: null, isTimerRunning: false });
+      await updateTimerStatusInFirestoreOnly({ matchStatus: 'Finished', currentPerformingSide: null, isTimerRunning: false, accumulatedDurationMs: 0, startTimeMs: null });
 
       const schedulesRef = collection(db, SCHEDULE_TGR_COLLECTION);
       const q = query(
@@ -433,12 +446,6 @@ function TGRTimerControlPageComponent({ gelanggangName }: { gelanggangName: stri
     } finally {
       setIsSubmitting(false);
     }
-  };
-
-  const formatTime = (seconds: number): string => {
-    const minutes = Math.floor(seconds / 60);
-    const remainingSeconds = Math.round(seconds % 60);
-    return `${minutes.toString().padStart(2, '0')}:${remainingSeconds.toString().padStart(2, '0')}`;
   };
 
   const getButtonDisabledState = () => isLoading || isSubmitting || !activeMatchId || !matchDetailsLoaded;
@@ -483,8 +490,8 @@ function TGRTimerControlPageComponent({ gelanggangName }: { gelanggangName: stri
   };
   
   const recordedDurationForSide = (side: 'biru' | 'merah'): string | null => {
-    if (side === 'biru' && tgrTimerStatus.performanceDurationBiru && tgrTimerStatus.performanceDurationBiru > 0) return formatTime(tgrTimerStatus.performanceDurationBiru);
-    if (side === 'merah' && tgrTimerStatus.performanceDurationMerah && tgrTimerStatus.performanceDurationMerah > 0) return formatTime(tgrTimerStatus.performanceDurationMerah);
+    const durationMs = side === 'biru' ? tgrTimerStatus.performanceDurationBiru : tgrTimerStatus.performanceDurationMerah;
+    if (durationMs && durationMs > 0) return formatTime(durationMs);
     return null;
   }
 
@@ -555,8 +562,8 @@ function TGRTimerControlPageComponent({ gelanggangName }: { gelanggangName: stri
 
         <Card className="max-w-lg mx-auto shadow-xl">
           <CardHeader className="text-center">
-            <CardTitle className="text-6xl md:text-8xl font-mono text-primary">
-              {formatTime(displaySeconds)}
+            <CardTitle className="text-6xl md:text-8xl font-mono text-primary tracking-tighter">
+              {formatTime(displayTime)}
             </CardTitle>
             <p className="text-sm text-muted-foreground">
               Status: {getStatusText()}
@@ -582,7 +589,7 @@ function TGRTimerControlPageComponent({ gelanggangName }: { gelanggangName: stri
               Stop & Catat Waktu
             </Button>
             <Button onClick={handleResetTimer} variant="outline" className="w-full py-3 text-lg" disabled={getResetButtonDisabled()}>
-              {isSubmitting && tgrTimerStatus.matchStatus === 'Pending' && tgrTimerStatus.currentPerformingSide && tgrTimerStatus.timerSeconds === 0 ? <Loader2 className="mr-2 h-5 w-5 animate-spin"/> : <RotateCcw className="mr-2 h-5 w-5"/>}
+              {isSubmitting && tgrTimerStatus.matchStatus === 'Pending' && tgrTimerStatus.currentPerformingSide ? <Loader2 className="mr-2 h-5 w-5 animate-spin"/> : <RotateCcw className="mr-2 h-5 w-5"/>}
               Reset Timer ({tgrTimerStatus.currentPerformingSide ? (tgrTimerStatus.currentPerformingSide === 'biru' ? 'Biru' : 'Merah') : 'N/A'})
             </Button>
             

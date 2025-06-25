@@ -1,4 +1,5 @@
 
+
 import type { Timestamp as FirebaseTimestamp } from 'firebase/firestore';
 
 export type PesilatColor = 'Merah' | 'Biru';
@@ -224,12 +225,16 @@ export interface MatchResultTanding {
 
 // --- TGR Scoring Types ---
 export interface TGRTimerStatus {
-  timerSeconds: number; // Elapsed time for stopwatch
   isTimerRunning: boolean;
   matchStatus: 'Pending' | 'Ongoing' | 'Paused' | 'Finished';
   currentPerformingSide: 'biru' | 'merah' | null;
-  performanceDurationBiru?: number; // Actual recorded performance time for Biru
-  performanceDurationMerah?: number; // Actual recorded performance time for Merah
+  // Time when the timer was last started/resumed. Uses a client-side `Date.now()` timestamp.
+  startTimeMs: number | null; 
+  // Total duration the timer has run before the current start time, in milliseconds.
+  accumulatedDurationMs: number; 
+  // Final recorded performance times in milliseconds.
+  performanceDurationBiru?: number;
+  performanceDurationMerah?: number;
 }
 
 export interface GandaElementScores {
