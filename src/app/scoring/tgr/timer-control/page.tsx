@@ -197,7 +197,8 @@ function TGRTimerControlPageComponent({ gelanggangName }: { gelanggangName: stri
               statusToInitializeWith.currentPerformingSide === null) {
             statusToInitializeWith.currentPerformingSide = initialSideForThisSchedule;
             statusToInitializeWith.matchStatus = 'Pending';
-            statusToInitializeWith.accumulatedDurationMs = 0;
+            statusToInitializeWith.accumulatedDurationMs = 0; 
+            statusToInitializeWith.startTimeMs = null; 
             if(initialSideForThisSchedule === 'biru') statusToInitializeWith.performanceDurationBiru = 0;
             if(initialSideForThisSchedule === 'merah') statusToInitializeWith.performanceDurationMerah = 0;
             needsFirestoreWrite = true;
@@ -215,14 +216,14 @@ function TGRTimerControlPageComponent({ gelanggangName }: { gelanggangName: stri
         if (!mounted) return;
         if (snap.exists()) {
           const data = snap.data();
-            if (data?.timerStatus) {
-                setTgrTimerStatus(data.timerStatus as TGRTimerStatus);
-            }
-            if (data?.matchResult) {
-                setMatchResultSaved(data.matchResult as TGRMatchResult);
-            } else {
-                setMatchResultSaved(null);
-            }
+          const fsTimerStatus = data?.timerStatus as TGRTimerStatus | undefined;
+          setTgrTimerStatus(fsTimerStatus ? { ...initialGlobalTgrTimerStatus, ...fsTimerStatus } : initialGlobalTgrTimerStatus);
+          
+          if (data?.matchResult) {
+              setMatchResultSaved(data.matchResult as TGRMatchResult);
+          } else {
+              setMatchResultSaved(null);
+          }
         } else {
           let fallbackSide: 'biru' | 'merah' | null = null;
           if (scheduleDetails?.pesilatBiruName) fallbackSide = 'biru';

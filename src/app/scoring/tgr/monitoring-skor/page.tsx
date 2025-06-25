@@ -308,8 +308,8 @@ function MonitoringSkorTGRPageComponent({ gelanggangName }: { gelanggangName: st
           if (!isMounted) return;
           if (docSnap.exists()) {
             const data = docSnap.data();
-            if (data?.timerStatus) setTgrTimerStatus(data.timerStatus as TGRTimerStatus);
-            else setTgrTimerStatus(initialTgrTimerStatus);
+            const fsTimerStatus = data?.timerStatus as TGRTimerStatus | undefined;
+            setTgrTimerStatus(fsTimerStatus ? { ...initialTgrTimerStatus, ...fsTimerStatus } : initialTgrTimerStatus);
             
             if (data?.matchResult) {
               setWinnerData(data.matchResult as TGRMatchResult);
