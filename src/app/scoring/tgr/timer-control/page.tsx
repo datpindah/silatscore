@@ -52,10 +52,20 @@ function TGRTimerControlPageComponent({ gelanggangName }: { gelanggangName: stri
   }, [tgrTimerStatus.timerSeconds]);
 
   useEffect(() => {
-    // This effect runs the timer locally for a smooth display.
+    // This effect runs the timer locally for a smooth display and syncs with Firestore periodically.
     if (tgrTimerStatus.isTimerRunning) {
       timerIntervalRef.current = setInterval(() => {
-        setDisplaySeconds(prev => prev + 1);
+        setDisplaySeconds(prev => {
+          const newSeconds = prev + 1;
+          // Periodically sync with Firestore so monitoring page is updated
+          if (newSeconds % 2 === 0 && activeMatchId) {
+            const matchDocRef = doc(db, MATCHES_TGR_COLLECTION, activeMatchId);
+            updateDoc(matchDocRef, { "timerStatus.timerSeconds": newSeconds }).catch(err => {
+              console.error("Periodic TGR timer sync failed:", err);
+            });
+          }
+          return newSeconds;
+        });
       }, 1000);
     } else {
       if (timerIntervalRef.current) {
@@ -64,7 +74,7 @@ function TGRTimerControlPageComponent({ gelanggangName }: { gelanggangName: stri
       }
     }
     return () => { if (timerIntervalRef.current) clearInterval(timerIntervalRef.current); };
-  }, [tgrTimerStatus.isTimerRunning]);
+  }, [tgrTimerStatus.isTimerRunning, activeMatchId]);
 
 
   useEffect(() => {
