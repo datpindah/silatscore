@@ -170,6 +170,9 @@ function MonitoringSkorTGRPageComponent({ gelanggangName }: { gelanggangName: st
   const [tgrTimerStatus, setTgrTimerStatus] = useState<TGRTimerStatus>(initialTgrTimerStatus);
   const [allJuriScores, setAllJuriScores] = useState<Record<string, TGRJuriScore | null>>(initialAllJuriScores);
   const [dewanPenalties, setDewanPenalties] = useState<TGRDewanPenalty[]>([]);
+  
+  const [displaySeconds, setDisplaySeconds] = useState(0);
+  const timerIntervalRef = useRef<NodeJS.Timeout | null>(null);
 
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -184,6 +187,31 @@ function MonitoringSkorTGRPageComponent({ gelanggangName }: { gelanggangName: st
   useEffect(() => {
     setMounted(true);
   }, []);
+
+  useEffect(() => {
+    setDisplaySeconds(tgrTimerStatus.timerSeconds);
+  }, [tgrTimerStatus.timerSeconds]);
+
+  useEffect(() => {
+    if (tgrTimerStatus.isTimerRunning) {
+      if (!timerIntervalRef.current) {
+        timerIntervalRef.current = setInterval(() => {
+          setDisplaySeconds(prev => prev + 1);
+        }, 1000);
+      }
+    } else {
+      if (timerIntervalRef.current) {
+        clearInterval(timerIntervalRef.current);
+        timerIntervalRef.current = null;
+      }
+      setDisplaySeconds(tgrTimerStatus.timerSeconds);
+    }
+    return () => {
+      if (timerIntervalRef.current) {
+        clearInterval(timerIntervalRef.current);
+      }
+    };
+  }, [tgrTimerStatus.isTimerRunning, tgrTimerStatus.timerSeconds]);
 
 
   const resetPageData = useCallback(() => {
@@ -539,7 +567,7 @@ function MonitoringSkorTGRPageComponent({ gelanggangName }: { gelanggangName: st
           <div className="text-right">
             <div className="text-xs md:text-sm font-medium text-[var(--monitor-text-muted)]">WAKTU PENAMPILAN</div>
             <div className="text-4xl md:text-6xl font-mono font-bold text-[var(--monitor-timer-text)]">
-              {isLoading && !matchDetailsLoaded ? <Skeleton className="h-12 w-40 bg-[var(--monitor-skeleton-bg)]" /> : formatTime(tgrTimerStatus.timerSeconds)}
+              {isLoading && !matchDetailsLoaded ? <Skeleton className="h-12 w-40 bg-[var(--monitor-skeleton-bg)]" /> : formatTime(displaySeconds)}
             </div>
           </div>
         </div>
