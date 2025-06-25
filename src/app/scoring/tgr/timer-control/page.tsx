@@ -36,6 +36,7 @@ function TGRTimerControlPageComponent({ gelanggangName }: { gelanggangName: stri
   const [scheduleDetails, setScheduleDetails] = useState<ScheduleTGR | null>(null);
 
   const [tgrTimerStatus, setTgrTimerStatus] = useState<TGRTimerStatus>(initialGlobalTgrTimerStatus);
+  const [displaySeconds, setDisplaySeconds] = useState(0);
   const [matchResultSaved, setMatchResultSaved] = useState<TGRMatchResult | null>(null);
 
   const [isLoading, setIsLoading] = useState(true);
@@ -44,6 +45,27 @@ function TGRTimerControlPageComponent({ gelanggangName }: { gelanggangName: stri
   const [matchDetailsLoaded, setMatchDetailsLoaded] = useState(false);
 
   const timerIntervalRef = useRef<NodeJS.Timeout | null>(null);
+
+  useEffect(() => {
+    // Sync local display with Firestore state, especially on load or when another client pauses.
+    setDisplaySeconds(tgrTimerStatus.timerSeconds);
+  }, [tgrTimerStatus.timerSeconds]);
+
+  useEffect(() => {
+    // This effect runs the timer locally for a smooth display.
+    if (tgrTimerStatus.isTimerRunning) {
+      timerIntervalRef.current = setInterval(() => {
+        setDisplaySeconds(prev => prev + 1);
+      }, 1000);
+    } else {
+      if (timerIntervalRef.current) {
+        clearInterval(timerIntervalRef.current);
+        timerIntervalRef.current = null;
+      }
+    }
+    return () => { if (timerIntervalRef.current) clearInterval(timerIntervalRef.current); };
+  }, [tgrTimerStatus.isTimerRunning]);
+
 
   useEffect(() => {
     if (!gelanggangName) {
@@ -212,39 +234,6 @@ function TGRTimerControlPageComponent({ gelanggangName }: { gelanggangName: stri
   }, [activeMatchId, matchDetailsLoaded, scheduleDetails, isLoading]);
 
 
-  useEffect(() => {
-    if (tgrTimerStatus.isTimerRunning && activeMatchId) {
-      timerIntervalRef.current = setInterval(async () => {
-        if (!activeMatchId) { if(timerIntervalRef.current) clearInterval(timerIntervalRef.current); return; }
-        try {
-          const matchDataDocRef = doc(db, MATCHES_TGR_COLLECTION, activeMatchId);
-          const currentDBDoc = await getDoc(matchDataDocRef);
-          if (!currentDBDoc.exists()) {
-            if (timerIntervalRef.current) clearInterval(timerIntervalRef.current);
-            setTgrTimerStatus(prev => ({ ...prev, isTimerRunning: false, matchStatus: 'Pending' }));
-            return;
-          }
-          const currentDBTimerStatus = currentDBDoc.data()?.timerStatus as TGRTimerStatus | undefined;
-          if (!currentDBTimerStatus || !currentDBTimerStatus.isTimerRunning) {
-            if (timerIntervalRef.current) clearInterval(timerIntervalRef.current);
-            if (currentDBTimerStatus) setTgrTimerStatus(currentDBTimerStatus);
-            else setTgrTimerStatus(prev => ({ ...prev, isTimerRunning: false }));
-            return;
-          }
-          const newSeconds = currentDBTimerStatus.timerSeconds + 1;
-          await updateDoc(matchDataDocRef, { "timerStatus.timerSeconds": newSeconds });
-        } catch (e) {
-          console.error("Error updating timer in interval (TGR):", e);
-          if(timerIntervalRef.current) clearInterval(timerIntervalRef.current);
-          setTgrTimerStatus(prev => ({ ...prev, isTimerRunning: false })); 
-        }
-      }, 1000);
-    } else {
-      if (timerIntervalRef.current) { clearInterval(timerIntervalRef.current); timerIntervalRef.current = null; }
-    }
-    return () => { if (timerIntervalRef.current) clearInterval(timerIntervalRef.current); };
-  }, [tgrTimerStatus.isTimerRunning, activeMatchId]);
-
   const updateTimerStatusInFirestoreOnly = useCallback(async (newStatusUpdates: Partial<TGRTimerStatus>) => {
     if (!activeMatchId || !scheduleDetails) { 
         console.warn("Update Firestore (timer only) aborted: No activeMatchId or scheduleDetails"); 
@@ -283,8 +272,18 @@ function TGRTimerControlPageComponent({ gelanggangName }: { gelanggangName: stri
     setIsSubmitting(true);
     setError(null);
     try {
-      if (tgrTimerStatus.isTimerRunning) await updateTimerStatusInFirestoreOnly({ isTimerRunning: false, matchStatus: 'Paused' });
-      else await updateTimerStatusInFirestoreOnly({ isTimerRunning: true, matchStatus: 'Ongoing' });
+      if (tgrTimerStatus.isTimerRunning) {
+        await updateTimerStatusInFirestoreOnly({ 
+            isTimerRunning: false, 
+            matchStatus: 'Paused',
+            timerSeconds: displaySeconds,
+        });
+      } else {
+        await updateTimerStatusInFirestoreOnly({ 
+            isTimerRunning: true, 
+            matchStatus: 'Ongoing' 
+        });
+      }
     } catch (e) {
       console.error("Error in handleStartPauseTimer (TGR):", e);
       setError("Gagal mengubah status timer.");
@@ -303,12 +302,13 @@ function TGRTimerControlPageComponent({ gelanggangName }: { gelanggangName: stri
       const updates: Partial<TGRTimerStatus> = {
         isTimerRunning: false,
         matchStatus: 'Finished',
+        timerSeconds: displaySeconds,
       };
 
       if (currentSide === 'biru') {
-        updates.performanceDurationBiru = tgrTimerStatus.timerSeconds;
+        updates.performanceDurationBiru = displaySeconds;
       } else if (currentSide === 'merah') {
-        updates.performanceDurationMerah = tgrTimerStatus.timerSeconds;
+        updates.performanceDurationMerah = displaySeconds;
       }
 
       const isLastParticipant = (currentSide === 'merah') || (currentSide === 'biru' && !scheduleDetails.pesilatMerahName);
@@ -340,6 +340,7 @@ function TGRTimerControlPageComponent({ gelanggangName }: { gelanggangName: stri
       else if (sideToReset === 'merah') updates.performanceDurationMerah = 0;
       
       await updateTimerStatusInFirestoreOnly(updates);
+      setDisplaySeconds(0);
 
       const batch = writeBatch(db);
       TGR_JURI_IDS.forEach(juriId => {
@@ -426,7 +427,7 @@ function TGRTimerControlPageComponent({ gelanggangName }: { gelanggangName: stri
 
   const formatTime = (seconds: number): string => {
     const minutes = Math.floor(seconds / 60);
-    const remainingSeconds = seconds % 60;
+    const remainingSeconds = Math.round(seconds % 60);
     return `${minutes.toString().padStart(2, '0')}:${remainingSeconds.toString().padStart(2, '0')}`;
   };
 
@@ -545,7 +546,7 @@ function TGRTimerControlPageComponent({ gelanggangName }: { gelanggangName: stri
         <Card className="max-w-lg mx-auto shadow-xl">
           <CardHeader className="text-center">
             <CardTitle className="text-6xl md:text-8xl font-mono text-primary">
-              {formatTime(tgrTimerStatus.timerSeconds)}
+              {formatTime(displaySeconds)}
             </CardTitle>
             <p className="text-sm text-muted-foreground">
               Status: {getStatusText()}
