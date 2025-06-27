@@ -5,7 +5,6 @@ import { useState, useEffect, useCallback, Suspense, use } from 'react';
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
 import { Header } from '@/components/layout/Header';
-import { PageTitle } from '@/components/shared/PageTitle';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogFooter, DialogClose } from "@/components/ui/dialog";
@@ -375,7 +374,7 @@ function JuriPageComponent({ juriId, gelanggangName }: { juriId: string; gelangg
 
   const isInputDisabled = isLoading || !activeMatchId || !matchDetailsLoaded || dewanMatchStatus === 'MatchFinished' || !isTimerRunningByDewan || dewanMatchStatus.startsWith('FinishedRound') || dewanMatchStatus.startsWith('Paused') || dewanMatchStatus === 'Pending';
 
-  const inputDisabledReason = () => {
+  const getStatusText = () => {
     if (configMatchId === undefined && isLoading && !gelanggangName) return "Memuat konfigurasi global...";
     if (!gelanggangName) return "Gelanggang tidak ditemukan di URL.";
     if (isLoading && (activeMatchId || (configMatchId === undefined && gelanggangName))) return `Sinkronisasi untuk Gelanggang: ${gelanggangName || '...'} (Babak Dewan: ${dewanControlledRound})`;
@@ -388,24 +387,16 @@ function JuriPageComponent({ juriId, gelanggangName }: { juriId: string; gelangg
     if (activeMatchId && matchDetailsLoaded && dewanMatchStatus === `OngoingRound${dewanControlledRound}` && !isTimerRunningByDewan) return `Timer Babak ${dewanControlledRound} belum berjalan dari Dewan.`;
     if (activeMatchId && matchDetailsLoaded && dewanMatchStatus === 'Pending') return `Babak ${dewanControlledRound} Menunggu Dewan memulai.`
     if (activeMatchId && matchDetailsLoaded && !isTimerRunningByDewan && dewanMatchStatus !== 'Pending' && dewanMatchStatus !== 'MatchFinished' && !dewanMatchStatus.startsWith('FinishedRound')) return "Input nilai ditutup (timer tidak berjalan).";
-    return "";
+    if (activeMatchId && matchDetailsLoaded && !isInputDisabled) return "Input Nilai Terbuka";
+    return `Memeriksa status untuk Gelanggang: ${gelanggangName || '...'} (Babak Dewan: ${dewanControlledRound})`;
   };
 
   const getStatusIcon = () => {
-    if (!gelanggangName) return <AlertTriangle className="h-5 w-5 text-red-500" />;
-    if (error) return <AlertTriangle className="h-5 w-5 text-red-500" />;
-    if (isLoading || (activeMatchId && !matchDetailsLoaded)) return <Loader2 className="h-5 w-5 text-yellow-500 animate-spin"/>;
-    if (isInputDisabled) return <Lock className="h-5 w-5 text-red-500" />;
-    if (!isInputDisabled && activeMatchId && matchDetailsLoaded) return <Unlock className="h-5 w-5 text-green-500" />;
-    return <Loader2 className="h-5 w-5 text-yellow-500 animate-spin"/>;
-  };
-
-  const getStatusText = () => {
-    const reason = inputDisabledReason();
-    if (reason) return reason;
-    if (activeMatchId && matchDetailsLoaded && !isInputDisabled) return "Input Nilai Terbuka";
-    if (isLoading || (activeMatchId && !matchDetailsLoaded)) return `Memuat data untuk Gelanggang ${gelanggangName || '...'} (Babak Dewan: ${dewanControlledRound})`;
-    return `Memeriksa status untuk Gelanggang: ${gelanggangName || '...'} (Babak Dewan: ${dewanControlledRound})`;
+    if (!gelanggangName || error) return <AlertTriangle className="h-5 w-5 text-yellow-300" />;
+    if (isLoading || (activeMatchId && !matchDetailsLoaded)) return <Loader2 className="h-5 w-5 text-primary-foreground/80 animate-spin"/>;
+    if (isInputDisabled) return <Lock className="h-5 w-5 text-yellow-300" />;
+    if (!isInputDisabled && activeMatchId && matchDetailsLoaded) return <Unlock className="h-5 w-5 text-green-300" />;
+    return <Loader2 className="h-5 w-5 text-primary-foreground/80 animate-spin"/>;
   };
 
   if (!gelanggangName && !isLoading) {
@@ -427,24 +418,26 @@ function JuriPageComponent({ juriId, gelanggangName }: { juriId: string; gelangg
     <div className="flex flex-col min-h-screen">
       <Header />
       <main className="flex-1 container mx-auto px-4 py-8">
-        <PageTitle
-          title={`${juriDisplayName} - Scoring Tanding (Gel: ${gelanggangName || 'N/A'})`}
-        >
-          <div className="flex items-center gap-2">
-             {getStatusIcon()}
-            <span className={cn("text-sm font-medium",
-                error ? 'text-red-600 dark:text-red-400' :
-                (isLoading || (activeMatchId && !matchDetailsLoaded)) ? 'text-yellow-600 dark:text-yellow-400' :
-                isInputDisabled ? 'text-red-500' :
-                'text-green-500'
-            )}>
-                {getStatusText()}
-            </span>
-            <Button variant="outline" asChild>
-              <Link href="/login"><ArrowLeft className="mr-2 h-4 w-4" /> Kembali</Link>
-            </Button>
-          </div>
-        </PageTitle>
+        <Card className="mb-6 shadow-lg bg-primary text-primary-foreground">
+            <CardContent className="p-4">
+              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+                <h1 className="text-3xl font-headline font-bold tracking-tight">
+                  {`${juriDisplayName} - Scoring Tanding (Gel: ${gelanggangName || 'N/A'})`}
+                </h1>
+                <div className="flex items-center gap-2">
+                  {getStatusIcon()}
+                  <span className={cn("text-sm font-medium text-primary-foreground/90",
+                      (error || (isInputDisabled && !isLoading)) && 'text-yellow-300 font-semibold'
+                  )}>
+                      {getStatusText()}
+                  </span>
+                  <Button variant="outline" asChild className="bg-primary-foreground/10 text-primary-foreground border-primary-foreground/20 hover:bg-primary-foreground/20">
+                    <Link href="/login"><ArrowLeft className="mr-2 h-4 w-4" /> Kembali</Link>
+                  </Button>
+                </div>
+              </div>
+            </CardContent>
+        </Card>
 
         <Card className="mb-6 shadow-lg">
           <CardContent className="p-4">
