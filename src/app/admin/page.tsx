@@ -12,11 +12,14 @@ import { Download, Filter, AlertTriangle, Loader2 } from 'lucide-react';
 import { ageCategories, type AgeCategory, type ScheduleTanding, type ScheduleTGR, type TimerStatus, type TGRTimerStatus, type MatchResultTanding } from '@/lib/types';
 import { db } from '@/lib/firebase';
 import { collection, getDocs, doc, getDoc, Timestamp } from 'firebase/firestore';
+import { Switch } from '@/components/ui/switch';
+import { Label } from '@/components/ui/label';
 
 const ALL_CATEGORIES_VALUE = "ALL_CATEGORIES";
 
 export default function AdminDashboardPage() {
   const [selectedAgeCategory, setSelectedAgeCategory] = useState<string>(ALL_CATEGORIES_VALUE);
+  const [showCompletedMatches, setShowCompletedMatches] = useState(false);
   const [allMatches, setAllMatches] = useState<RecapMatchItem[]>([]);
   const [filteredMatches, setFilteredMatches] = useState<RecapMatchItem[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -209,14 +212,23 @@ export default function AdminDashboardPage() {
   }, []);
 
   useEffect(() => {
-    if (selectedAgeCategory === ALL_CATEGORIES_VALUE) {
-      setFilteredMatches(allMatches);
-    } else {
-      setFilteredMatches(
-        allMatches.filter(match => match.ageCategoryDerived === selectedAgeCategory)
-      );
+    let matchesToFilter = [...allMatches];
+
+    // 1. Filter by completion status
+    if (!showCompletedMatches) {
+        matchesToFilter = matchesToFilter.filter(match => !match.status.startsWith('Selesai'));
     }
-  }, [selectedAgeCategory, allMatches]);
+
+    // 2. Filter by age category (only affects Tanding matches)
+    if (selectedAgeCategory !== ALL_CATEGORIES_VALUE) {
+        matchesToFilter = matchesToFilter.filter(match => {
+            // Always include TGR matches, or Tanding matches that match the category
+            return match.type === 'TGR' || match.ageCategoryDerived === selectedAgeCategory;
+        });
+    }
+    
+    setFilteredMatches(matchesToFilter);
+  }, [selectedAgeCategory, allMatches, showCompletedMatches]);
 
   const handleDownloadData = () => {
     // This function might need adjustment if data for download needs to be different from display
@@ -253,11 +265,12 @@ export default function AdminDashboardPage() {
         <CardHeader>
           <CardTitle className="flex items-center gap-2 font-headline">
             <Filter className="h-5 w-5 text-primary" />
-            Filter Data (Kategori Tanding)
+            Filter Tampilan Data
           </CardTitle>
         </CardHeader>
-        <CardContent>
+        <CardContent className="space-y-4">
           <div className="max-w-sm">
+            <Label htmlFor="age-category" className="block text-sm font-medium text-foreground mb-1">Filter Kategori Usia Tanding</Label>
             <Select onValueChange={(value) => setSelectedAgeCategory(value)} value={selectedAgeCategory} disabled={isLoading}>
               <SelectTrigger id="age-category">
                 <SelectValue placeholder="Pilih Kategori Usia" />
@@ -269,9 +282,20 @@ export default function AdminDashboardPage() {
                 ))}
               </SelectContent>
             </Select>
-            <p className="text-sm text-muted-foreground mt-2">
-              Pilih kategori usia untuk memfilter data Tanding yang ditampilkan. Filter ini belum berlaku untuk TGR.
+            <p className="text-xs text-muted-foreground mt-1">
+              Filter ini hanya berlaku untuk data Tanding.
             </p>
+          </div>
+          <div className="flex items-center space-x-2 pt-2">
+            <Switch
+              id="show-completed"
+              checked={showCompletedMatches}
+              onCheckedChange={setShowCompletedMatches}
+              disabled={isLoading}
+            />
+            <Label htmlFor="show-completed" className="font-normal">
+              Tampilkan pertandingan yang sudah selesai
+            </Label>
           </div>
         </CardContent>
       </Card>
