@@ -438,7 +438,7 @@ function DewanDuaPageComponent({ gelanggangName }: { gelanggangName: string | nu
         <Header overrideBackgroundClass="bg-blue-100 dark:bg-gray-900" />
         <main className="flex-1 container mx-auto px-4 py-8">
            <Card className="mt-6 shadow-lg">
-            <CardHeader><CardTitle className="text-xl font-headline text-center text-primary">Dewan 2 - Skor Detail</CardTitle></CardHeader>
+            <CardHeader><CardTitle className="text-xl font-headline text-center text-primary">Dewan 2</CardTitle></CardHeader>
             <CardContent className="p-6 text-center">
                 <p className="mb-4 text-muted-foreground">{error || `Tidak ada pertandingan yang aktif untuk Gelanggang: ${gelanggangName}.`}</p>
                 <Button variant="outline" asChild>
@@ -461,7 +461,7 @@ function DewanDuaPageComponent({ gelanggangName }: { gelanggangName: string | nu
         <Card className="mb-4 shadow-xl bg-gradient-to-b from-blue-600 to-blue-800 text-white">
           <CardHeader className="pb-2 pt-3 px-3 md:pb-3 md:pt-4 md:px-4">
             <CardTitle className="text-xl md:text-2xl font-bold font-headline text-center">
-              DEWAN 2 - SKOR DETAIL (GEL: {gelanggangName || <Skeleton className="h-6 w-10 inline-block bg-blue-400" />})
+              DEWAN 2 (GEL: {gelanggangName || <Skeleton className="h-6 w-10 inline-block bg-blue-400" />})
             </CardTitle>
              {matchDetails && (
               <CardDescription className="text-xs md:text-sm text-blue-200 text-center">
@@ -486,8 +486,8 @@ function DewanDuaPageComponent({ gelanggangName }: { gelanggangName: string | nu
             <div className="text-sm md:text-base font-semibold text-red-600 dark:text-red-400">KONTINGEN {pesilatMerahInfo?.contingent.toUpperCase() || (isLoading ? <Skeleton className="h-5 w-24 bg-muted" /> : '-')}</div>
             <div className="text-lg md:text-2xl font-bold text-red-600 dark:text-red-400">{pesilatMerahInfo?.name.toUpperCase() || (isLoading ? <Skeleton className="h-6 w-32 bg-muted" /> : 'PESILAT MERAH')}</div>
             <div className="mt-2 flex justify-start">
-              <div className="bg-white dark:bg-gray-800 text-red-600 dark:text-red-400 rounded-lg shadow-md w-24 h-24 md:w-28 md:h-28 flex items-center justify-center">
-                {isLoading ? <Skeleton className="h-12 w-10 bg-gray-300 dark:bg-gray-600" /> : <span className="text-4xl md:text-5xl font-bold">{confirmedScoreMerah}</span>}
+              <div className="bg-white dark:bg-gray-800 text-red-600 dark:text-red-400 rounded-lg shadow-md w-20 h-20 md:w-24 md:h-24 flex items-center justify-center">
+                {isLoading ? <Skeleton className="h-10 w-8 bg-gray-300 dark:bg-gray-600" /> : <span className="text-3xl md:text-4xl font-bold">{confirmedScoreMerah}</span>}
               </div>
             </div>
           </div>
@@ -500,8 +500,8 @@ function DewanDuaPageComponent({ gelanggangName }: { gelanggangName: string | nu
              <div className="text-sm md:text-base font-semibold text-blue-600 dark:text-blue-400">KONTINGEN {pesilatBiruInfo?.contingent.toUpperCase() || (isLoading ? <Skeleton className="h-5 w-24 ml-auto bg-muted" /> : '-')}</div>
              <div className="text-lg md:text-2xl font-bold text-blue-600 dark:text-blue-400">{pesilatBiruInfo?.name.toUpperCase() || (isLoading ? <Skeleton className="h-6 w-32 ml-auto bg-muted" /> : 'PESILAT BIRU')}</div>
             <div className="mt-2 flex justify-end">
-              <div className="bg-white dark:bg-gray-800 text-blue-600 dark:text-blue-400 rounded-lg shadow-md w-24 h-24 md:w-28 md:h-28 flex items-center justify-center">
-                 {isLoading ? <Skeleton className="h-12 w-10 bg-gray-300 dark:bg-gray-600" /> : <span className="text-4xl md:text-5xl font-bold">{confirmedScoreBiru}</span>}
+              <div className="bg-white dark:bg-gray-800 text-blue-600 dark:text-blue-400 rounded-lg shadow-md w-20 h-20 md:w-24 md:h-24 flex items-center justify-center">
+                 {isLoading ? <Skeleton className="h-10 w-8 bg-gray-300 dark:bg-gray-600" /> : <span className="text-3xl md:text-4xl font-bold">{confirmedScoreBiru}</span>}
               </div>
             </div>
           </div>
