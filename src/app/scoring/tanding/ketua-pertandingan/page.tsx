@@ -554,7 +554,7 @@ function KetuaPertandinganPageComponent({ gelanggangName }: { gelanggangName: st
             </div>
             <Dialog open={isVerificationCreationDialogOpen} onOpenChange={setIsVerificationCreationDialogOpen}>
               <DialogTrigger asChild>
-                <Button className="w-full md:w-auto bg-yellow-500 hover:bg-yellow-600 text-black py-2 text-sm" disabled={isLoadingPage || dewanTimerStatus.matchStatus === 'MatchFinished' || isCreatingVerification || (activeVerificationDetails !== null && activeVerificationDetails.status === 'pending')} onClick={() => setSelectedVerificationTypeForCreation('')}>
+                <Button className="bg-yellow-500 hover:bg-yellow-600 text-black py-2 text-sm" disabled={isLoadingPage || dewanTimerStatus.matchStatus === 'MatchFinished' || isCreatingVerification || (activeVerificationDetails !== null && activeVerificationDetails.status === 'pending')} onClick={() => setSelectedVerificationTypeForCreation('')}>
                   <span>
                     {isCreatingVerification ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Vote className="mr-2 h-4 w-4"/>}
                     Mulai Verifikasi
@@ -587,7 +587,7 @@ function KetuaPertandinganPageComponent({ gelanggangName }: { gelanggangName: st
                 </DialogFooter>
               </DialogContent>
             </Dialog>
-            <Button onClick={handleTentukanPemenang} className="w-full md:w-auto bg-green-600 hover:bg-green-700 text-white py-2 text-sm" disabled={isLoadingPage || (dewanTimerStatus.matchStatus !== 'MatchFinished' && !matchResultSaved) || !!matchResultSaved || isSavingResult}>
+            <Button onClick={handleTentukanPemenang} className="bg-green-600 hover:bg-green-700 text-white py-2 text-sm" disabled={isLoadingPage || (dewanTimerStatus.matchStatus !== 'MatchFinished' && !matchResultSaved) || !!matchResultSaved || isSavingResult}>
               <Trophy className="mr-2 h-4 w-4"/>
               {matchResultSaved ? 'Hasil Telah Disimpan' : 'Tentukan Pemenang'}
             </Button>
