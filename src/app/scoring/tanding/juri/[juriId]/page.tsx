@@ -53,6 +53,7 @@ function JuriPageComponent({ juriId, gelanggangName }: { juriId: string; gelangg
 
   const [configMatchId, setConfigMatchId] = useState<string | null | undefined>(undefined); 
   const [activeMatchId, setActiveMatchId] = useState<string | null>(null); 
+  const [matchDetails, setMatchDetails] = useState<ScheduleTanding | null>(null);
 
   const [pesilatMerah, setPesilatMerah] = useState<PesilatInfo | null>(null);
   const [pesilatBiru, setPesilatBiru] = useState<PesilatInfo | null>(null);
@@ -171,6 +172,7 @@ function JuriPageComponent({ juriId, gelanggangName }: { juriId: string; gelangg
         if (!mounted) return;
         if (scheduleDoc.exists()) {
           const scheduleData = scheduleDoc.data() as Omit<ScheduleTanding, 'id' | 'date'> & { date: Timestamp | string };
+          setMatchDetails({ ...scheduleData, id: scheduleDoc.id, date: scheduleData.date.toString()});
           setPesilatMerah({ name: scheduleData.pesilatMerahName, contingent: scheduleData.pesilatMerahContingent });
           setPesilatBiru({ name: scheduleData.pesilatBiruName, contingent: scheduleData.pesilatBiruContingent });
           setMatchDetailsLoaded(true);
@@ -420,9 +422,18 @@ function JuriPageComponent({ juriId, gelanggangName }: { juriId: string; gelangg
         <Card className="mb-6 shadow-lg bg-primary text-primary-foreground">
           <CardContent className="p-4">
             <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
-              <h1 className="text-3xl font-headline font-bold tracking-tight">
-                {`${juriDisplayName} (Gel: ${gelanggangName || 'N/A'})`}
-              </h1>
+              <div>
+                <h1 className="text-3xl font-headline font-bold tracking-tight">
+                  {juriDisplayName}
+                </h1>
+                <div className="text-sm opacity-90">
+                  {matchDetails && matchDetailsLoaded ? (
+                      `Gel: ${gelanggangName || 'N/A'} | No.Partai: ${matchDetails.matchNumber}`
+                  ) : (
+                      `Gel: ${gelanggangName || 'N/A'}`
+                  )}
+                </div>
+              </div>
               <div className="flex items-center gap-2">
                 {getStatusIcon()}
                 <span className={cn("text-sm font-medium text-primary-foreground/90",
@@ -440,7 +451,7 @@ function JuriPageComponent({ juriId, gelanggangName }: { juriId: string; gelangg
 
         <Card className="mb-6 shadow-lg">
           <CardContent className="p-4">
-            <div className="grid grid-cols-[1fr_5rem_1fr] text-center mb-4 gap-4 items-center">
+            <div className="grid grid-cols-[1fr_auto_1fr] text-center mb-4 gap-4 items-center">
               <div className="bg-red-600 text-white rounded-lg p-3 shadow-md w-full flex flex-col justify-center text-left">
                   <div className="font-semibold text-lg truncate">{ (activeMatchId && matchDetailsLoaded) ? (pesilatMerah?.name || 'PESILAT MERAH') : <Skeleton className="h-6 w-32 bg-red-400/70" />}</div>
                   <div className="text-sm opacity-90 truncate">Kontingen: { (activeMatchId && matchDetailsLoaded) ? (pesilatMerah?.contingent || '-') : <Skeleton className="h-4 w-24 mt-1 bg-red-400/70" /> }</div>
@@ -456,17 +467,17 @@ function JuriPageComponent({ juriId, gelanggangName }: { juriId: string; gelangg
             </div>
 
             <div className="border rounded-lg overflow-hidden">
-              <div className="grid grid-cols-[1fr_auto_1fr] text-center font-semibold">
+              <div className="grid grid-cols-[1fr_5rem_1fr] text-center font-semibold">
                 <div className="bg-red-500 text-white p-2">MERAH</div>
-                <div className="bg-yellow-400 text-black p-2 w-20">BABAK</div>
+                <div className="bg-yellow-400 text-black p-2">BABAK</div>
                 <div className="bg-blue-500 text-white p-2">BIRU</div>
               </div>
               {[1, 2, 3].map((round) => (
-                <div key={round} className={`grid grid-cols-[1fr_auto_1fr] text-center border-t ${dewanControlledRound === round ? 'bg-yellow-100 dark:bg-yellow-700/30 font-semibold' : 'bg-white dark:bg-gray-800'}`}>
+                <div key={round} className={`grid grid-cols-[1fr_5rem_1fr] text-center border-t ${dewanControlledRound === round ? 'bg-yellow-100 dark:bg-yellow-700/30 font-semibold' : 'bg-white dark:bg-gray-800'}`}>
                   <div className="p-3 tabular-nums min-h-[3rem] flex items-center justify-center border-r">
                     {activeMatchId && matchDetailsLoaded ? renderRoundScoresDisplay(scoresData.merah[`round${round as 1 | 2 | 3}` as keyof RoundScores]) : (((isLoading && activeMatchId) || (!activeMatchId && configMatchId === undefined)) ? <Skeleton className="h-5 w-20"/> : '-')}
                   </div>
-                  <div className={`p-3 font-medium flex items-center justify-center border-r w-20`}>
+                  <div className={`p-3 font-medium flex items-center justify-center border-r`}>
                     {round === 1 ? 'I' : round === 2 ? 'II' : 'III'}
                   </div>
                   <div className="p-3 tabular-nums min-h-[3rem] flex items-center justify-center">
