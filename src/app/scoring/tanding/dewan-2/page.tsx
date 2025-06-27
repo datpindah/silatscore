@@ -405,7 +405,7 @@ function DewanDuaPageComponent({ gelanggangName }: { gelanggangName: string | nu
             <main className="flex-1 container mx-auto p-4 md:p-8 flex flex-col items-center justify-center text-center">
                 <AlertTriangle className="h-12 w-12 text-destructive mb-4" />
                 <h1 className="text-xl font-semibold text-destructive">Gelanggang Diperlukan</h1>
-                <p className="text-muted-foreground mt-2">Parameter 'gelanggang' tidak ditemukan di URL. Halaman ini tidak dapat memuat data pertandingan tanpa nama gelanggang.</p>
+                <p className="text-muted-foreground mt-2">Parameter 'gelanggang' tidak ditemukan di URL. Halaman ini tidak dapat memuat data pertandingan.</p>
                 <Button asChild className="mt-6">
                     <Link href="/login"><ArrowLeft className="mr-2 h-4 w-4"/> Kembali ke Halaman Login</Link>
                 </Button>
@@ -480,21 +480,29 @@ function DewanDuaPageComponent({ gelanggangName }: { gelanggangName: string | nu
           </CardHeader>
         </Card>
 
-        <div className="grid grid-cols-3 items-center text-center mb-4 md:mb-6">
+        <div className="grid grid-cols-3 items-start text-center mb-4 md:mb-6">
           <div className="text-left">
             <div className="text-sm md:text-base font-semibold text-red-600 dark:text-red-400">KONTINGEN {pesilatMerahInfo?.contingent.toUpperCase() || (isLoading ? <Skeleton className="h-5 w-24 bg-muted" /> : '-')}</div>
             <div className="text-lg md:text-2xl font-bold text-red-600 dark:text-red-400">{pesilatMerahInfo?.name.toUpperCase() || (isLoading ? <Skeleton className="h-6 w-32 bg-muted" /> : 'PESILAT MERAH')}</div>
-            <div className="text-3xl md:text-5xl font-bold text-red-600 dark:text-red-400 mt-1">{isLoading ? <Skeleton className="h-10 w-10 bg-muted"/> : confirmedScoreMerah}</div>
+            <div className="mt-2 flex justify-start">
+              <div className="bg-white dark:bg-gray-800 text-red-600 dark:text-red-400 rounded-lg shadow-md w-24 h-24 md:w-32 md:h-32 flex items-center justify-center">
+                {isLoading ? <Skeleton className="h-12 w-10 bg-gray-300 dark:bg-gray-600" /> : <span className="text-5xl md:text-6xl font-bold">{confirmedScoreMerah}</span>}
+              </div>
+            </div>
           </div>
 
-          <div className="text-4xl md:text-6xl font-mono font-bold text-gray-700 dark:text-gray-300">
+          <div className="text-4xl md:text-6xl font-mono font-bold text-gray-700 dark:text-gray-300 pt-8">
             {isLoading ? <Skeleton className="h-12 w-40 mx-auto bg-muted" /> : formatTime(timerStatus.timerSeconds)}
           </div>
 
           <div className="text-right">
              <div className="text-sm md:text-base font-semibold text-blue-600 dark:text-blue-400">KONTINGEN {pesilatBiruInfo?.contingent.toUpperCase() || (isLoading ? <Skeleton className="h-5 w-24 ml-auto bg-muted" /> : '-')}</div>
              <div className="text-lg md:text-2xl font-bold text-blue-600 dark:text-blue-400">{pesilatBiruInfo?.name.toUpperCase() || (isLoading ? <Skeleton className="h-6 w-32 ml-auto bg-muted" /> : 'PESILAT BIRU')}</div>
-            <div className="text-3xl md:text-5xl font-bold text-blue-600 dark:text-blue-400 mt-1">{isLoading ? <Skeleton className="h-10 w-10 ml-auto bg-muted"/> : confirmedScoreBiru}</div>
+            <div className="mt-2 flex justify-end">
+              <div className="bg-white dark:bg-gray-800 text-blue-600 dark:text-blue-400 rounded-lg shadow-md w-24 h-24 md:w-32 md:h-32 flex items-center justify-center">
+                 {isLoading ? <Skeleton className="h-12 w-10 bg-gray-300 dark:bg-gray-600" /> : <span className="text-5xl md:text-6xl font-bold">{confirmedScoreBiru}</span>}
+              </div>
+            </div>
           </div>
         </div>
 
@@ -608,6 +616,7 @@ function PageWithSearchParams() {
     
 
     
+
 
 
 
