@@ -216,8 +216,17 @@ function TGRTimerControlPageComponent({ gelanggangName }: { gelanggangName: stri
         if (!mounted) return;
         if (snap.exists()) {
           const data = snap.data();
-          const fsTimerStatus = data?.timerStatus as TGRTimerStatus | undefined;
-          setTgrTimerStatus(fsTimerStatus ? { ...initialGlobalTgrTimerStatus, ...fsTimerStatus } : initialGlobalTgrTimerStatus);
+          const fsTimerStatus = data?.timerStatus as Partial<TGRTimerStatus> | undefined;
+          
+          const safeTimerStatus: TGRTimerStatus = {
+            ...initialGlobalTgrTimerStatus,
+            ...fsTimerStatus,
+            accumulatedDurationMs: fsTimerStatus?.accumulatedDurationMs ?? 0,
+            performanceDurationBiru: fsTimerStatus?.performanceDurationBiru ?? 0,
+            performanceDurationMerah: fsTimerStatus?.performanceDurationMerah ?? 0,
+            startTimeMs: fsTimerStatus?.startTimeMs ?? null,
+          };
+          setTgrTimerStatus(safeTimerStatus);
           
           if (data?.matchResult) {
               setMatchResultSaved(data.matchResult as TGRMatchResult);
@@ -290,7 +299,7 @@ function TGRTimerControlPageComponent({ gelanggangName }: { gelanggangName: stri
             isTimerRunning: false, 
             matchStatus: 'Paused',
             startTimeMs: null,
-            accumulatedDurationMs: tgrTimerStatus.accumulatedDurationMs + elapsed,
+            accumulatedDurationMs: (tgrTimerStatus.accumulatedDurationMs || 0) + elapsed,
         });
       } else { // Starting/Resuming
         await updateTimerStatusInFirestoreOnly({ 
@@ -315,7 +324,7 @@ function TGRTimerControlPageComponent({ gelanggangName }: { gelanggangName: stri
     try {
       const currentSide = tgrTimerStatus.currentPerformingSide;
       const elapsed = Date.now() - (tgrTimerStatus.startTimeMs || Date.now());
-      const finalDuration = tgrTimerStatus.accumulatedDurationMs + elapsed;
+      const finalDuration = (tgrTimerStatus.accumulatedDurationMs || 0) + elapsed;
 
       const updates: Partial<TGRTimerStatus> = {
         isTimerRunning: false,
