@@ -391,17 +391,6 @@ function JuriPageComponent({ juriId, gelanggangName }: { juriId: string; gelangg
     return "";
   };
 
-  const pageDescription = () => {
-    if (configMatchId === undefined && isLoading && !gelanggangName) return "Memuat konfigurasi...";
-    if (!gelanggangName) return "Gelanggang tidak valid.";
-    if (isLoading && (activeMatchId || (configMatchId === undefined && gelanggangName))) return `Memuat data untuk Gelanggang: ${gelanggangName}...`;
-    if (!activeMatchId && !isLoading && configMatchId === null) return `Tidak ada pertandingan aktif untuk Gelanggang: ${gelanggangName}.`;
-    if (matchDetailsLoaded && activeMatchId) return "Tekan tombol Pukulan (1 poin) atau Tendangan (2 poin) sesuai aksi pesilat.";
-    if (activeMatchId && !matchDetailsLoaded && !isLoading) return "Menunggu detail pertandingan...";
-    if (error) return `Error: ${error}`;
-    return `Menunggu info pertandingan untuk Gelanggang: ${gelanggangName || '...'} (Babak Dewan: ${dewanControlledRound})`;
-  };
-
   const getStatusIcon = () => {
     if (!gelanggangName) return <AlertTriangle className="h-5 w-5 text-red-500" />;
     if (error) return <AlertTriangle className="h-5 w-5 text-red-500" />;
@@ -440,7 +429,6 @@ function JuriPageComponent({ juriId, gelanggangName }: { juriId: string; gelangg
       <main className="flex-1 container mx-auto px-4 py-8">
         <PageTitle
           title={`${juriDisplayName} - Scoring Tanding (Gel: ${gelanggangName || 'N/A'})`}
-          description={pageDescription()}
         >
           <div className="flex items-center gap-2">
              {getStatusIcon()}
