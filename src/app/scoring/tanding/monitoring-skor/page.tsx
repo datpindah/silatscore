@@ -561,9 +561,9 @@ function MonitoringSkorPageComponent({ gelanggangName }: { gelanggangName: strin
       <div className="flex-grow flex flex-col p-1 md:p-2">
         <div className="grid grid-cols-[minmax(0,_1fr)_minmax(0,_0.6fr)_minmax(0,_1fr)] gap-1 items-stretch mb-2 md:mb-4">
           <div className="flex flex-col items-center flex-1">
-            <div className="text-center mb-1 md:mb-2 w-full">
-              <div className="font-bold text-sm md:text-xl text-[var(--monitor-pesilat-biru-name-text)]">{pesilatBiruInfo?.name || <Skeleton className="h-6 w-32 bg-[var(--monitor-skeleton-bg)]" />}</div>
-              <div className="text-xs md:text-base text-[var(--monitor-pesilat-biru-contingent-text)]">{pesilatBiruInfo?.contingent || <Skeleton className="h-4 w-24 bg-[var(--monitor-skeleton-bg)] mt-1" />}</div>
+            <div className="bg-blue-600 text-white rounded-md p-2 md:p-3 text-center mb-1 md:mb-2 w-full shadow-md">
+              <div className="font-bold text-sm md:text-xl uppercase">{pesilatBiruInfo?.name || <Skeleton className="h-6 w-32 bg-blue-400 mx-auto" />}</div>
+              <div className="text-xs md:text-base opacity-90">{pesilatBiruInfo?.contingent || <Skeleton className="h-4 w-24 bg-blue-400 mx-auto mt-1" />}</div>
             </div>
             <div className="flex w-full items-stretch gap-1 md:gap-2 mb-1 md:mb-2 h-56 md:h-72">
               <div className="flex flex-col gap-2 p-0.5 w-20 md:w-24 h-full">
@@ -612,9 +612,9 @@ function MonitoringSkorPageComponent({ gelanggangName }: { gelanggangName: strin
           </div>
 
           <div className="flex flex-col items-center flex-1">
-            <div className="text-center mb-1 md:mb-2 w-full">
-              <div className="font-bold text-sm md:text-xl text-[var(--monitor-pesilat-merah-name-text)]">{pesilatMerahInfo?.name || <Skeleton className="h-6 w-32 bg-[var(--monitor-skeleton-bg)]" />}</div>
-              <div className="text-xs md:text-base text-[var(--monitor-pesilat-merah-contingent-text)]">{pesilatMerahInfo?.contingent || <Skeleton className="h-4 w-24 bg-[var(--monitor-skeleton-bg)] mt-1" />}</div>
+             <div className="bg-red-600 text-white rounded-md p-2 md:p-3 text-center mb-1 md:mb-2 w-full shadow-md">
+              <div className="font-bold text-sm md:text-xl uppercase">{pesilatMerahInfo?.name || <Skeleton className="h-6 w-32 bg-red-400 mx-auto" />}</div>
+              <div className="text-xs md:text-base opacity-90">{pesilatMerahInfo?.contingent || <Skeleton className="h-4 w-24 bg-red-400 mx-auto mt-1" />}</div>
             </div>
             <div className="flex w-full items-stretch gap-1 md:gap-2 mb-1 md:mb-2 h-56 md:h-72">
               <div className="flex-grow h-full bg-gradient-to-b from-red-500 to-red-700 flex items-center justify-center text-5xl md:text-8xl font-bold rounded-md text-[var(--monitor-skor-text)]">
