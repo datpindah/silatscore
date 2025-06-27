@@ -22,70 +22,93 @@ export default function SchemeManagementPage() {
       return;
     }
 
-    // Calculate bracket properties
     const nextPowerOfTwo = 2 ** Math.ceil(Math.log2(participantCount));
-    const totalRounds = Math.log2(nextPowerOfTwo);
     const byes = nextPowerOfTwo - participantCount;
-    
-    const bracketData = [];
-    let matchCounter = 1;
-    let roundMatches: any[] = [];
-    
-    // Simplified seeding for template
-    let participants = Array.from({ length: participantCount }, (_, i) => ({ name: `Peserta ${i + 1}`, contingent: `Kontingen ${i + 1}`}));
-    let byeReceivers = participants.slice(0, byes);
-    let round1Players = participants.slice(byes);
+    const totalMatches = participantCount - 1;
+    const firstRoundMatchCount = (participantCount - byes) / 2;
 
-    // Generate Round 1
-    for (let i = 0; i < round1Players.length / 2; i++) {
-        roundMatches.push({
-            matchInternalId: `R1-M${i+1}`,
-            globalMatchNumber: matchCounter++,
-            roundNumber: 1,
-            roundName: "Penyisihan",
-            participant1_name: "", // User to fill
-            participant1_contingent: "",
-            participant2_name: "", // User to fill
-            participant2_contingent: "",
-            winnerToMatchId: `R2-M${Math.floor(i / 2) + 1}`,
-        });
+    const getRoundName = (totalParticipants: number, currentRoundPlayers: number): string => {
+        if (currentRoundPlayers === 2) return "Final";
+        if (currentRoundPlayers === 4) return "Semi Final";
+        if (currentRoundPlayers === 8) return "Perempat Final";
+        if (currentRoundPlayers === 16) return "Babak 16 Besar";
+        if (currentRoundPlayers === 32) return "Babak 32 Besar";
+        return `Babak Penyisihan (${currentRoundPlayers} Peserta)`;
+    };
+    
+    const bracket = [];
+    let matchNumber = 1;
+    let playersInRound = nextPowerOfTwo;
+    let matchIdCounter = 1;
+    let prevRoundMatchIds: string[] = [];
+
+    while (playersInRound > 1) {
+        const matchesInCurrentRound = playersInRound / 2;
+        const currentRoundMatchIds: string[] = [];
+        const roundName = getRoundName(participantCount, playersInRound);
+
+        for (let i = 0; i < matchesInCurrentRound; i++) {
+            const matchId = `M${matchIdCounter++}`;
+            currentRoundMatchIds.push(matchId);
+            
+            let p1Name = "", p1Contingent = "", p2Name = "", p2Contingent = "";
+            let winnerTo = ""; // This logic can be enhanced later if needed.
+            
+            const isFirstRound = playersInRound === nextPowerOfTwo;
+
+            if (isFirstRound) {
+                // Matches with real players that need filling
+                if (matchNumber <= firstRoundMatchCount) {
+                    p1Name = ""; p1Contingent = "";
+                    p2Name = ""; p2Contingent = "";
+                } else { // Matches involving BYEs
+                    p1Name = ""; p1Contingent = ""; // One real participant
+                    p2Name = "BYE"; p2Contingent = "BYE";
+                }
+            } else {
+                 // Placeholder for subsequent rounds
+                const sourceMatch1 = prevRoundMatchIds.shift();
+                const sourceMatch2 = prevRoundMatchIds.shift();
+                p1Name = `(Pemenang ${sourceMatch1})`;
+                p2Name = `(Pemenang ${sourceMatch2})`;
+                p1Contingent = ""; p2Contingent = "";
+            }
+
+            bracket.push({
+                ID_Pertandingan_Unik: matchId,
+                Nomor_Partai: matchNumber,
+                Babak: roundName,
+                Nama_Peserta_1: p1Name,
+                Kontingen_1: p1Contingent,
+                Nama_Peserta_2: p2Name,
+                Kontingen_2: p2Contingent,
+                Pemenang_Maju_ke_ID: winnerTo,
+            });
+            matchNumber++;
+        }
+        prevRoundMatchIds = [...currentRoundMatchIds];
+        playersInRound /= 2;
+
+        // Stop if we have generated all necessary matches
+        if (matchNumber > totalMatches) break;
     }
 
-    // This is a simplified generator. A full one is more complex.
-    // For now, we will create a simple list for users to fill.
-    const templateData = [
-        {
-            ID_Pertandingan_Unik: "A-DWS-PENYISIHAN-1",
-            Nomor_Partai_Global: 1,
-            Babak: "Penyisihan",
-            Nama_Peserta_1: "",
-            Kontingen_1: "",
-            Nama_Peserta_2: "",
-            Kontingen_2: "",
-            Pemenang_Maju_ke_ID: "A-DWS-PEREMPAT-1",
-        },
-        {
-            ID_Pertandingan_Unik: "A-DWS-PEREMPAT-1",
-            Nomor_Partai_Global: 5,
-            Babak: "Perempat Final",
-            Nama_Peserta_1: "(Pemenang A-DWS-PENYISIHAN-1)",
-            Kontingen_1: "",
-            Nama_Peserta_2: "BYE",
-            Kontingen_2: "BYE",
-            Pemenang_Maju_ke_ID: "A-DWS-SEMI-1",
-        }
-    ];
 
-    const finalData = Array.from({ length: participantCount -1 }, (_, i) => ({
-      ID_Pertandingan_Unik: `MATCH-${i + 1}`,
-      Nomor_Partai_Global: i + 1,
-      Babak: "Penyisihan",
-      Nama_Peserta_1: "",
-      Kontingen_1: "",
-      Nama_Peserta_2: "",
-      Kontingen_2: "",
-      Pemenang_Maju_ke_ID: i + 1 < participantCount - 1 ? `MATCH-${i + 2}`: "FINAL",
-    }));
+    const finalData = bracket.slice(0, totalMatches);
+    
+    // Simple linking for winnerTo field
+    let futureMatchIdCounter = firstRoundMatchCount + byes + 1;
+    for(let i = 0; i < totalMatches; i++){
+        if(i < firstRoundMatchCount + byes) { // if it's a match in a round that feeds into another
+            if(finalData[i+1] && finalData[i].Babak !== 'Final') {
+               const targetMatchIndex = firstRoundMatchCount + byes + Math.floor(i / 2);
+               if (finalData[targetMatchIndex]) {
+                  finalData[i].Pemenang_Maju_ke_ID = finalData[targetMatchIndex].ID_Pertandingan_Unik;
+               }
+            }
+        }
+    }
+
 
     const ws = XLSX.utils.json_to_sheet(finalData);
     const wb = XLSX.utils.book_new();
@@ -135,7 +158,7 @@ export default function SchemeManagementPage() {
                 id="tandingParticipants"
                 type="number"
                 value={tandingParticipants}
-                onChange={(e) => setTandingParticipants(parseInt(e.target.value, 10) || 0)}
+                onChange={(e) => setTandingParticipants(parseInt(e.target.value) || 0)}
                 min="2"
               />
             </div>
@@ -167,7 +190,7 @@ export default function SchemeManagementPage() {
                 id="tgrParticipants"
                 type="number"
                 value={tgrParticipants}
-                onChange={(e) => setTgrParticipants(parseInt(e.target.value, 10) || 0)}
+                onChange={(e) => setTgrParticipants(parseInt(e.target.value) || 0)}
                 min="1"
               />
             </div>
