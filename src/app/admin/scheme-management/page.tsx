@@ -135,7 +135,7 @@ export default function SchemeManagementPage() {
                 id="tandingParticipants"
                 type="number"
                 value={tandingParticipants}
-                onChange={(e) => setTandingParticipants(parseInt(e.target.value, 10))}
+                onChange={(e) => setTandingParticipants(parseInt(e.target.value, 10) || 0)}
                 min="2"
               />
             </div>
@@ -167,7 +167,7 @@ export default function SchemeManagementPage() {
                 id="tgrParticipants"
                 type="number"
                 value={tgrParticipants}
-                onChange={(e) => setTgrParticipants(parseInt(e.target.value, 10))}
+                onChange={(e) => setTgrParticipants(parseInt(e.target.value, 10) || 0)}
                 min="1"
               />
             </div>
