@@ -485,8 +485,8 @@ function DewanDuaPageComponent({ gelanggangName }: { gelanggangName: string | nu
             <div className="text-sm md:text-base font-semibold text-red-600 dark:text-red-400">KONTINGEN {pesilatMerahInfo?.contingent.toUpperCase() || (isLoading ? <Skeleton className="h-5 w-24 bg-muted" /> : '-')}</div>
             <div className="text-lg md:text-2xl font-bold text-red-600 dark:text-red-400">{pesilatMerahInfo?.name.toUpperCase() || (isLoading ? <Skeleton className="h-6 w-32 bg-muted" /> : 'PESILAT MERAH')}</div>
             <div className="mt-2 flex justify-start">
-              <div className="bg-white dark:bg-gray-800 text-red-600 dark:text-red-400 rounded-lg shadow-md w-24 h-24 md:w-32 md:h-32 flex items-center justify-center">
-                {isLoading ? <Skeleton className="h-12 w-10 bg-gray-300 dark:bg-gray-600" /> : <span className="text-5xl md:text-6xl font-bold">{confirmedScoreMerah}</span>}
+              <div className="bg-white dark:bg-gray-800 text-red-600 dark:text-red-400 rounded-lg shadow-md w-20 h-20 md:w-28 md:h-28 flex items-center justify-center">
+                {isLoading ? <Skeleton className="h-12 w-10 bg-gray-300 dark:bg-gray-600" /> : <span className="text-4xl md:text-5xl font-bold">{confirmedScoreMerah}</span>}
               </div>
             </div>
           </div>
@@ -499,8 +499,8 @@ function DewanDuaPageComponent({ gelanggangName }: { gelanggangName: string | nu
              <div className="text-sm md:text-base font-semibold text-blue-600 dark:text-blue-400">KONTINGEN {pesilatBiruInfo?.contingent.toUpperCase() || (isLoading ? <Skeleton className="h-5 w-24 ml-auto bg-muted" /> : '-')}</div>
              <div className="text-lg md:text-2xl font-bold text-blue-600 dark:text-blue-400">{pesilatBiruInfo?.name.toUpperCase() || (isLoading ? <Skeleton className="h-6 w-32 ml-auto bg-muted" /> : 'PESILAT BIRU')}</div>
             <div className="mt-2 flex justify-end">
-              <div className="bg-white dark:bg-gray-800 text-blue-600 dark:text-blue-400 rounded-lg shadow-md w-24 h-24 md:w-32 md:h-32 flex items-center justify-center">
-                 {isLoading ? <Skeleton className="h-12 w-10 bg-gray-300 dark:bg-gray-600" /> : <span className="text-5xl md:text-6xl font-bold">{confirmedScoreBiru}</span>}
+              <div className="bg-white dark:bg-gray-800 text-blue-600 dark:text-blue-400 rounded-lg shadow-md w-20 h-20 md:w-28 md:h-28 flex items-center justify-center">
+                 {isLoading ? <Skeleton className="h-12 w-10 bg-gray-300 dark:bg-gray-600" /> : <span className="text-4xl md:text-5xl font-bold">{confirmedScoreBiru}</span>}
               </div>
             </div>
           </div>
@@ -623,3 +623,6 @@ function PageWithSearchParams() {
 
 
 
+
+
+    
