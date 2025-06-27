@@ -522,17 +522,46 @@ function KetuaPertandinganPageComponent({ gelanggangName }: { gelanggangName: st
           </CardContent>
         </Card>
         <div className="grid grid-cols-2 gap-4 mb-4">
-          <Card className="bg-red-600 text-white rounded-lg p-3 shadow-md">
-             <CardTitle className="text-lg font-bold text-center">{pesilatMerahInfo?.name || (isLoadingPage && activeMatchId ? <Skeleton className="h-6 w-32 bg-red-400 mx-auto" /> : 'PESILAT MERAH')}</CardTitle>
-            <CardDescription className="text-sm opacity-90 text-red-200 text-center">Kontingen: {pesilatMerahInfo?.contingent || (isLoadingPage && activeMatchId ? <Skeleton className="h-4 w-24 bg-red-400 mx-auto mt-1" /> : '-')}</CardDescription>
+          <Card className="bg-red-600 text-white rounded-lg p-3 shadow-md text-center">
+             <CardTitle className="text-lg font-bold">{pesilatMerahInfo?.name || (isLoadingPage && activeMatchId ? <Skeleton className="h-6 w-32 bg-red-400 mx-auto" /> : 'PESILAT MERAH')}</CardTitle>
+            <CardDescription className="text-sm opacity-90 text-red-200">Kontingen: {pesilatMerahInfo?.contingent || (isLoadingPage && activeMatchId ? <Skeleton className="h-4 w-24 bg-red-400 mx-auto mt-1" /> : '-')}</CardDescription>
           </Card>
-          <Card className="bg-blue-600 text-white rounded-lg p-3 shadow-md">
-            <CardTitle className="text-lg font-bold text-center">{pesilatBiruInfo?.name || (isLoadingPage && activeMatchId ? <Skeleton className="h-6 w-32 ml-auto bg-blue-400 mx-auto" /> : 'PESILAT BIRU')}</CardTitle>
-            <CardDescription className="text-sm opacity-90 text-blue-200 text-center">Kontingen: {pesilatBiruInfo?.contingent || (isLoadingPage && activeMatchId ? <Skeleton className="h-4 w-24 ml-auto bg-blue-400 mx-auto mt-1" /> : '-')}</CardDescription>
+          <Card className="bg-blue-600 text-white rounded-lg p-3 shadow-md text-center">
+            <CardTitle className="text-lg font-bold">{pesilatBiruInfo?.name || (isLoadingPage && activeMatchId ? <Skeleton className="h-6 w-32 ml-auto bg-blue-400 mx-auto" /> : 'PESILAT BIRU')}</CardTitle>
+            <CardDescription className="text-sm opacity-90 text-blue-200">Kontingen: {pesilatBiruInfo?.contingent || (isLoadingPage && activeMatchId ? <Skeleton className="h-4 w-24 ml-auto bg-blue-400 mx-auto mt-1" /> : '-')}</CardDescription>
           </Card>
         </div>
-        <div className="mb-6 overflow-x-auto">
-          <Table className="min-w-full border-collapse border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800"><TableHeader><TableRow className="bg-gray-100 dark:bg-gray-700"><TableHead className="border border-gray-300 dark:border-gray-600 text-center text-red-600 dark:text-red-400 py-2 px-1 text-xs sm:text-sm">Hukuman</TableHead><TableHead className="border border-gray-300 dark:border-gray-600 text-center text-red-600 dark:text-red-400 py-2 px-1 text-xs sm:text-sm">Binaan</TableHead><TableHead className="border border-gray-300 dark:border-gray-600 text-center text-red-600 dark:text-red-400 py-2 px-1 text-xs sm:text-sm">Jatuhan</TableHead><TableHead className="border border-gray-300 dark:border-gray-600 text-center py-2 px-1 text-xs sm:text-sm text-gray-700 dark:text-gray-200">Babak</TableHead><TableHead className="border border-gray-300 dark:border-gray-600 text-center text-blue-600 dark:text-blue-400 py-2 px-1 text-xs sm:text-sm">Jatuhan</TableHead><TableHead className="border border-gray-300 dark:border-gray-600 text-center text-blue-600 dark:text-blue-400 py-2 px-1 text-xs sm:text-sm">Binaan</TableHead><TableHead className="border border-gray-300 dark:border-gray-600 text-center text-blue-600 dark:text-blue-400 py-2 px-1 text-xs sm:text-sm">Hukuman</TableHead></TableRow></TableHeader><TableBody>{ROUNDS.map((round) => { const scoresMerah = calculateDisplayScoresForTable(ketuaActionsLog, 'merah', round); const scoresBiru = calculateDisplayScoresForTable(ketuaActionsLog, 'biru', round); return ( <TableRow key={`round-display-${round}`} className={dewanTimerStatus.currentRound === round ? 'bg-yellow-100 dark:bg-yellow-900/30' : ''}><TableCell className="border border-gray-300 dark:border-gray-600 text-center font-medium py-2 px-1 text-gray-800 dark:text-gray-100">{isLoadingPage && !matchDetailsLoaded ? <Skeleton className="h-5 w-8 mx-auto bg-muted"/> : scoresMerah.hukuman}</TableCell><TableCell className="border border-gray-300 dark:border-gray-600 text-center font-medium py-2 px-1 text-gray-800 dark:text-gray-100">{isLoadingPage && !matchDetailsLoaded ? <Skeleton className="h-5 w-8 mx-auto bg-muted"/> : scoresMerah.binaan}</TableCell><TableCell className="border border-gray-300 dark:border-gray-600 text-center font-medium py-2 px-1 text-gray-800 dark:text-gray-100">{isLoadingPage && !matchDetailsLoaded ? <Skeleton className="h-5 w-8 mx-auto bg-muted"/> : scoresMerah.jatuhan}</TableCell><TableCell className="border border-gray-300 dark:border-gray-600 text-center font-bold py-2 px-1 text-gray-800 dark:text-gray-100">{round === 1 ? 'I' : round === 2 ? 'II' : 'III'}</TableCell><TableCell className="border border-gray-300 dark:border-gray-600 text-center font-medium py-2 px-1 text-gray-800 dark:text-gray-100">{isLoadingPage && !matchDetailsLoaded ? <Skeleton className="h-5 w-8 mx-auto bg-muted"/> : scoresBiru.jatuhan}</TableCell><TableCell className="border border-gray-300 dark:border-gray-600 text-center font-medium py-2 px-1 text-gray-800 dark:text-gray-100">{isLoadingPage && !matchDetailsLoaded ? <Skeleton className="h-5 w-8 mx-auto bg-muted"/> : scoresBiru.binaan}</TableCell><TableCell className="border border-gray-300 dark:border-gray-600 text-center font-medium py-2 px-1 text-gray-800 dark:text-gray-100">{isLoadingPage && !matchDetailsLoaded ? <Skeleton className="h-5 w-8 mx-auto bg-muted"/> : scoresBiru.hukuman}</TableCell></TableRow> ); })}</TableBody></Table>
+        <div className="mb-6 rounded-lg border overflow-hidden">
+          <Table className="min-w-full">
+            <TableHeader>
+              <TableRow>
+                <TableHead className="text-center text-red-600 dark:text-red-400 py-2 px-1 text-xs sm:text-sm">Hukuman</TableHead>
+                <TableHead className="text-center text-red-600 dark:text-red-400 py-2 px-1 text-xs sm:text-sm">Binaan</TableHead>
+                <TableHead className="text-center text-red-600 dark:text-red-400 py-2 px-1 text-xs sm:text-sm">Jatuhan</TableHead>
+                <TableHead className="text-center py-2 px-1 text-xs sm:text-sm text-gray-700 dark:text-gray-200">Babak</TableHead>
+                <TableHead className="text-center text-blue-600 dark:text-blue-400 py-2 px-1 text-xs sm:text-sm">Jatuhan</TableHead>
+                <TableHead className="text-center text-blue-600 dark:text-blue-400 py-2 px-1 text-xs sm:text-sm">Binaan</TableHead>
+                <TableHead className="text-center text-blue-600 dark:text-blue-400 py-2 px-1 text-xs sm:text-sm">Hukuman</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {ROUNDS.map((round) => {
+                const scoresMerah = calculateDisplayScoresForTable(ketuaActionsLog, 'merah', round);
+                const scoresBiru = calculateDisplayScoresForTable(ketuaActionsLog, 'biru', round);
+                return (
+                  <TableRow key={`round-display-${round}`} className={cn(dewanTimerStatus.currentRound === round ? 'bg-yellow-100/70 dark:bg-yellow-900/30' : '')}>
+                    <TableCell className="text-center font-medium py-2 px-1 text-gray-800 dark:text-gray-100">{isLoadingPage && !matchDetailsLoaded ? <Skeleton className="h-5 w-8 mx-auto bg-muted"/> : scoresMerah.hukuman}</TableCell>
+                    <TableCell className="text-center font-medium py-2 px-1 text-gray-800 dark:text-gray-100">{isLoadingPage && !matchDetailsLoaded ? <Skeleton className="h-5 w-8 mx-auto bg-muted"/> : scoresMerah.binaan}</TableCell>
+                    <TableCell className="text-center font-medium py-2 px-1 text-gray-800 dark:text-gray-100">{isLoadingPage && !matchDetailsLoaded ? <Skeleton className="h-5 w-8 mx-auto bg-muted"/> : scoresMerah.jatuhan}</TableCell>
+                    <TableCell className="text-center font-bold py-2 px-1 text-gray-800 dark:text-gray-100">{round === 1 ? 'I' : round === 2 ? 'II' : 'III'}</TableCell>
+                    <TableCell className="text-center font-medium py-2 px-1 text-gray-800 dark:text-gray-100">{isLoadingPage && !matchDetailsLoaded ? <Skeleton className="h-5 w-8 mx-auto bg-muted"/> : scoresBiru.jatuhan}</TableCell>
+                    <TableCell className="text-center font-medium py-2 px-1 text-gray-800 dark:text-gray-100">{isLoadingPage && !matchDetailsLoaded ? <Skeleton className="h-5 w-8 mx-auto bg-muted"/> : scoresBiru.binaan}</TableCell>
+                    <TableCell className="text-center font-medium py-2 px-1 text-gray-800 dark:text-gray-100">{isLoadingPage && !matchDetailsLoaded ? <Skeleton className="h-5 w-8 mx-auto bg-muted"/> : scoresBiru.hukuman}</TableCell>
+                  </TableRow>
+                );
+              })}
+            </TableBody>
+          </Table>
         </div>
         <Card className="mb-6 bg-white dark:bg-gray-800">
           <CardHeader>
