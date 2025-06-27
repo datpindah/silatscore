@@ -1,4 +1,3 @@
-
 "use client";
 
 import { useState, useEffect, useCallback, Suspense, use } from 'react'; 
@@ -6,7 +5,7 @@ import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
 import { Header } from '@/components/layout/Header';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent } from '@/components/ui/card';
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogFooter, DialogClose } from "@/components/ui/dialog";
 import { ArrowLeft, MinusSquare, Target, Shield, Lock, Unlock, Loader2, Vote, AlertTriangle } from 'lucide-react';
 import type { ScheduleTanding, VerificationRequest, JuriVoteValue, JuriMatchData as LibJuriMatchData, RoundScores as LibRoundScoresType, ScoreEntry as LibScoreEntryType } from '@/lib/types';
@@ -386,7 +385,6 @@ function JuriPageComponent({ juriId, gelanggangName }: { juriId: string; gelangg
     if (dewanMatchStatus.startsWith('Paused') && isTimerRunningByDewan === false) return `Babak ${dewanControlledRound} Jeda. Input ditutup.`;
     if (activeMatchId && matchDetailsLoaded && dewanMatchStatus === `OngoingRound${dewanControlledRound}` && !isTimerRunningByDewan) return `Timer Babak ${dewanControlledRound} belum berjalan dari Dewan.`;
     if (activeMatchId && matchDetailsLoaded && dewanMatchStatus === 'Pending') return `Babak ${dewanControlledRound} Menunggu Dewan memulai.`
-    if (activeMatchId && matchDetailsLoaded && !isTimerRunningByDewan && dewanMatchStatus !== 'Pending' && dewanMatchStatus !== 'MatchFinished' && !dewanMatchStatus.startsWith('FinishedRound')) return "Input nilai ditutup (timer tidak berjalan).";
     if (activeMatchId && matchDetailsLoaded && !isInputDisabled) return "Input Nilai Terbuka";
     return `Memeriksa status untuk Gelanggang: ${gelanggangName || '...'} (Babak Dewan: ${dewanControlledRound})`;
   };
@@ -419,24 +417,24 @@ function JuriPageComponent({ juriId, gelanggangName }: { juriId: string; gelangg
       <Header />
       <main className="flex-1 container mx-auto px-4 py-8">
         <Card className="mb-6 shadow-lg bg-primary text-primary-foreground">
-            <CardContent className="p-4">
-              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
-                <h1 className="text-3xl font-headline font-bold tracking-tight">
-                  {`${juriDisplayName} - Scoring Tanding (Gel: ${gelanggangName || 'N/A'})`}
-                </h1>
-                <div className="flex items-center gap-2">
-                  {getStatusIcon()}
-                  <span className={cn("text-sm font-medium text-primary-foreground/90",
-                      (error || (isInputDisabled && !isLoading)) && 'text-yellow-300 font-semibold'
-                  )}>
-                      {getStatusText()}
-                  </span>
-                  <Button variant="outline" asChild className="bg-primary-foreground/10 text-primary-foreground border-primary-foreground/20 hover:bg-primary-foreground/20">
-                    <Link href="/login"><ArrowLeft className="mr-2 h-4 w-4" /> Kembali</Link>
-                  </Button>
-                </div>
+          <CardContent className="p-4">
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+              <h1 className="text-3xl font-headline font-bold tracking-tight">
+                {`${juriDisplayName} - Scoring Tanding (Gel: ${gelanggangName || 'N/A'})`}
+              </h1>
+              <div className="flex items-center gap-2">
+                {getStatusIcon()}
+                <span className={cn("text-sm font-medium text-primary-foreground/90",
+                    (error || (isInputDisabled && !isLoading)) && 'text-yellow-300 font-semibold'
+                )}>
+                    {getStatusText()}
+                </span>
+                <Button variant="outline" asChild className="bg-primary-foreground/10 text-primary-foreground border-primary-foreground/20 hover:bg-primary-foreground/20">
+                  <Link href="/login"><ArrowLeft className="mr-2 h-4 w-4" /> Kembali</Link>
+                </Button>
               </div>
-            </CardContent>
+            </div>
+          </CardContent>
         </Card>
 
         <Card className="mb-6 shadow-lg">
@@ -457,13 +455,13 @@ function JuriPageComponent({ juriId, gelanggangName }: { juriId: string; gelangg
             </div>
 
             <div className="border rounded-lg overflow-hidden">
-              <div className="grid grid-cols-3 text-center font-semibold">
+              <div className="grid grid-cols-[1fr_auto_1fr] text-center font-semibold">
                 <div className="bg-red-500 text-white p-2">MERAH</div>
                 <div className="bg-yellow-400 text-black p-2">BABAK</div>
                 <div className="bg-blue-500 text-white p-2">BIRU</div>
               </div>
               {[1, 2, 3].map((round) => (
-                <div key={round} className={`grid grid-cols-3 text-center border-t ${dewanControlledRound === round ? 'bg-yellow-100 dark:bg-yellow-700/30 font-semibold' : 'bg-white dark:bg-gray-800'}`}>
+                <div key={round} className={`grid grid-cols-[1fr_auto_1fr] text-center border-t ${dewanControlledRound === round ? 'bg-yellow-100 dark:bg-yellow-700/30 font-semibold' : 'bg-white dark:bg-gray-800'}`}>
                   <div className="p-3 tabular-nums min-h-[3rem] flex items-center justify-center border-r">
                     {activeMatchId && matchDetailsLoaded ? renderRoundScoresDisplay(scoresData.merah[`round${round as 1 | 2 | 3}` as keyof RoundScores]) : (((isLoading && activeMatchId) || (!activeMatchId && configMatchId === undefined)) ? <Skeleton className="h-5 w-20"/> : '-')}
                   </div>
