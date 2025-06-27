@@ -394,9 +394,9 @@ function JuriPageComponent({ juriId, gelanggangName }: { juriId: string; gelangg
   const pageDescription = () => {
     if (configMatchId === undefined && isLoading && !gelanggangName) return "Memuat konfigurasi...";
     if (!gelanggangName) return "Gelanggang tidak valid.";
-    if (isLoading && (activeMatchId || (configMatchId === undefined && gelanggangName))) return `Memuat data untuk Gelanggang: ${gelanggangName}... (Babak Dewan: ${dewanControlledRound})`;
+    if (isLoading && (activeMatchId || (configMatchId === undefined && gelanggangName))) return `Memuat data untuk Gelanggang: ${gelanggangName}...`;
     if (!activeMatchId && !isLoading && configMatchId === null) return `Tidak ada pertandingan aktif untuk Gelanggang: ${gelanggangName}.`;
-    if (matchDetailsLoaded && activeMatchId) return `${pesilatMerah?.name || 'Merah'} vs ${pesilatBiru?.name || 'Biru'} - Babak Aktif: ${dewanControlledRound}`;
+    if (matchDetailsLoaded && activeMatchId) return `Babak Aktif: ${dewanControlledRound}`;
     if (activeMatchId && !matchDetailsLoaded && !isLoading) return "Menunggu detail pertandingan...";
     if (error) return `Error: ${error}`;
     return `Menunggu info pertandingan untuk Gelanggang: ${gelanggangName || '...'} (Babak Dewan: ${dewanControlledRound})`;
@@ -591,4 +591,3 @@ export default function DynamicJuriPageWithSuspense({ params: paramsProp }: { pa
     </Suspense>
   );
 }
-
