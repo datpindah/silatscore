@@ -439,7 +439,7 @@ function JuriPageComponent({ juriId, gelanggangName }: { juriId: string; gelangg
 
         <Card className="mb-6 shadow-lg">
           <CardContent className="p-4">
-            <div className="flex justify-between items-stretch text-sm mb-4 gap-4">
+             <div className="flex justify-between items-stretch text-sm mb-4 gap-4">
               <div className="bg-red-600 text-white rounded-lg p-3 shadow-md w-2/5 flex flex-col justify-center">
                   <div className="font-semibold text-lg truncate">{ (activeMatchId && matchDetailsLoaded) ? (pesilatMerah?.name || 'PESILAT MERAH') : <Skeleton className="h-6 w-32 bg-red-400/70" />}</div>
                   <div className="text-sm opacity-90 truncate">Kontingen: { (activeMatchId && matchDetailsLoaded) ? (pesilatMerah?.contingent || '-') : <Skeleton className="h-4 w-24 mt-1 bg-red-400/70" /> }</div>
@@ -455,13 +455,13 @@ function JuriPageComponent({ juriId, gelanggangName }: { juriId: string; gelangg
             </div>
 
             <div className="border rounded-lg overflow-hidden">
-              <div className="grid grid-cols-[1fr_auto_1fr] text-center font-semibold">
+              <div className="grid grid-cols-[1fr_5rem_1fr] text-center font-semibold">
                 <div className="bg-red-500 text-white p-2">MERAH</div>
                 <div className="bg-yellow-400 text-black p-2">BABAK</div>
                 <div className="bg-blue-500 text-white p-2">BIRU</div>
               </div>
               {[1, 2, 3].map((round) => (
-                <div key={round} className={`grid grid-cols-[1fr_auto_1fr] text-center border-t ${dewanControlledRound === round ? 'bg-yellow-100 dark:bg-yellow-700/30 font-semibold' : 'bg-white dark:bg-gray-800'}`}>
+                <div key={round} className={`grid grid-cols-[1fr_5rem_1fr] text-center border-t ${dewanControlledRound === round ? 'bg-yellow-100 dark:bg-yellow-700/30 font-semibold' : 'bg-white dark:bg-gray-800'}`}>
                   <div className="p-3 tabular-nums min-h-[3rem] flex items-center justify-center border-r">
                     {activeMatchId && matchDetailsLoaded ? renderRoundScoresDisplay(scoresData.merah[`round${round as 1 | 2 | 3}` as keyof RoundScores]) : (((isLoading && activeMatchId) || (!activeMatchId && configMatchId === undefined)) ? <Skeleton className="h-5 w-20"/> : '-')}
                   </div>
