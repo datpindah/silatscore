@@ -502,19 +502,22 @@ function KetuaPertandinganPageComponent({ gelanggangName }: { gelanggangName: st
           <CardContent className="p-3 md:p-4">
             <h1 className="text-xl md:text-2xl font-bold font-headline">Ketua Pertandingan (Gel: {gelanggangName || 'N/A'})</h1>
             <div className="text-xs md:text-sm opacity-90">
-              {isLoadingPage && !matchDetailsLoaded ? <Skeleton className="h-4 w-32 inline-block bg-primary-foreground/30" /> : (matchDetails?.place || `Partai No. ${matchDetails?.matchNumber || 'N/A'}`)}
-              {matchDetails && matchDetailsLoaded && ` - ${matchDetails.class} (${matchDetails.round})`}
+              {isLoadingPage && !matchDetailsLoaded ? (
+                <Skeleton className="h-4 w-48 inline-block bg-primary-foreground/30" />
+              ) : (
+                matchDetails && `Partai No. ${matchDetails.matchNumber} - ${matchDetails.class} (${matchDetails.round})`
+              )}
             </div>
           </CardContent>
         </Card>
         <div className="grid grid-cols-2 gap-4 mb-4">
-          <div className="bg-red-600 text-white rounded-lg p-3 shadow-md">
-            <div className="text-lg font-bold truncate">{pesilatMerahInfo?.name || (isLoadingPage && activeMatchId ? <Skeleton className="h-6 w-32 bg-red-400" /> : 'PESILAT MERAH')}</div>
-            <div className="text-sm opacity-90 truncate">Kontingen: {pesilatMerahInfo?.contingent || (isLoadingPage && activeMatchId ? <Skeleton className="h-4 w-24 bg-red-400" /> : '-')}</div>
+          <div className="bg-red-600 text-white rounded-lg p-3 shadow-md text-center">
+            <div className="text-lg font-bold truncate">{pesilatMerahInfo?.name || (isLoadingPage && activeMatchId ? <Skeleton className="h-6 w-32 bg-red-400 mx-auto" /> : 'PESILAT MERAH')}</div>
+            <div className="text-sm opacity-90 truncate">Kontingen: {pesilatMerahInfo?.contingent || (isLoadingPage && activeMatchId ? <Skeleton className="h-4 w-24 bg-red-400 mx-auto" /> : '-')}</div>
           </div>
-          <div className="bg-blue-600 text-white rounded-lg p-3 shadow-md text-right">
-            <div className="text-lg font-bold truncate">{pesilatBiruInfo?.name || (isLoadingPage && activeMatchId ? <Skeleton className="h-6 w-32 ml-auto bg-blue-400" /> : 'PESILAT BIRU')}</div>
-            <div className="text-sm opacity-90 truncate">Kontingen: {pesilatBiruInfo?.contingent || (isLoadingPage && activeMatchId ? <Skeleton className="h-4 w-24 ml-auto bg-blue-400" /> : '-')}</div>
+          <div className="bg-blue-600 text-white rounded-lg p-3 shadow-md text-center">
+            <div className="text-lg font-bold truncate">{pesilatBiruInfo?.name || (isLoadingPage && activeMatchId ? <Skeleton className="h-6 w-32 ml-auto bg-blue-400 mx-auto" /> : 'PESILAT BIRU')}</div>
+            <div className="text-sm opacity-90 truncate">Kontingen: {pesilatBiruInfo?.contingent || (isLoadingPage && activeMatchId ? <Skeleton className="h-4 w-24 ml-auto bg-blue-400 mx-auto" /> : '-')}</div>
           </div>
         </div>
         <div className="mb-6 overflow-x-auto">
