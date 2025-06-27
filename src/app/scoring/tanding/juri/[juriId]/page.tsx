@@ -448,17 +448,18 @@ function JuriPageComponent({ juriId, gelanggangName }: { juriId: string; gelangg
 
         <Card className="mb-6 shadow-lg">
           <CardContent className="p-4">
-            <div className="flex justify-between items-center text-sm mb-4">
-              <div className="text-red-600">
-                <div className="font-semibold text-lg">{ (activeMatchId && matchDetailsLoaded) ? (pesilatMerah?.name || 'PESILAT MERAH') : ((isLoading && activeMatchId) ? <Skeleton className="h-6 w-32" /> : 'PESILAT MERAH')}</div>
-                <div>Kontingen: { (activeMatchId && matchDetailsLoaded) ? (pesilatMerah?.contingent || '-') : ((isLoading && activeMatchId) ? <Skeleton className="h-4 w-24 mt-1" /> : '-') }</div>
+            <div className="flex justify-between items-stretch text-sm mb-4 gap-4">
+              <div className="bg-red-600 text-white rounded-lg p-3 shadow-md w-2/5 flex flex-col justify-center">
+                  <div className="font-semibold text-lg truncate">{ (activeMatchId && matchDetailsLoaded) ? (pesilatMerah?.name || 'PESILAT MERAH') : <Skeleton className="h-6 w-32 bg-red-400/70" />}</div>
+                  <div className="text-sm opacity-90 truncate">Kontingen: { (activeMatchId && matchDetailsLoaded) ? (pesilatMerah?.contingent || '-') : <Skeleton className="h-4 w-24 mt-1 bg-red-400/70" /> }</div>
               </div>
-              <div className="text-lg font-bold text-gray-700 dark:text-gray-300">
-                Babak: <span className="text-primary">{dewanControlledRound}</span>
+              <div className="text-lg font-bold text-gray-700 dark:text-gray-300 flex flex-col items-center justify-center">
+                  <span>Babak</span>
+                  <span className="text-4xl text-primary font-headline">{dewanControlledRound}</span>
               </div>
-              <div className="text-blue-600 text-right">
-                <div className="font-semibold text-lg">{(activeMatchId && matchDetailsLoaded) ? (pesilatBiru?.name || 'PESILAT BIRU') : ((isLoading && activeMatchId) ? <Skeleton className="h-6 w-32" /> : 'PESILAT BIRU')}</div>
-                <div>Kontingen: {(activeMatchId && matchDetailsLoaded) ? (pesilatBiru?.contingent || '-') : ((isLoading && activeMatchId) ? <Skeleton className="h-4 w-24 mt-1" /> : '-') }</div>
+              <div className="bg-blue-600 text-white rounded-lg p-3 shadow-md text-right w-2/5 flex flex-col justify-center">
+                  <div className="font-semibold text-lg truncate">{(activeMatchId && matchDetailsLoaded) ? (pesilatBiru?.name || 'PESILAT BIRU') : <Skeleton className="h-6 w-32 ml-auto bg-blue-400/70" />}</div>
+                  <div className="text-sm opacity-90 truncate">Kontingen: {(activeMatchId && matchDetailsLoaded) ? (pesilatBiru?.contingent || '-') : <Skeleton className="h-4 w-24 mt-1 ml-auto bg-blue-400/70" /> }</div>
               </div>
             </div>
 
