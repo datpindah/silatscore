@@ -11,8 +11,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Download, Upload, GitBranch, Loader2 } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import { db } from '@/lib/firebase';
-import { doc, setDoc, Timestamp, collection } from 'firebase/firestore';
-import { ageCategories, tgrCategoriesList, type TGRCategoryType, type Scheme, type SchemeParticipant, type SchemeRound, type SchemeMatch, type ScheduleTanding, type ScheduleTGR } from '@/lib/types';
+import { doc, setDoc, Timestamp } from 'firebase/firestore';
+import { ageCategories, tgrCategoriesList, type TGRCategoryType, type Scheme, type SchemeParticipant, type SchemeRound, type SchemeMatch } from '@/lib/types';
 
 
 export default function SchemeManagementPage() {
@@ -56,76 +56,72 @@ export default function SchemeManagementPage() {
     };
     
     const bracket: Omit<SchemeMatch, 'status'>[] = [];
-    let matchNumberCounter = 1;
     let matchIdCounter = 1;
     let playersInRound = nextPowerOfTwo;
-    let prevRoundMatchIds: (string | null)[] = Array.from({ length: nextPowerOfTwo }, (_, i) => `Peserta ${i + 1}`);
+    let prevRoundMatchHolders: (string | null)[] = Array.from({ length: nextPowerOfTwo }, (_, i) => `Peserta ${i + 1}`);
 
+    let globalMatchNumberCounter = 1;
 
     while (playersInRound > 1) {
         const matchesInCurrentRound = playersInRound / 2;
-        const currentRoundMatchIds: (string | null)[] = [];
+        const currentRoundMatchHolders: (string | null)[] = [];
         const roundName = getRoundName(nextPowerOfTwo, playersInRound);
 
         for (let i = 0; i < matchesInCurrentRound; i++) {
             const matchId = `M${matchIdCounter++}`;
-            currentRoundMatchIds.push(matchId);
+            currentRoundMatchHolders.push(matchId);
             
+            const p1Source = prevRoundMatchHolders.shift() || '';
+            const p2Source = prevRoundMatchHolders.shift() || '';
+
             let p1Name = "", p1Contingent = "", p2Name = "", p2Contingent = "";
 
             const isFirstRound = playersInRound === nextPowerOfTwo;
+            const isByeMatch = (participantCount - byes > 0 && i >= firstRoundMatchCount) && isFirstRound;
 
             if (isFirstRound) {
-                if (i < firstRoundMatchCount) { // Real match
-                    p1Name = ""; p1Contingent = "";
-                    p2Name = ""; p2Contingent = "";
-                } else { // Bye match (goes directly to next round)
+                if(isByeMatch){
                     p1Name = ""; p1Contingent = "";
                     p2Name = "BYE"; p2Contingent = "BYE";
+                } else {
+                    p1Name = ""; p1Contingent = "";
+                    p2Name = ""; p2Contingent = "";
                 }
             } else {
-                 const sourceMatch1 = prevRoundMatchIds.shift() || '';
-                 const sourceMatch2 = prevRoundMatchIds.shift() || '';
-                 p1Name = `(Pemenang ${sourceMatch1})`;
-                 p2Name = `(Pemenang ${sourceMatch2})`;
+                 p1Name = `(Pemenang ${p1Source})`;
+                 p2Name = `(Pemenang ${p2Source})`;
             }
 
             bracket.push({
                 matchInternalId: matchId,
-                globalMatchNumber: matchNumberCounter++,
+                globalMatchNumber: globalMatchNumberCounter++,
                 roundName: roundName,
-                participant1: p1Name ? { name: p1Name, contingent: p1Contingent } : null,
-                participant2: p2Name ? { name: p2Name, contingent: p2Contingent } : null,
-                winnerToMatchId: "", // Will be filled later
+                participant1: p1Name !== '' ? { name: p1Name, contingent: p1Contingent } : null,
+                participant2: p2Name !== '' ? { name: p2Name, contingent: p2Contingent } : null,
+                winnerToMatchId: "", 
             });
         }
-        prevRoundMatchIds = [...currentRoundMatchIds];
+        prevRoundMatchHolders = [...currentRoundMatchHolders];
         playersInRound /= 2;
 
-        if (matchNumberCounter > totalMatches) break;
+        if (globalMatchNumberCounter > totalMatches) break;
     }
-
 
     const finalData = bracket.slice(0, totalMatches);
     
-    let matchIndexForNextRound = firstRoundMatchCount;
-    const firstRoundByeMatches = bracket.filter(m => m.roundName === getRoundName(nextPowerOfTwo, nextPowerOfTwo) && m.participant2?.name === "BYE");
-    if(firstRoundByeMatches.length > 0){
-        matchIndexForNextRound = bracket.findIndex(m => m.roundName === getRoundName(nextPowerOfTwo, nextPowerOfTwo / 2));
-    } else {
-        matchIndexForNextRound = bracket.findIndex(m => m.roundName === getRoundName(nextPowerOfTwo, nextPowerOfTwo/2));
-    }
-
-
     for(let i = 0; i < totalMatches; i++){
       if(finalData[i].roundName === 'Final') continue;
       
       const currentRoundName = finalData[i].roundName;
       let nextRoundName = '';
-      const roundNames = ['Penyisihan', 'Babak 32 Besar', 'Babak 16 Besar', 'Perempat Final', 'Semi Final', 'Final'];
+      const roundNames = ['Babak Awal', 'Babak Penyisihan', 'Babak 32 Besar', 'Babak 16 Besar', 'Perempat Final', 'Semi Final', 'Final'];
       const currentRoundIndex = roundNames.indexOf(currentRoundName);
       if(currentRoundIndex !== -1 && currentRoundIndex < roundNames.length - 1) {
         nextRoundName = roundNames[currentRoundIndex + 1];
+      } else {
+        // Fallback for custom round names if needed
+        if(currentRoundName.includes("Perempat")) nextRoundName = "Semi Final";
+        if(currentRoundName.includes("Semi")) nextRoundName = "Final";
       }
       
       const matchesInCurrentRound = finalData.filter(m => m.roundName === currentRoundName);
@@ -140,20 +136,16 @@ export default function SchemeManagementPage() {
       }
     }
 
-
     const excelData = finalData.map(d => ({
         "ID_Pertandingan_Unik": d.matchInternalId,
-        "Nomor_Partai_Global": d.globalMatchNumber,
+        "Nomor_Partai": d.globalMatchNumber,
         "Babak": d.roundName,
-        "Tanggal_YYYY-MM-DD": new Date().toISOString().split('T')[0], // Default to today
-        "Gelanggang": "Gelanggang A", // Default value
         "Nama_Peserta_1": d.participant1?.name || "",
         "Kontingen_1": d.participant1?.contingent || "",
         "Nama_Peserta_2": d.participant2?.name || "",
         "Kontingen_2": d.participant2?.contingent || "",
         "Pemenang_Maju_ke_ID": d.winnerToMatchId || "",
     }));
-
 
     const ws = XLSX.utils.json_to_sheet(excelData);
     const wb = XLSX.utils.book_new();
@@ -166,11 +158,7 @@ export default function SchemeManagementPage() {
   const handleDownloadTgrTemplate = () => {
     const templateData = Array.from({ length: tgrParticipants }, (_, i) => ({
       "Nomor_Undian": i + 1,
-      "Tanggal_YYYY-MM-DD": new Date().toISOString().split('T')[0],
-      "Gelanggang": "Gelanggang TGR",
-      "Pool_Grup": "A",
-      "Babak": "Penyisihan",
-      "Nama_Peserta": "",
+      "Nama_Peserta": "", // For multiple names in Ganda/Regu, use comma separation.
       "Kontingen": "",
     }));
 
@@ -193,7 +181,7 @@ export default function SchemeManagementPage() {
       const worksheet = workbook.Sheets[sheetName];
       const jsonData = XLSX.utils.sheet_to_json(worksheet) as any[];
 
-      const expectedHeaders = ["ID_Pertandingan_Unik", "Nomor_Partai_Global", "Babak", "Tanggal_YYYY-MM-DD", "Gelanggang", "Nama_Peserta_1", "Kontingen_1", "Nama_Peserta_2", "Kontingen_2", "Pemenang_Maju_ke_ID"];
+      const expectedHeaders = ["ID_Pertandingan_Unik", "Nomor_Partai", "Babak", "Nama_Peserta_1", "Kontingen_1", "Nama_Peserta_2", "Kontingen_2", "Pemenang_Maju_ke_ID"];
       const actualHeaders = Object.keys(jsonData[0]);
       if (!expectedHeaders.every(h => actualHeaders.includes(h))) {
         throw new Error("Format header file XLSX tidak sesuai. Harap unduh templat yang benar.");
@@ -208,21 +196,21 @@ export default function SchemeManagementPage() {
         
         const p1Name = row["Nama_Peserta_1"];
         const p1Contingent = row["Kontingen_1"];
-        if (p1Name && p1Name !== "BYE" && p1Name.trim() !== "" && !p1Name.startsWith("(Pemenang")) {
+        if (p1Name && p1Name !== "BYE" && String(p1Name).trim() !== "" && !String(p1Name).startsWith("(Pemenang")) {
             const key = `${p1Name}-${p1Contingent}`;
             if (!participantsMap.has(key)) participantsMap.set(key, { id: key, name: p1Name, contingent: p1Contingent });
         }
         
         const p2Name = row["Nama_Peserta_2"];
         const p2Contingent = row["Kontingen_2"];
-         if (p2Name && p2Name !== "BYE" && p2Name.trim() !== "" && !p2Name.startsWith("(Pemenang")) {
+        if (p2Name && p2Name !== "BYE" && String(p2Name).trim() !== "" && !String(p2Name).startsWith("(Pemenang")) {
             const key = `${p2Name}-${p2Contingent}`;
             if (!participantsMap.has(key)) participantsMap.set(key, { id: key, name: p2Name, contingent: p2Contingent });
         }
 
         roundsMap.get(babak)!.push({
           matchInternalId: row["ID_Pertandingan_Unik"],
-          globalMatchNumber: row["Nomor_Partai_Global"],
+          globalMatchNumber: row["Nomor_Partai"],
           roundName: babak,
           participant1: p1Name ? { name: p1Name, contingent: p1Contingent } : null,
           participant2: p2Name ? { name: p2Name, contingent: p2Contingent } : null,
@@ -231,8 +219,9 @@ export default function SchemeManagementPage() {
         });
       });
 
-      const finalRounds: SchemeRound[] = Array.from(roundsMap.entries()).map(([name, matches], index) => ({
-        roundNumber: index + 1, 
+      const roundOrder = ['Babak Awal', 'Babak Penyisihan', 'Babak 32 Besar', 'Babak 16 Besar', 'Perempat Final', 'Semi Final', 'Final'];
+      const finalRounds: SchemeRound[] = Array.from(roundsMap.entries()).map(([name, matches]) => ({
+        roundNumber: roundOrder.indexOf(name) !== -1 ? roundOrder.indexOf(name) : 99, 
         name,
         matches,
       })).sort((a,b) => a.roundNumber - b.roundNumber);
@@ -254,40 +243,7 @@ export default function SchemeManagementPage() {
       
       await setDoc(doc(db, "schemes", schemeId), newScheme);
       
-      let createdSchedulesCount = 0;
-      if (newScheme.rounds.length > 0) {
-        const firstRoundMatches = newScheme.rounds[0].matches.filter(m => m.participant1?.name !== 'BYE' && m.participant2?.name !== 'BYE');
-        
-        for (const match of firstRoundMatches) {
-          const rowData = jsonData.find(row => row.ID_Pertandingan_Unik === match.matchInternalId);
-          if (rowData) {
-            const scheduleData: Omit<ScheduleTanding, 'id'> = {
-              matchNumber: rowData.Nomor_Partai_Global,
-              date: rowData["Tanggal_YYYY-MM-DD"],
-              place: rowData.Gelanggang,
-              round: match.roundName,
-              class: tandingClass, // from state
-              pesilatMerahName: match.participant1?.name || '',
-              pesilatMerahContingent: match.participant1?.contingent || '',
-              pesilatBiruName: match.participant2?.name || '',
-              pesilatBiruContingent: match.participant2?.contingent || '',
-            };
-
-            const firestoreDate = typeof scheduleData.date === 'number'
-              ? Timestamp.fromDate(new Date(1899, 11, 30 + scheduleData.date))
-              : Timestamp.fromDate(new Date(scheduleData.date + 'T00:00:00'));
-
-            const scheduleDataForFirestore = { ...scheduleData, date: firestoreDate };
-            
-            const newScheduleId = `${schemeId}-match-${match.globalMatchNumber}`;
-            const scheduleRef = doc(db, 'schedules_tanding', newScheduleId);
-            await setDoc(scheduleRef, scheduleDataForFirestore);
-            createdSchedulesCount++;
-          }
-        }
-      }
-
-      alert(`Skema Tanding berhasil diunggah. ${createdSchedulesCount} jadwal pertandingan babak pertama telah dibuat dan akan muncul di halaman Jadwal Tanding.`);
+      alert(`Skema Tanding untuk ${tandingClass} (${tandingAge}) berhasil disimpan. Anda sekarang dapat membuat jadwal untuk pertandingan babak pertama di halaman 'Jadwal Tanding'.`);
 
     } catch (err) {
       console.error("Error processing tanding scheme file:", err);
@@ -309,7 +265,7 @@ export default function SchemeManagementPage() {
       const worksheet = workbook.Sheets[sheetName];
       const jsonData = XLSX.utils.sheet_to_json(worksheet) as any[];
 
-      const expectedHeaders = ["Nomor_Undian", "Tanggal_YYYY-MM-DD", "Gelanggang", "Pool_Grup", "Babak", "Nama_Peserta", "Kontingen"];
+      const expectedHeaders = ["Nomor_Undian", "Nama_Peserta", "Kontingen"];
       const actualHeaders = Object.keys(jsonData[0]);
        if (!expectedHeaders.every(h => actualHeaders.includes(h))) {
         throw new Error("Format header file XLSX TGR tidak sesuai. Harap unduh templat yang benar.");
@@ -333,41 +289,13 @@ export default function SchemeManagementPage() {
           tgrCategory: tgrCategory,
           participantCount: participants.length,
           participants: participants,
-          rounds: [], // TGR schemes might not have bracket rounds
+          rounds: [], // TGR schemes don't have bracket rounds in this model
           createdAt: Timestamp.now(),
       };
 
       await setDoc(doc(db, "schemes", schemeId), newScheme);
-
-      let createdSchedulesCount = 0;
-      for (const row of jsonData) {
-        const participantNames = String(row.Nama_Peserta).split(',').map(name => name.trim());
-
-        const scheduleData: Omit<ScheduleTGR, 'id'> = {
-          lotNumber: row.Nomor_Undian,
-          category: tgrCategory,
-          date: row["Tanggal_YYYY-MM-DD"],
-          place: row.Gelanggang,
-          round: row.Babak,
-          pesilatMerahName: participantNames[0] || '',
-          pesilatMerahContingent: row.Kontingen,
-          pesilatBiruName: participantNames[1] || '',
-          pesilatBiruContingent: participantNames[1] ? row.Kontingen : '',
-        };
-
-        const firestoreDate = typeof scheduleData.date === 'number'
-          ? Timestamp.fromDate(new Date(1899, 11, 30 + scheduleData.date))
-          : Timestamp.fromDate(new Date(scheduleData.date + 'T00:00:00'));
-        
-        const scheduleDataForFirestore = { ...scheduleData, date: firestoreDate };
-        
-        const newScheduleId = `${schemeId}-lot-${row.Nomor_Undian}`;
-        const scheduleRef = doc(db, 'schedules_tgr', newScheduleId);
-        await setDoc(scheduleRef, scheduleDataForFirestore);
-        createdSchedulesCount++;
-      }
       
-      alert(`Skema TGR berhasil diunggah. ${createdSchedulesCount} jadwal pertandingan telah dibuat dan akan muncul di halaman Jadwal TGR.`);
+      alert(`Daftar Peserta TGR untuk ${tgrCategory} (${tgrAge}) berhasil disimpan. Anda sekarang dapat membuat jadwal di halaman 'Jadwal TGR'.`);
 
     } catch (err) {
        console.error("Error processing TGR scheme file:", err);
@@ -381,13 +309,13 @@ export default function SchemeManagementPage() {
 
   return (
     <>
-      <PageTitle title="Manajemen Skema Pertandingan" description="Buat templat skema berdasarkan jumlah peserta, isi, dan unggah untuk integrasi otomatis dengan jadwal." />
+      <PageTitle title="Manajemen Skema Pertandingan" description="Buat templat, isi daftar peserta, dan unggah untuk membuat blueprint bagan atau daftar peserta." />
       
       <div className="grid md:grid-cols-2 gap-8">
         <Card className="shadow-lg">
           <CardHeader>
             <CardTitle className="text-2xl font-headline text-primary flex items-center"><GitBranch className="mr-2" />Skema Tanding</CardTitle>
-            <CardDescription>Generate templat skema untuk kategori Tanding (sistem gugur).</CardDescription>
+            <CardDescription>Generate templat bagan Tanding, isi nama peserta, lalu unggah untuk menyimpan struktur pertandingannya.</CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -401,7 +329,7 @@ export default function SchemeManagementPage() {
                   </Select>
                </div>
                 <div>
-                  <Label htmlFor="tandingClass">Nama Kelas</Label>
+                  <Label htmlFor="tandingClass">Nama Kelas Tanding</Label>
                   <Input
                     id="tandingClass"
                     value={tandingClass}
@@ -434,7 +362,7 @@ export default function SchemeManagementPage() {
               </Button>
             </div>
              <p className="text-xs text-muted-foreground mt-2">
-              Unduh templat, isi nama peserta, tanggal, dan gelanggang, lalu unggah kembali untuk membuat jadwal otomatis.
+              Unggah skema untuk menyimpan blueprint bagan. Pembuatan jadwal dilakukan terpisah di halaman Jadwal Tanding.
             </p>
           </CardContent>
         </Card>
@@ -442,7 +370,7 @@ export default function SchemeManagementPage() {
         <Card className="shadow-lg">
           <CardHeader>
             <CardTitle className="text-2xl font-headline text-primary flex items-center"><GitBranch className="mr-2" />Skema TGR</CardTitle>
-            <CardDescription>Generate templat daftar peserta untuk kategori TGR (Tunggal, Ganda, Regu).</CardDescription>
+            <CardDescription>Generate templat daftar peserta TGR, isi, lalu unggah untuk menyimpan daftar pesertanya.</CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -484,11 +412,11 @@ export default function SchemeManagementPage() {
               <input type="file" ref={tgrFileInputRef} onChange={processUploadedTgrFile} accept=".xlsx" style={{ display: 'none' }} />
               <Button onClick={() => tgrFileInputRef.current?.click()} variant="outline" className="w-full" disabled={isUploading}>
                 {isUploading ? <Loader2 className="mr-2 h-4 w-4 animate-spin"/> : <Upload className="mr-2 h-4 w-4" />}
-                Unggah Skema TGR
+                Unggah Daftar Peserta
               </Button>
             </div>
              <p className="text-xs text-muted-foreground mt-2">
-              Sistem TGR umumnya berbasis skor. Templat ini digunakan untuk mendaftarkan semua peserta dalam satu kategori.
+              Unggah daftar peserta TGR. Pembuatan jadwal dilakukan terpisah di halaman Jadwal TGR.
             </p>
           </CardContent>
         </Card>
