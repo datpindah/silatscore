@@ -847,7 +847,7 @@ function DewanSatuPageComponent() {
       <main className="flex-1 container mx-auto px-2 py-4 md:px-4 md:py-6">
         <Card className="mb-4 shadow-xl bg-primary text-primary-foreground">
           <CardContent className="p-3 md:p-4 text-center">
-            <h1 className="text-xl md:text-2xl font-bold font-headline">PENCAK SILAT - GELANGGANG: {gelanggangName || <Loader2 className="inline h-5 w-5 animate-spin"/>}</h1>
+            <h1 className="text-xl md:text-2xl font-bold font-headline">DEWAN 1 - GELANGGANG: {gelanggangName || <Loader2 className="inline h-5 w-5 animate-spin"/>}</h1>
             {matchDetails && (<p className="text-xs md:text-sm">Partai No. {matchDetails.matchNumber} | {matchDetails.round} | {matchDetails.class}</p>)}
             {error && !isLoading && !matchDetails && <p className="text-xs md:text-sm text-yellow-300 mt-1">Gagal memuat detail pertandingan. {error}</p>}
           </CardContent>
@@ -981,4 +981,3 @@ interface CombinedScoreEntry extends ScoreEntry {
   round: keyof LibRoundScores;
   color: 'merah' | 'biru';
 }
-
