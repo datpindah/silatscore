@@ -325,3 +325,48 @@ export interface TGRMatchData {
   matchResult?: TGRMatchResult;
 }
 // --- End TGR Scoring Types ---
+
+
+// --- SCHEME MANAGEMENT TYPES ---
+export interface SchemeParticipant {
+  id: string; // Unique ID for the participant, can be generated
+  name: string;
+  contingent: string;
+  seed?: number; // Optional for seeding
+}
+
+export interface SchemeMatch {
+  matchInternalId: string; // Unique ID within the scheme, e.g., 'A-DWS-R1-M1'
+  globalMatchNumber?: number; // The user-facing match number (1, 2, 3...)
+  roundNumber: number;
+  roundName: string;
+  
+  // These can be participant names/ids or 'BYE'
+  participant1: { name: string; contingent: string } | null;
+  participant2: { name:string; contingent: string } | null;
+
+  winnerToMatchId: string | null; // The matchInternalId the winner proceeds to
+  winnerToSlot?: 'participant1' | 'participant2'; // Which slot the winner takes in the next match
+
+  scheduleId?: string; // Link to the actual schedule document in schedules_tanding/tgr
+  status: 'PENDING' | 'SCHEDULED' | 'COMPLETED';
+  winnerId?: string | null; // The ID of the winning participant
+}
+
+export interface SchemeRound {
+  roundNumber: number;
+  name: string; // "Penyisihan", "Perempat Final", etc.
+  matches: SchemeMatch[];
+}
+
+export interface Scheme {
+  id: string; // e.g., 'tanding-kelas-a-dewasa-putra'
+  type: 'Tanding' | 'TGR';
+  className: string; // e.g., "Kelas A Dewasa Putra"
+  category?: TGRCategoryType; // For TGR
+  participantCount: number;
+  participants: SchemeParticipant[]; // The master list of participants
+  rounds: SchemeRound[]; // The generated bracket structure
+  createdAt: FirebaseTimestamp;
+}
+// --- END SCHEME MANAGEMENT TYPES ---
