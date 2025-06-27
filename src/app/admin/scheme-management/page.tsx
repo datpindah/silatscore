@@ -7,13 +7,20 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Download, Upload, GitBranch } from 'lucide-react';
 import * as XLSX from 'xlsx';
+import { ageCategories, tgrCategoriesList, type TGRCategoryType } from '@/lib/types';
+
 
 export default function SchemeManagementPage() {
+  const [tandingAge, setTandingAge] = useState<string>('Dewasa');
+  const [tandingClass, setTandingClass] = useState('Kelas A Putra');
   const [tandingParticipants, setTandingParticipants] = useState(8);
+
+  const [tgrAge, setTgrAge] = useState<string>('Remaja');
+  const [tgrCategory, setTgrCategory] = useState<TGRCategoryType>('Tunggal');
   const [tgrParticipants, setTgrParticipants] = useState(10);
-  const [className, setClassName] = useState('Kelas A Dewasa Putra');
 
   const handleDownloadTandingTemplate = () => {
     const participantCount = tandingParticipants;
@@ -25,58 +32,63 @@ export default function SchemeManagementPage() {
     const nextPowerOfTwo = 2 ** Math.ceil(Math.log2(participantCount));
     const byes = nextPowerOfTwo - participantCount;
     const totalMatches = participantCount - 1;
-    const firstRoundMatchCount = (participantCount - byes) / 2;
+    let firstRoundMatchCount = (participantCount - byes) / 2;
+    // If there are no byes, all participants play in the first round.
+    if (byes === 0) {
+        firstRoundMatchCount = participantCount / 2;
+    }
 
-    const getRoundName = (totalParticipants: number, currentRoundPlayers: number): string => {
+
+    const getRoundName = (totalParticipantsInBracket: number, currentRoundPlayers: number): string => {
         if (currentRoundPlayers === 2) return "Final";
         if (currentRoundPlayers === 4) return "Semi Final";
         if (currentRoundPlayers === 8) return "Perempat Final";
         if (currentRoundPlayers === 16) return "Babak 16 Besar";
         if (currentRoundPlayers === 32) return "Babak 32 Besar";
-        return `Babak Penyisihan (${currentRoundPlayers} Peserta)`;
+        if (totalParticipantsInBracket > currentRoundPlayers) return "Babak Penyisihan";
+        return "Babak Pertama"; // Fallback for smaller brackets
     };
     
     const bracket = [];
-    let matchNumber = 1;
-    let playersInRound = nextPowerOfTwo;
+    let matchNumberCounter = 1;
     let matchIdCounter = 1;
-    let prevRoundMatchIds: string[] = [];
+    let playersInRound = nextPowerOfTwo;
+    let prevRoundMatchIds: (string | null)[] = Array.from({ length: nextPowerOfTwo }, (_, i) => `Peserta ${i + 1}`);
+
 
     while (playersInRound > 1) {
         const matchesInCurrentRound = playersInRound / 2;
-        const currentRoundMatchIds: string[] = [];
-        const roundName = getRoundName(participantCount, playersInRound);
+        const currentRoundMatchIds: (string | null)[] = [];
+        const roundName = getRoundName(nextPowerOfTwo, playersInRound);
 
         for (let i = 0; i < matchesInCurrentRound; i++) {
             const matchId = `M${matchIdCounter++}`;
             currentRoundMatchIds.push(matchId);
             
             let p1Name = "", p1Contingent = "", p2Name = "", p2Contingent = "";
-            let winnerTo = ""; // This logic can be enhanced later if needed.
-            
+            let winnerTo = "";
+
             const isFirstRound = playersInRound === nextPowerOfTwo;
 
             if (isFirstRound) {
-                // Matches with real players that need filling
-                if (matchNumber <= firstRoundMatchCount) {
+                // If it is a match for players (not byes)
+                if (i < firstRoundMatchCount) {
                     p1Name = ""; p1Contingent = "";
                     p2Name = ""; p2Contingent = "";
-                } else { // Matches involving BYEs
-                    p1Name = ""; p1Contingent = ""; // One real participant
+                } else { // This is a bye slot
+                    p1Name = ""; p1Contingent = "";
                     p2Name = "BYE"; p2Contingent = "BYE";
                 }
             } else {
-                 // Placeholder for subsequent rounds
-                const sourceMatch1 = prevRoundMatchIds.shift();
-                const sourceMatch2 = prevRoundMatchIds.shift();
-                p1Name = `(Pemenang ${sourceMatch1})`;
-                p2Name = `(Pemenang ${sourceMatch2})`;
-                p1Contingent = ""; p2Contingent = "";
+                 const sourceMatch1 = prevRoundMatchIds.shift() || '';
+                 const sourceMatch2 = prevRoundMatchIds.shift() || '';
+                 p1Name = `(Pemenang ${sourceMatch1})`;
+                 p2Name = `(Pemenang ${sourceMatch2})`;
             }
 
             bracket.push({
                 ID_Pertandingan_Unik: matchId,
-                Nomor_Partai: matchNumber,
+                Nomor_Partai: matchNumberCounter++,
                 Babak: roundName,
                 Nama_Peserta_1: p1Name,
                 Kontingen_1: p1Contingent,
@@ -84,27 +96,22 @@ export default function SchemeManagementPage() {
                 Kontingen_2: p2Contingent,
                 Pemenang_Maju_ke_ID: winnerTo,
             });
-            matchNumber++;
         }
         prevRoundMatchIds = [...currentRoundMatchIds];
         playersInRound /= 2;
 
-        // Stop if we have generated all necessary matches
-        if (matchNumber > totalMatches) break;
+        if (matchNumberCounter > totalMatches) break;
     }
 
 
     const finalData = bracket.slice(0, totalMatches);
     
-    // Simple linking for winnerTo field
-    let futureMatchIdCounter = firstRoundMatchCount + byes + 1;
+    let nextRoundMatchIndex = firstRoundMatchCount + byes;
     for(let i = 0; i < totalMatches; i++){
-        if(i < firstRoundMatchCount + byes) { // if it's a match in a round that feeds into another
-            if(finalData[i+1] && finalData[i].Babak !== 'Final') {
-               const targetMatchIndex = firstRoundMatchCount + byes + Math.floor(i / 2);
-               if (finalData[targetMatchIndex]) {
-                  finalData[i].Pemenang_Maju_ke_ID = finalData[targetMatchIndex].ID_Pertandingan_Unik;
-               }
+        if (finalData[i].Babak !== 'Final') {
+            const targetMatch = finalData[nextRoundMatchIndex + Math.floor(i / 2)];
+            if(targetMatch) {
+               finalData[i].Pemenang_Maju_ke_ID = targetMatch.ID_Pertandingan_Unik;
             }
         }
     }
@@ -113,14 +120,15 @@ export default function SchemeManagementPage() {
     const ws = XLSX.utils.json_to_sheet(finalData);
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, "Skema Tanding");
-    XLSX.writeFile(wb, `Template_Skema_Tanding_${className.replace(/\s+/g, '_')}_${participantCount}_Peserta.xlsx`);
+    const safeTandingAge = tandingAge.replace(/\s+/g, '_');
+    const safeTandingClass = tandingClass.replace(/\s+/g, '_');
+    XLSX.writeFile(wb, `Template_Skema_Tanding_${safeTandingAge}_${safeTandingClass}_${participantCount}_Peserta.xlsx`);
   };
 
   const handleDownloadTgrTemplate = () => {
     const templateData = Array.from({ length: tgrParticipants }, (_, i) => ({
       Nomor_Undian: i + 1,
       Pool_Grup: "A",
-      Kategori_TGR: "Tunggal",
       Nama_Peserta: "",
       Kontingen: "",
     }));
@@ -128,7 +136,9 @@ export default function SchemeManagementPage() {
     const ws = XLSX.utils.json_to_sheet(templateData);
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, "Skema TGR");
-    XLSX.writeFile(wb, `Template_Skema_TGR_${tgrParticipants}_Peserta.xlsx`);
+    const safeTgrAge = tgrAge.replace(/\s+/g, '_');
+    const safeTgrCategory = tgrCategory.replace(/\s+/g, '_');
+    XLSX.writeFile(wb, `Template_Skema_TGR_${safeTgrAge}_${safeTgrCategory}_${tgrParticipants}_Peserta.xlsx`);
   };
 
 
@@ -143,14 +153,25 @@ export default function SchemeManagementPage() {
             <CardDescription>Generate templat skema untuk kategori Tanding (sistem gugur).</CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
-            <div>
-              <Label htmlFor="className">Nama Kelas</Label>
-              <Input
-                id="className"
-                value={className}
-                onChange={(e) => setClassName(e.target.value)}
-                placeholder="cth: Kelas A Dewasa Putra"
-              />
+             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+               <div>
+                  <Label htmlFor="tandingAge">Kategori Usia</Label>
+                  <Select onValueChange={setTandingAge} value={tandingAge}>
+                    <SelectTrigger id="tandingAge"><SelectValue placeholder="Pilih Kategori Usia" /></SelectTrigger>
+                    <SelectContent>
+                      {ageCategories.map(cat => <SelectItem key={cat} value={cat}>{cat}</SelectItem>)}
+                    </SelectContent>
+                  </Select>
+               </div>
+                <div>
+                  <Label htmlFor="tandingClass">Nama Kelas</Label>
+                  <Input
+                    id="tandingClass"
+                    value={tandingClass}
+                    onChange={(e) => setTandingClass(e.target.value)}
+                    placeholder="cth: Kelas A Putra"
+                  />
+                </div>
             </div>
             <div>
               <Label htmlFor="tandingParticipants">Jumlah Peserta</Label>
@@ -184,6 +205,26 @@ export default function SchemeManagementPage() {
             <CardDescription>Generate templat daftar peserta untuk kategori TGR (Tunggal, Ganda, Regu).</CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
+             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <Label htmlFor="tgrAge">Kategori Usia</Label>
+                   <Select onValueChange={setTgrAge} value={tgrAge}>
+                    <SelectTrigger id="tgrAge"><SelectValue placeholder="Pilih Kategori Usia" /></SelectTrigger>
+                    <SelectContent>
+                      {ageCategories.map(cat => <SelectItem key={cat} value={cat}>{cat}</SelectItem>)}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div>
+                  <Label htmlFor="tgrCategory">Kategori TGR</Label>
+                  <Select onValueChange={(v) => setTgrCategory(v as TGRCategoryType)} value={tgrCategory}>
+                    <SelectTrigger id="tgrCategory"><SelectValue placeholder="Pilih Kategori TGR" /></SelectTrigger>
+                    <SelectContent>
+                      {tgrCategoriesList.map(cat => <SelectItem key={cat} value={cat}>{cat}</SelectItem>)}
+                    </SelectContent>
+                  </Select>
+                </div>
+             </div>
             <div>
               <Label htmlFor="tgrParticipants">Jumlah Peserta/Tim</Label>
               <Input
