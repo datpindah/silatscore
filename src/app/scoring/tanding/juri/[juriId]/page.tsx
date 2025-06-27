@@ -1,3 +1,4 @@
+
 "use client";
 
 import { useState, useEffect, useCallback, Suspense, use } from 'react'; 
@@ -403,7 +404,7 @@ function JuriPageComponent({ juriId, gelanggangName }: { juriId: string; gelangg
             <main className="flex-1 container mx-auto p-4 md:p-8 flex flex-col items-center justify-center text-center">
                 <AlertTriangle className="h-12 w-12 text-destructive mb-4" />
                 <h1 className="text-xl font-semibold text-destructive">Gelanggang Diperlukan</h1>
-                <p className="text-muted-foreground mt-2">Parameter 'gelanggang' tidak ditemukan di URL. Halaman Juri tidak dapat memuat data pertandingan tanpa nama gelanggang.</p>
+                <p className="text-muted-foreground mt-2">Parameter 'gelanggang' tidak ditemukan di URL. Halaman Juri tidak dapat memuat data pertandingan.</p>
                 <Button asChild className="mt-6">
                     <Link href="/login"><ArrowLeft className="mr-2 h-4 w-4"/> Kembali ke Halaman Login</Link>
                 </Button>
@@ -420,7 +421,7 @@ function JuriPageComponent({ juriId, gelanggangName }: { juriId: string; gelangg
           <CardContent className="p-4">
             <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
               <h1 className="text-3xl font-headline font-bold tracking-tight">
-                {`${juriDisplayName} - Scoring Tanding (Gel: ${gelanggangName || 'N/A'})`}
+                {`${juriDisplayName} (Gel: ${gelanggangName || 'N/A'})`}
               </h1>
               <div className="flex items-center gap-2">
                 {getStatusIcon()}
@@ -439,33 +440,33 @@ function JuriPageComponent({ juriId, gelanggangName }: { juriId: string; gelangg
 
         <Card className="mb-6 shadow-lg">
           <CardContent className="p-4">
-             <div className="flex justify-between items-stretch text-sm mb-4 gap-4">
-              <div className="bg-red-600 text-white rounded-lg p-3 shadow-md w-2/5 flex flex-col justify-center">
+            <div className="grid grid-cols-[1fr_5rem_1fr] text-center mb-4 gap-4 items-center">
+              <div className="bg-red-600 text-white rounded-lg p-3 shadow-md w-full flex flex-col justify-center text-left">
                   <div className="font-semibold text-lg truncate">{ (activeMatchId && matchDetailsLoaded) ? (pesilatMerah?.name || 'PESILAT MERAH') : <Skeleton className="h-6 w-32 bg-red-400/70" />}</div>
                   <div className="text-sm opacity-90 truncate">Kontingen: { (activeMatchId && matchDetailsLoaded) ? (pesilatMerah?.contingent || '-') : <Skeleton className="h-4 w-24 mt-1 bg-red-400/70" /> }</div>
               </div>
               <div className="text-lg font-bold text-gray-700 dark:text-gray-300 flex flex-col items-center justify-center">
-                  <span>Babak</span>
+                  <span className="text-base">Babak</span>
                   <span className="text-4xl text-primary font-headline">{dewanControlledRound}</span>
               </div>
-              <div className="bg-blue-600 text-white rounded-lg p-3 shadow-md text-right w-2/5 flex flex-col justify-center">
+              <div className="bg-blue-600 text-white rounded-lg p-3 shadow-md text-right w-full flex flex-col justify-center">
                   <div className="font-semibold text-lg truncate">{(activeMatchId && matchDetailsLoaded) ? (pesilatBiru?.name || 'PESILAT BIRU') : <Skeleton className="h-6 w-32 ml-auto bg-blue-400/70" />}</div>
                   <div className="text-sm opacity-90 truncate">Kontingen: {(activeMatchId && matchDetailsLoaded) ? (pesilatBiru?.contingent || '-') : <Skeleton className="h-4 w-24 mt-1 ml-auto bg-blue-400/70" /> }</div>
               </div>
             </div>
 
             <div className="border rounded-lg overflow-hidden">
-              <div className="grid grid-cols-[1fr_5rem_1fr] text-center font-semibold">
+              <div className="grid grid-cols-[1fr_auto_1fr] text-center font-semibold">
                 <div className="bg-red-500 text-white p-2">MERAH</div>
-                <div className="bg-yellow-400 text-black p-2">BABAK</div>
+                <div className="bg-yellow-400 text-black p-2 w-20">BABAK</div>
                 <div className="bg-blue-500 text-white p-2">BIRU</div>
               </div>
               {[1, 2, 3].map((round) => (
-                <div key={round} className={`grid grid-cols-[1fr_5rem_1fr] text-center border-t ${dewanControlledRound === round ? 'bg-yellow-100 dark:bg-yellow-700/30 font-semibold' : 'bg-white dark:bg-gray-800'}`}>
+                <div key={round} className={`grid grid-cols-[1fr_auto_1fr] text-center border-t ${dewanControlledRound === round ? 'bg-yellow-100 dark:bg-yellow-700/30 font-semibold' : 'bg-white dark:bg-gray-800'}`}>
                   <div className="p-3 tabular-nums min-h-[3rem] flex items-center justify-center border-r">
                     {activeMatchId && matchDetailsLoaded ? renderRoundScoresDisplay(scoresData.merah[`round${round as 1 | 2 | 3}` as keyof RoundScores]) : (((isLoading && activeMatchId) || (!activeMatchId && configMatchId === undefined)) ? <Skeleton className="h-5 w-20"/> : '-')}
                   </div>
-                  <div className={`p-3 font-medium flex items-center justify-center border-r`}>
+                  <div className={`p-3 font-medium flex items-center justify-center border-r w-20`}>
                     {round === 1 ? 'I' : round === 2 ? 'II' : 'III'}
                   </div>
                   <div className="p-3 tabular-nums min-h-[3rem] flex items-center justify-center">
