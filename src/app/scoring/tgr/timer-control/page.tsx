@@ -572,19 +572,20 @@ function TGRTimerControlPageComponent({ gelanggangName }: { gelanggangName: stri
 
         <Card className="max-w-lg mx-auto shadow-xl">
           <CardHeader className="text-center">
-            <CardTitle className="text-6xl md:text-8xl font-mono text-primary tracking-tighter">
-              {formatTime(displayTime)}
+            <CardTitle className="font-mono text-primary tracking-tighter flex items-baseline justify-center">
+              <span className="text-6xl md:text-8xl">{formatTime(displayTime).split('.')[0]}</span>
+              <span className="text-4xl md:text-6xl self-end">.{formatTime(displayTime).split('.')[1] || '00'}</span>
             </CardTitle>
             <p className="text-sm text-muted-foreground">
               Status: {getStatusText()}
             </p>
             {scheduleDetails?.pesilatBiruName && recordedDurationForSide('biru') && (
-                <p className={cn("text-xs", tgrTimerStatus.currentPerformingSide === 'biru' && tgrTimerStatus.matchStatus === 'Finished' ? "text-green-600 font-semibold" : "text-gray-500")}>
+                <p className={cn("text-xs", tgrTimerStatus.matchStatus === 'Finished' && tgrTimerStatus.performanceDurationBiru && tgrTimerStatus.performanceDurationBiru > 0 ? "text-green-600 font-semibold" : "text-gray-500")}>
                     Waktu Tercatat Biru: {recordedDurationForSide('biru')}
                 </p>
             )}
             {scheduleDetails?.pesilatMerahName && recordedDurationForSide('merah') && (
-                 <p className={cn("text-xs", tgrTimerStatus.currentPerformingSide === 'merah' && tgrTimerStatus.matchStatus === 'Finished' ? "text-green-600 font-semibold" : "text-gray-500")}>
+                 <p className={cn("text-xs", tgrTimerStatus.matchStatus === 'Finished' && tgrTimerStatus.performanceDurationMerah && tgrTimerStatus.performanceDurationMerah > 0 ? "text-green-600 font-semibold" : "text-gray-500")}>
                     Waktu Tercatat Merah: {recordedDurationForSide('merah')}
                 </p>
             )}

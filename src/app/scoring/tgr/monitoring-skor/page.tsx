@@ -5,11 +5,11 @@ import { useState, useEffect, useCallback, useRef, Suspense } from 'react';
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation'; // Ditambahkan
 import { Button } from '@/components/ui/button';
-import { ArrowLeft, Loader2, Sun, Moon, AlertTriangle } from 'lucide-react';
+import { ArrowLeft, Eye, Loader2, RadioTower, AlertTriangle, Sun, Moon, ChevronsRight } from 'lucide-react';
 import type { ScheduleTGR, TGRTimerStatus, TGRJuriScore, SideSpecificTGRScore, TGRDewanPenalty, TGRMatchResult, TGRMatchResultDetail } from '@/lib/types';
 import type { ScoreEntry as LibScoreEntryType, RoundScores as LibRoundScoresType } from '@/lib/types';
 import { db } from '@/lib/firebase';
-import { doc, onSnapshot, getDoc, collection, query, orderBy, limit, Timestamp } from 'firebase/firestore';
+import { doc, onSnapshot, getDoc, collection, query, orderBy, limit, Timestamp, setDoc, where, getDocs, updateDoc, deleteField } from 'firebase/firestore';
 import { cn } from '@/lib/utils';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Dialog, DialogContent, DialogHeader, DialogTitle as RadixDialogTitle, DialogDescription as DialogDesc, DialogFooter } from "@/components/ui/dialog"; // DialogDesc for consistency
@@ -573,8 +573,9 @@ function MonitoringSkorTGRPageComponent({ gelanggangName }: { gelanggangName: st
           </div>
           <div className="text-right">
             <div className="text-xs md:text-sm font-medium text-[var(--monitor-text-muted)]">WAKTU PENAMPILAN</div>
-            <div className="text-4xl md:text-6xl font-mono font-bold text-[var(--monitor-timer-text)] tracking-tighter">
-              {isLoading && !matchDetailsLoaded ? <Skeleton className="h-12 w-48 bg-[var(--monitor-skeleton-bg)]" /> : formatTime(displayTime)}
+            <div className="font-mono font-bold text-[var(--monitor-timer-text)] tracking-tighter flex items-baseline justify-end">
+                <span className="text-4xl md:text-6xl">{formatTime(displayTime).split('.')[0]}</span>
+                <span className="text-2xl md:text-4xl self-end">.{formatTime(displayTime).split('.')[1] || '00'}</span>
             </div>
           </div>
         </div>
