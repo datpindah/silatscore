@@ -488,7 +488,18 @@ function KetuaPertandinganPageComponent({ gelanggangName }: { gelanggangName: st
     return ( <div className="flex flex-col min-h-screen"> <Header overrideBackgroundClass="bg-gray-50 dark:bg-black" /> <main className="flex-1 container mx-auto p-4 md:p-8 flex flex-col items-center justify-center text-center"> <AlertTriangle className="h-12 w-12 text-destructive mb-4" /> <h1 className="text-xl font-semibold text-destructive">Nama Gelanggang Diperlukan</h1> <p className="text-muted-foreground mt-2">Parameter 'gelanggang' tidak ditemukan di URL. Halaman ini tidak dapat memuat data pertandingan.</p> <Button asChild className="mt-6"> <Link href="/login"><ArrowLeft className="mr-2 h-4 w-4"/> Kembali ke Halaman Login</Link> </Button> </main> </div> );
   }
   if (isLoadingPage && (!activeMatchId || !matchDetailsLoaded)) {
-    return ( <div className="flex flex-col min-h-screen"> <Header overrideBackgroundClass="bg-gray-50 dark:bg-black" /> <main className="flex-1 container mx-auto p-4 md:p-8 flex flex-col items-center justify-center"> <Loader2 className="h-12 w-12 animate-spin text-primary mb-4" /> <p className="text-lg text-muted-foreground"> {configMatchId === undefined ? `Memuat konfigurasi untuk Gelanggang: ${gelanggangName || '...'}` : !activeMatchId && configMatchId === null ? `Tidak ada jadwal aktif untuk Gelanggang: ${gelanggangName || '...'}` : `Memuat data pertandingan untuk Gelanggang: ${gelanggangName || '...'}`} </p> {error && <p className="text-sm text-red-500 mt-2">Error: {error}</p>} </main> </div> );
+    return (
+      <div className="flex flex-col min-h-screen">
+        <Header overrideBackgroundClass="bg-gray-50 dark:bg-black" />
+        <main className="flex-1 container mx-auto p-4 md:p-8 flex flex-col items-center justify-center">
+          <Loader2 className="h-12 w-12 animate-spin text-primary mb-4" />
+          <p className="text-lg text-muted-foreground">
+            {configMatchId === undefined ? `Memuat konfigurasi untuk Gelanggang: ${gelanggangName || '...'}` : !activeMatchId && configMatchId === null ? `Tidak ada jadwal aktif untuk Gelanggang: ${gelanggangName || '...'}` : `Memuat data pertandingan untuk Gelanggang: ${gelanggangName || '...'}`}
+          </p>
+          {error && <p className="text-sm text-red-500 mt-2">Error: {error}</p>}
+        </main>
+      </div>
+    );
   }
   if (!activeMatchId && !isLoadingPage && configMatchId === null) {
     return ( <div className="flex flex-col min-h-screen"> <Header overrideBackgroundClass="bg-gray-50 dark:bg-black" /> <main className="flex-1 container mx-auto px-4 py-8"> <Card className="bg-primary text-primary-foreground text-center mb-6 shadow-xl"> <CardContent className="p-3 md:p-4"> <h1 className="text-xl md:text-2xl font-bold font-headline">Ketua Pertandingan (Gel: {gelanggangName || 'N/A'})</h1> </CardContent> </Card> <div className="text-center"> <div className="text-muted-foreground mb-4">{error || `Tidak ada pertandingan yang aktif untuk Gelanggang: ${gelanggangName}.`}</div> <Button variant="outline" asChild> <Link href="/login"> <ArrowLeft className="mr-2 h-4 w-4" /> Kembali ke Login </Link> </Button> </div> </main> </div> );
@@ -511,13 +522,13 @@ function KetuaPertandinganPageComponent({ gelanggangName }: { gelanggangName: st
           </CardContent>
         </Card>
         <div className="grid grid-cols-2 gap-4 mb-4">
-          <Card className="bg-red-600 text-white rounded-lg p-3 shadow-md text-center">
-            <CardTitle className="text-lg font-bold truncate">{pesilatMerahInfo?.name || (isLoadingPage && activeMatchId ? <Skeleton className="h-6 w-32 bg-red-400 mx-auto" /> : 'PESILAT MERAH')}</CardTitle>
-            <CardDescription className="text-sm opacity-90 text-red-200 truncate">Kontingen: {pesilatMerahInfo?.contingent || (isLoadingPage && activeMatchId ? <Skeleton className="h-4 w-24 bg-red-400 mx-auto mt-1" /> : '-')}</CardDescription>
+          <Card className="bg-red-600 text-white rounded-lg p-3 shadow-md">
+             <CardTitle className="text-lg font-bold text-center">{pesilatMerahInfo?.name || (isLoadingPage && activeMatchId ? <Skeleton className="h-6 w-32 bg-red-400 mx-auto" /> : 'PESILAT MERAH')}</CardTitle>
+            <CardDescription className="text-sm opacity-90 text-red-200 text-center">Kontingen: {pesilatMerahInfo?.contingent || (isLoadingPage && activeMatchId ? <Skeleton className="h-4 w-24 bg-red-400 mx-auto mt-1" /> : '-')}</CardDescription>
           </Card>
-          <Card className="bg-blue-600 text-white rounded-lg p-3 shadow-md text-center">
-            <CardTitle className="text-lg font-bold truncate">{pesilatBiruInfo?.name || (isLoadingPage && activeMatchId ? <Skeleton className="h-6 w-32 ml-auto bg-blue-400 mx-auto" /> : 'PESILAT BIRU')}</CardTitle>
-            <CardDescription className="text-sm opacity-90 text-blue-200 truncate">Kontingen: {pesilatBiruInfo?.contingent || (isLoadingPage && activeMatchId ? <Skeleton className="h-4 w-24 ml-auto bg-blue-400 mx-auto mt-1" /> : '-')}</CardDescription>
+          <Card className="bg-blue-600 text-white rounded-lg p-3 shadow-md">
+            <CardTitle className="text-lg font-bold text-center">{pesilatBiruInfo?.name || (isLoadingPage && activeMatchId ? <Skeleton className="h-6 w-32 ml-auto bg-blue-400 mx-auto" /> : 'PESILAT BIRU')}</CardTitle>
+            <CardDescription className="text-sm opacity-90 text-blue-200 text-center">Kontingen: {pesilatBiruInfo?.contingent || (isLoadingPage && activeMatchId ? <Skeleton className="h-4 w-24 ml-auto bg-blue-400 mx-auto mt-1" /> : '-')}</CardDescription>
           </Card>
         </div>
         <div className="mb-6 overflow-x-auto">
@@ -544,7 +555,7 @@ function KetuaPertandinganPageComponent({ gelanggangName }: { gelanggangName: st
             </Button>
           </div>
           <div className="flex flex-col items-center justify-start space-y-2 order-first md:order-none">
-            <div className={cn("text-center p-1 rounded-md w-full bg-white dark:bg-gray-800 shadow", dewanTimerStatus.matchStatus.startsWith('PausedForVerification') ? "border-2 border-orange-500" : dewanTimerStatus.isTimerRunning ? "border-2 border-green-500" : "border border-gray-300 dark:border-gray-700" )}>
+            <div className={cn("text-center p-2 rounded-md w-full bg-white dark:bg-gray-800 shadow", dewanTimerStatus.matchStatus.startsWith('PausedForVerification') ? "border-2 border-orange-500" : dewanTimerStatus.isTimerRunning ? "border-2 border-green-500" : "border border-gray-300 dark:border-gray-700" )}>
               <div className="text-xl font-mono font-bold text-gray-800 dark:text-gray-100">
                 {dewanTimerStatus.isTimerRunning ? formatTime(dewanTimerStatus.timerSeconds) : "JEDA"}
               </div>
@@ -554,11 +565,13 @@ function KetuaPertandinganPageComponent({ gelanggangName }: { gelanggangName: st
             </div>
             <Dialog open={isVerificationCreationDialogOpen} onOpenChange={setIsVerificationCreationDialogOpen}>
               <DialogTrigger asChild>
-                <Button className="w-full bg-yellow-500 hover:bg-yellow-600 text-black py-2 text-sm" disabled={isLoadingPage || dewanTimerStatus.matchStatus === 'MatchFinished' || isCreatingVerification || (activeVerificationDetails !== null && activeVerificationDetails.status === 'pending')} onClick={() => setSelectedVerificationTypeForCreation('')}>
-                  <span>
-                    {isCreatingVerification ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Vote className="mr-2 h-4 w-4"/>}
-                    Mulai Verifikasi
-                  </span>
+                <Button
+                  className="w-full bg-yellow-500 hover:bg-yellow-600 text-black py-2 text-sm"
+                  disabled={isLoadingPage || dewanTimerStatus.matchStatus === 'MatchFinished' || isCreatingVerification || (activeVerificationDetails !== null && activeVerificationDetails.status === 'pending')}
+                  onClick={() => setSelectedVerificationTypeForCreation('')}
+                >
+                  <Vote className="mr-2 h-4 w-4" />
+                  Mulai Verifikasi
                 </Button>
               </DialogTrigger>
               <DialogContent className="sm:max-w-[425px] bg-white dark:bg-gray-800">
