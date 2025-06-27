@@ -787,7 +787,7 @@ function DewanSatuPageComponent() {
             <main className="flex-1 container mx-auto p-4 md:p-8 flex flex-col items-center justify-center text-center">
                 <AlertTriangle className="h-12 w-12 text-destructive mb-4" />
                 <h1 className="text-xl font-semibold text-destructive">Nama Gelanggang Diperlukan</h1>
-                <p className="text-muted-foreground mt-2">Parameter 'gelanggang' tidak ditemukan di URL. Halaman ini tidak dapat memuat data pertandingan tanpa nama gelanggang.</p>
+                <p className="text-muted-foreground mt-2">Parameter 'gelanggang' tidak ditemukan di URL. Halaman ini tidak dapat memuat data pertandingan.</p>
                 <Button asChild className="mt-6">
                     <Link href="/login"><ArrowLeft className="mr-2 h-4 w-4"/> Kembali ke Halaman Login</Link>
                 </Button>
@@ -847,7 +847,7 @@ function DewanSatuPageComponent() {
       <main className="flex-1 container mx-auto px-2 py-4 md:px-4 md:py-6">
         <Card className="mb-4 shadow-xl bg-primary text-primary-foreground">
           <CardContent className="p-3 md:p-4 text-center">
-            <h1 className="text-xl md:text-2xl font-bold font-headline">DEWAN 1 - GELANGGANG: {gelanggangName || <Loader2 className="inline h-5 w-5 animate-spin"/>}</h1>
+            <h1 className="text-xl md:text-2xl font-bold font-headline">DEWAN 1 (GEL: {gelanggangName || <Loader2 className="inline h-5 w-5 animate-spin"/>})</h1>
             {matchDetails && (<p className="text-xs md:text-sm">Partai No. {matchDetails.matchNumber} | {matchDetails.round} | {matchDetails.class}</p>)}
             {error && !isLoading && !matchDetails && <p className="text-xs md:text-sm text-yellow-300 mt-1">Gagal memuat detail pertandingan. {error}</p>}
           </CardContent>

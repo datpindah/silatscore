@@ -89,7 +89,7 @@ const calculateDisplayScoresForTable = (
 const formatTime = (seconds: number): string => {
     const minutes = Math.floor(seconds / 60);
     const remainingSeconds = seconds % 60;
-    return `${minutes.toString().padStart(2, '0')}:${remainingSeconds.toString().padStart(2, '0')}`;
+    return `${minutes.toString().padStart(2, '0')}:${(seconds % 60).toString().padStart(2, '0')}`;
 };
 
 const formatFirestoreTimestamp = (timestamp: KetuaActionLogEntry['timestamp']): string => {
@@ -507,14 +507,14 @@ function KetuaPertandinganPageComponent({ gelanggangName }: { gelanggangName: st
             </div>
           </CardContent>
         </Card>
-        <div className="flex justify-between items-center mb-4 px-1">
-          <div className="text-left">
-            <div className="text-sm font-semibold text-red-600 dark:text-red-400">KONTINGEN {pesilatMerahInfo?.contingent || (isLoadingPage && activeMatchId ? <Skeleton className="h-4 w-16 inline-block bg-muted" /> : '-')}</div>
-            <div className="text-lg font-bold text-red-600 dark:text-red-400">{pesilatMerahInfo?.name || (isLoadingPage && activeMatchId ? <Skeleton className="h-6 w-32 bg-muted" /> : 'PESILAT MERAH')}</div>
+        <div className="grid grid-cols-2 gap-4 mb-4">
+          <div className="bg-red-600 text-white rounded-lg p-3 shadow-md">
+            <div className="text-lg font-bold truncate">{pesilatMerahInfo?.name || (isLoadingPage && activeMatchId ? <Skeleton className="h-6 w-32 bg-red-400" /> : 'PESILAT MERAH')}</div>
+            <div className="text-sm opacity-90 truncate">Kontingen: {pesilatMerahInfo?.contingent || (isLoadingPage && activeMatchId ? <Skeleton className="h-4 w-24 bg-red-400" /> : '-')}</div>
           </div>
-          <div className="text-right">
-            <div className="text-sm font-semibold text-blue-600 dark:text-blue-400">KONTINGEN {pesilatBiruInfo?.contingent || (isLoadingPage && activeMatchId ? <Skeleton className="h-4 w-16 inline-block bg-muted" /> : '-')}</div>
-            <div className="text-lg font-bold text-blue-600 dark:text-blue-400">{pesilatBiruInfo?.name || (isLoadingPage && activeMatchId ? <Skeleton className="h-6 w-32 bg-muted" /> : 'PESILAT BIRU')}</div>
+          <div className="bg-blue-600 text-white rounded-lg p-3 shadow-md text-right">
+            <div className="text-lg font-bold truncate">{pesilatBiruInfo?.name || (isLoadingPage && activeMatchId ? <Skeleton className="h-6 w-32 ml-auto bg-blue-400" /> : 'PESILAT BIRU')}</div>
+            <div className="text-sm opacity-90 truncate">Kontingen: {pesilatBiruInfo?.contingent || (isLoadingPage && activeMatchId ? <Skeleton className="h-4 w-24 ml-auto bg-blue-400" /> : '-')}</div>
           </div>
         </div>
         <div className="mb-6 overflow-x-auto">
