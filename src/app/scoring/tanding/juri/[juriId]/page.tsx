@@ -396,7 +396,7 @@ function JuriPageComponent({ juriId, gelanggangName }: { juriId: string; gelangg
     if (!gelanggangName) return "Gelanggang tidak valid.";
     if (isLoading && (activeMatchId || (configMatchId === undefined && gelanggangName))) return `Memuat data untuk Gelanggang: ${gelanggangName}...`;
     if (!activeMatchId && !isLoading && configMatchId === null) return `Tidak ada pertandingan aktif untuk Gelanggang: ${gelanggangName}.`;
-    if (matchDetailsLoaded && activeMatchId) return `Babak Aktif: ${dewanControlledRound}`;
+    if (matchDetailsLoaded && activeMatchId) return "Tekan tombol Pukulan (1 poin) atau Tendangan (2 poin) sesuai aksi pesilat.";
     if (activeMatchId && !matchDetailsLoaded && !isLoading) return "Menunggu detail pertandingan...";
     if (error) return `Error: ${error}`;
     return `Menunggu info pertandingan untuk Gelanggang: ${gelanggangName || '...'} (Babak Dewan: ${dewanControlledRound})`;
@@ -575,9 +575,6 @@ export default function DynamicJuriPageWithSuspense({ params: paramsProp }: { pa
   const params = use(paramsProp); 
   const juriId = params.juriId;
 
-  const searchParams = useSearchParams();
-  const gelanggangName = searchParams.get('gelanggang');
-  
   return (
     <Suspense fallback={
       <div className="flex flex-col min-h-screen"> <Header />
@@ -587,7 +584,13 @@ export default function DynamicJuriPageWithSuspense({ params: paramsProp }: { pa
         </main>
       </div>
     }>
-      <JuriPageComponent juriId={juriId} gelanggangName={gelanggangName} />
+      <JuriPageComponentWithSearchParams juriId={juriId} />
     </Suspense>
   );
+}
+
+function JuriPageComponentWithSearchParams({ juriId }: { juriId: string }) {
+  const searchParams = useSearchParams();
+  const gelanggangName = searchParams.get('gelanggang');
+  return <JuriPageComponent juriId={juriId} gelanggangName={gelanggangName} />;
 }
