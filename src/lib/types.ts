@@ -329,44 +329,39 @@ export interface TGRMatchData {
 
 // --- SCHEME MANAGEMENT TYPES ---
 export interface SchemeParticipant {
-  id: string; // Unique ID for the participant, can be generated
+  id: string;
   name: string;
   contingent: string;
-  seed?: number; // Optional for seeding
+  seed?: number;
 }
 
 export interface SchemeMatch {
-  matchInternalId: string; // Unique ID within the scheme, e.g., 'A-DWS-R1-M1'
-  globalMatchNumber?: number; // The user-facing match number (1, 2, 3...)
-  roundNumber: number;
+  matchInternalId: string;
+  globalMatchNumber: number;
   roundName: string;
-  
-  // These can be participant names/ids or 'BYE'
   participant1: { name: string; contingent: string } | null;
-  participant2: { name:string; contingent: string } | null;
-
-  winnerToMatchId: string | null; // The matchInternalId the winner proceeds to
-  winnerToSlot?: 'participant1' | 'participant2'; // Which slot the winner takes in the next match
-
-  scheduleId?: string; // Link to the actual schedule document in schedules_tanding/tgr
+  participant2: { name: string; contingent: string } | null;
+  winnerToMatchId: string | null;
+  scheduleId?: string;
   status: 'PENDING' | 'SCHEDULED' | 'COMPLETED';
-  winnerId?: string | null; // The ID of the winning participant
+  winnerId?: string | null;
 }
 
 export interface SchemeRound {
   roundNumber: number;
-  name: string; // "Penyisihan", "Perempat Final", etc.
+  name: string;
   matches: SchemeMatch[];
 }
 
 export interface Scheme {
-  id: string; // e.g., 'tanding-kelas-a-dewasa-putra'
+  id: string; // e.g., 'tanding-dewasa-kelas-a-putra'
   type: 'Tanding' | 'TGR';
-  className: string; // e.g., "Kelas A Dewasa Putra"
-  category?: TGRCategoryType; // For TGR
+  ageCategory: string;
+  tandingClass?: string;
+  tgrCategory?: TGRCategoryType;
   participantCount: number;
-  participants: SchemeParticipant[]; // The master list of participants
-  rounds: SchemeRound[]; // The generated bracket structure
+  participants: SchemeParticipant[];
+  rounds: SchemeRound[];
   createdAt: FirebaseTimestamp;
 }
 // --- END SCHEME MANAGEMENT TYPES ---
