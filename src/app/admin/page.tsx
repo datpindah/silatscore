@@ -8,10 +8,10 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { DataRecapTable, type RecapMatchItem } from '@/components/admin/DataRecapTable';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import { Download, Filter, AlertTriangle, Loader2 } from 'lucide-react';
+import { Download, Filter, AlertTriangle, Loader2, Trash2 } from 'lucide-react';
 import { ageCategories, type AgeCategory, type ScheduleTanding, type ScheduleTGR, type TimerStatus, type TGRTimerStatus, type MatchResultTanding } from '@/lib/types';
 import { db } from '@/lib/firebase';
-import { collection, getDocs, doc, getDoc, Timestamp } from 'firebase/firestore';
+import { collection, getDocs, doc, getDoc, Timestamp, deleteDoc } from 'firebase/firestore';
 import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
 
@@ -23,6 +23,7 @@ export default function AdminDashboardPage() {
   const [allMatches, setAllMatches] = useState<RecapMatchItem[]>([]);
   const [filteredMatches, setFilteredMatches] = useState<RecapMatchItem[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [isDeleting, setIsDeleting] = useState(false);
   const [dataLoadError, setDataLoadError] = useState<string | null>(null);
 
   const parseAgeCategory = (className: string): AgeCategory | string => {
@@ -242,13 +243,71 @@ export default function AdminDashboardPage() {
     console.log("Data to download:", filteredMatches);
   };
 
+  const handleDeleteCompletedMatches = async () => {
+    if (!confirm("Apakah Anda yakin ingin menghapus PERMANEN semua jadwal yang telah selesai? Tindakan ini tidak dapat diurungkan dan akan menghapus semua data terkait (skor, log, dll).")) {
+      return;
+    }
+
+    setIsDeleting(true);
+    setDataLoadError(null);
+
+    const completedMatches = allMatches.filter(m => m.status.startsWith('Selesai'));
+    if (completedMatches.length === 0) {
+      alert("Tidak ada pertandingan selesai untuk dihapus.");
+      setIsDeleting(false);
+      return;
+    }
+
+    let deletedCount = 0;
+
+    try {
+      for (const match of completedMatches) {
+        const matchDocRef = doc(db, match.type === 'Tanding' ? 'matches_tanding' : 'matches_tgr', match.id);
+        const scheduleDocRef = doc(db, match.type === 'Tanding' ? 'schedules_tanding' : 'schedules_tgr', match.id);
+        
+        const tandingSubcollections = ['official_actions', 'verifications', 'juri_scores'];
+        const tgrSubcollections = ['dewan_penalties_tgr', 'juri_scores_tgr'];
+        const subcollectionsToDelete = match.type === 'Tanding' ? tandingSubcollections : tgrSubcollections;
+
+        for (const sub of subcollectionsToDelete) {
+          const subcollectionRef = collection(db, matchDocRef.path, sub);
+          const snapshot = await getDocs(subcollectionRef);
+          if (!snapshot.empty) {
+            const deletePromises = snapshot.docs.map(d => deleteDoc(d.ref));
+            await Promise.all(deletePromises);
+          }
+        }
+        
+        await deleteDoc(matchDocRef);
+        await deleteDoc(scheduleDocRef);
+        deletedCount++;
+      }
+      
+      setAllMatches(prev => prev.filter(m => !completedMatches.some(cm => cm.id === m.id)));
+      alert(`${deletedCount} pertandingan yang telah selesai berhasil dihapus.`);
+    } catch (e) {
+      console.error("Failed to delete completed matches:", e);
+      if (e instanceof Error) setDataLoadError(e.message);
+      else setDataLoadError("An unknown error occurred while deleting match data.");
+    } finally {
+      setIsDeleting(false);
+    }
+  };
+
+
   return (
     <>
       <PageTitle title="Admin Dashboard" description="Manajemen data dan jadwal pertandingan Pencak Silat.">
-          <Button onClick={handleDownloadData} className="bg-primary hover:bg-primary/90 text-primary-foreground" disabled={isLoading || !!dataLoadError}>
-            <Download className="mr-2 h-4 w-4" />
-            Download Rekap
-          </Button>
+          <div className="flex flex-wrap items-center gap-2">
+            <Button onClick={handleDownloadData} className="bg-primary hover:bg-primary/90 text-primary-foreground" disabled={isLoading || isDeleting || !!dataLoadError}>
+              <Download className="mr-2 h-4 w-4" />
+              Download Rekap
+            </Button>
+            <Button variant="destructive" onClick={handleDeleteCompletedMatches} disabled={isLoading || isDeleting || !allMatches.some(m => m.status.startsWith('Selesai'))}>
+              {isDeleting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Trash2 className="mr-2 h-4 w-4" />}
+              Hapus Jadwal Selesai
+            </Button>
+          </div>
       </PageTitle>
 
       {dataLoadError && (
@@ -271,7 +330,7 @@ export default function AdminDashboardPage() {
         <CardContent className="space-y-4">
           <div className="max-w-sm">
             <Label htmlFor="age-category" className="block text-sm font-medium text-foreground mb-1">Filter Kategori Usia Tanding</Label>
-            <Select onValueChange={(value) => setSelectedAgeCategory(value)} value={selectedAgeCategory} disabled={isLoading}>
+            <Select onValueChange={(value) => setSelectedAgeCategory(value)} value={selectedAgeCategory} disabled={isLoading || isDeleting}>
               <SelectTrigger id="age-category">
                 <SelectValue placeholder="Pilih Kategori Usia" />
               </SelectTrigger>
@@ -291,7 +350,7 @@ export default function AdminDashboardPage() {
               id="show-completed"
               checked={showCompletedMatches}
               onCheckedChange={setShowCompletedMatches}
-              disabled={isLoading}
+              disabled={isLoading || isDeleting}
             />
             <Label htmlFor="show-completed" className="font-normal">
               Tampilkan pertandingan yang sudah selesai
@@ -318,3 +377,4 @@ export default function AdminDashboardPage() {
     </>
   );
 }
+
