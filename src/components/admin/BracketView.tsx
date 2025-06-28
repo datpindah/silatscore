@@ -1,4 +1,3 @@
-
 "use client";
 
 import type { Scheme, SchemeMatch } from '@/lib/types';
@@ -77,6 +76,7 @@ export function BracketView({ scheme }: { scheme: Scheme | null }) {
             const parentMatch = prevRound.matches.find(m => m.globalMatchNumber === parentMatchNumber);
             if (parentMatch) parentSources.push(parentMatch);
           } else {
+            // This is for byes
             const parentMatch = prevRound.matches.find(m => m.participant1?.name === p.name && m.participant2 === null);
             if (parentMatch) parentSources.push(parentMatch);
           }
@@ -96,23 +96,24 @@ export function BracketView({ scheme }: { scheme: Scheme | null }) {
     }
 
     // 3. Draw lines connecting the positioned matches
+    const allMatches = rounds.flatMap(r => r.matches);
     for (let i = 0; i < rounds.length - 1; i++) {
         const currentRound = rounds[i];
         const nextRound = rounds[i + 1];
 
-        currentRound.forEach(parentMatch => {
+        currentRound.matches.forEach(parentMatch => {
             const parentPos = positions.get(parentMatch.matchInternalId);
             if (!parentPos) return;
 
             const winnerPlaceholder = `Pemenang Partai ${parentMatch.globalMatchNumber}`;
-            const childMatch = nextRound.find(child => 
+            const childMatch = nextRound.matches.find(child => 
                 child.participant1?.name === winnerPlaceholder || 
                 child.participant2?.name === winnerPlaceholder
             );
 
             // This logic is for Byes that are not placeholders
             if (!childMatch && parentMatch.participant2 === null) {
-                 const directChild = nextRound.find(child => 
+                 const directChild = nextRound.matches.find(child => 
                     child.participant1?.name === parentMatch.participant1?.name || 
                     child.participant2?.name === parentMatch.participant1?.name
                 );
@@ -147,7 +148,7 @@ export function BracketView({ scheme }: { scheme: Scheme | null }) {
                 .map(p => {
                     if (p?.name.startsWith('Pemenang Partai ')) {
                          const num = parseInt(p.name.replace('Pemenang Partai ', ''), 10);
-                         return rounds.flat().find(m => m.globalMatchNumber === num);
+                         return allMatches.find(m => m.globalMatchNumber === num);
                     }
                     return null;
                 })
@@ -161,7 +162,7 @@ export function BracketView({ scheme }: { scheme: Scheme | null }) {
                      const childMidY = childPos.y + BOX_HEIGHT / 2;
                      generatedLines.push({
                         key: `line-vert-${childMatch.matchInternalId}`,
-                        d: `M ${midX} ${y1} V ${y2}`
+                        d: `M ${midX} ${Math.min(y1, y2)} V ${Math.max(y1, y2)}`
                      });
                      generatedLines.push({
                         key: `line-child-${childMatch.matchInternalId}`,
@@ -239,17 +240,3 @@ export function BracketView({ scheme }: { scheme: Scheme | null }) {
     </div>
   );
 }
-
-// Helper to flatten nested rounds array for easier processing
-const flattenRounds = (rounds: Scheme['rounds']) => {
-    let allMatches: SchemeMatch[] = [];
-    rounds.forEach(round => {
-        allMatches = [...allMatches, ...round.matches];
-    });
-    return allMatches;
-};
-
-// Helper to find a match by its global number
-const findMatchByGlobalNumber = (allMatches: SchemeMatch[], num: number) => {
-    return allMatches.find(m => m.globalMatchNumber === num);
-};
