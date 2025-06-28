@@ -168,89 +168,80 @@ export default function SchemeManagementPage() {
         alert("Minimal 2 peserta dibutuhkan untuk membuat bagan.");
         setIsLoading(false); return;
       }
+
       const schemeId = `tanding-${tandingAge.replace(/\s+/g, '_').toLowerCase()}-${tandingClass.replace(/\s+/g, '_').toLowerCase()}-${Date.now()}`;
       const bracketSize = Math.pow(2, Math.ceil(Math.log2(numParticipants)));
       const numByes = bracketSize - numParticipants;
       
       const byeParticipants = participants.slice(0, numByes);
-      const prelimCompetitors = participants.slice(numByes);
+      const prelimParticipants = participants.slice(numByes);
 
       let allRounds: SchemeRound[] = [];
       let globalMatchCounter = 1;
-      let competitorsForNextRound: ({ name: string; contingent: string } | null)[] = [];
 
-      // --- Create preliminary round if needed ---
-      if (prelimCompetitors.length > 0) {
-        let prelimMatches: SchemeMatch[] = [];
-        for (let i = 0; i < prelimCompetitors.length; i += 2) {
+      // --- 1. Create Preliminary Round (if needed) ---
+      const prelimMatches: SchemeMatch[] = [];
+      if (prelimParticipants.length > 0) {
+        for (let i = 0; i < prelimParticipants.length; i += 2) {
           const match: SchemeMatch = {
-            matchInternalId: `${schemeId}-R0-M${globalMatchCounter}`,
+            matchInternalId: `${schemeId}-R1-M${globalMatchCounter}`,
             globalMatchNumber: globalMatchCounter,
             roundName: 'Babak Penyisihan',
-            participant1: prelimCompetitors[i],
-            participant2: prelimCompetitors[i + 1] || null,
+            participant1: prelimParticipants[i],
+            participant2: prelimParticipants[i + 1] || null,
             winnerToMatchId: null,
             status: 'PENDING',
           };
           prelimMatches.push(match);
           globalMatchCounter++;
         }
-        allRounds.push({ roundNumber: 0, name: 'Babak Penyisihan', matches: prelimMatches });
-        
-        const prelimWinnersPlaceholders = prelimMatches.map(match => ({ name: `Pemenang Partai ${match.globalMatchNumber}`, contingent: '' }));
-        
-        const fullBracketCompetitors: ({ name: string; contingent: string } | null)[] = new Array(bracketSize).fill(null);
-        
-        // Balanced bracket seeding: 1, 16, 8, 9, 5, 12, 4, 13, 3, 14, 6, 11, 7, 10, 2, 15
-        const seedOrder = [1, bracketSize, Math.floor(bracketSize/2), Math.floor(bracketSize/2)+1];
-        if(bracketSize > 4) {
-             const quarter = Math.floor(bracketSize / 4);
-             const half = Math.floor(bracketSize / 2);
-             seedOrder.push(quarter, bracketSize - quarter + 1, half + quarter, half - quarter + 1);
-        }
-        if(bracketSize > 8){
-             const eighth = Math.floor(bracketSize/8);
-             seedOrder.push(eighth, bracketSize - eighth + 1, half - eighth, half + eighth + 1);
-             seedOrder.push(quarter+eighth, bracketSize - quarter - eighth + 1, half+quarter-eighth, half-quarter+eighth+1);
-        }
-        const standardSeeding = [1, 16, 9, 8, 5, 12, 13, 4, 3, 14, 11, 6, 7, 10, 15, 2];
-        const placementOrder = standardSeeding.slice(0, bracketSize);
+        allRounds.push({ roundNumber: 1, name: 'Babak Penyisihan', matches: prelimMatches });
+      }
 
-        const allCompetitors = [...byeParticipants, ...prelimCompetitors];
-        allCompetitors.sort((a,b) => a.seed - b.seed);
-
-        placementOrder.forEach((seedPos, i) => {
-            if(allCompetitors[i]){
-                fullBracketCompetitors[seedPos - 1] = allCompetitors[i];
-            }
-        });
-
-        // Now, replace prelim competitors with their matches
-        const finalBracketForRound2: ({ name: string; contingent: string } | null)[] = [];
-        for(let i = 0; i < bracketSize; i += 2) {
-            const p1 = fullBracketCompetitors[i];
-            const p2 = fullBracketCompetitors[i+1];
-            
-            const isP1Bye = byeParticipants.some(bp => bp.seed === (p1 as any)?.seed);
-            const isP2Bye = byeParticipants.some(bp => bp.seed === (p2 as any)?.seed);
-            
-            if(isP1Bye) finalBracketForRound2.push(p1);
-            else if (isP2Bye) finalBracketForRound2.push(p2);
-            else { // It's a prelim match
-                const prelimMatch = prelimMatches.find(pm => pm.participant1?.name === p1?.name || pm.participant2?.name === p1?.name);
-                if(prelimMatch) {
-                    finalBracketForRound2.push({name: `Pemenang Partai ${prelimMatch.globalMatchNumber}`, contingent: ''});
-                }
-            }
-        }
-        competitorsForNextRound = finalBracketForRound2;
+      // --- 2. Create the list of competitors for the first main round ---
+      let mainRoundCompetitors: ({ name: string; contingent: string } | null)[] = [];
+      if (numByes > 0) {
+        const prelimWinners = prelimMatches.map(match => ({ name: `Pemenang Partai ${match.globalMatchNumber}`, contingent: '' }));
         
+        // This logic pairs bye participants sequentially with prelim winners.
+        // #1 vs winner of first prelim, #2 vs winner of second, etc.
+        const pairs = [];
+        for (let i = 0; i < byeParticipants.length; i++) {
+          pairs.push([byeParticipants[i], prelimWinners[i]]);
+        }
+        
+        // Now, structure the main bracket to be balanced
+        // This ensures top seeds (#1/#2) are on opposite sides of the bracket
+        const finalPairs = [];
+        if(pairs.length >= 4) { // For 8 or more main round participants (e.g. 12 total participants -> 4 byes, 4 prelim matches)
+          finalPairs.push(...pairs[0]); // #1 seed pair
+          finalPairs.push(...pairs[3]); // #4 seed pair
+          finalPairs.push(...pairs[2]); // #3 seed pair
+          finalPairs.push(...pairs[1]); // #2 seed pair
+        } else if (pairs.length >= 2) { // for 4 main round participants (semis)
+          finalPairs.push(...pairs[0]);
+          finalPairs.push(...pairs[1]);
+        } else if (pairs.length > 0) {
+          finalPairs.push(...pairs[0]);
+        }
+        mainRoundCompetitors = finalPairs;
+
       } else {
-        competitorsForNextRound = participants;
+        // If no byes, all participants start in the first round. Standard seeding.
+        const p = participants;
+        if (p.length === 8) {
+            mainRoundCompetitors = [ p[0], p[7], p[3], p[4], p[2], p[5], p[1], p[6] ];
+        } else if (p.length === 4) {
+             mainRoundCompetitors = [ p[0], p[3], p[1], p[2] ];
+        } else {
+             mainRoundCompetitors = [...p]; // fallback for non-standard numbers
+        }
       }
       
-      // --- Generate main bracket rounds ---
-      let currentRoundNumber = prelimRoundIndex > -1 ? 1 : 0;
+      // --- 3. Generate all subsequent rounds from the main round competitors ---
+      let competitorsForNextRound = mainRoundCompetitors;
+      let currentRoundNumber = prelimMatches.length > 0 ? 2 : 1;
+
       while (competitorsForNextRound.length > 1) {
         const currentRoundMatches: SchemeMatch[] = [];
         const winnersForNextRound: ({ name: string; contingent: string } | null)[] = [];
@@ -276,9 +267,8 @@ export default function SchemeManagementPage() {
         competitorsForNextRound = winnersForNextRound;
         currentRoundNumber++;
       }
-
-
-      // --- Name the rounds correctly ---
+      
+      // --- 4. Name the rounds correctly ---
       const mainRounds = allRounds.filter(r => r.name !== 'Babak Penyisihan');
       mainRounds.forEach((round, index) => {
         const roundFromTheEnd = mainRounds.length - index;
@@ -289,6 +279,7 @@ export default function SchemeManagementPage() {
         round.matches.forEach(m => { m.roundName = round.name; });
       });
 
+      // --- 5. Finalize scheme object ---
       const finalSchemeParticipants: SchemeParticipant[] = participants.map((p, i) => ({
         id: `${p.contingent}-${p.name}-${i}`.replace(/\s+/g, '-'),
         name: p.name,
