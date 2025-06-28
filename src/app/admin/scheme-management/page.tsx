@@ -1,7 +1,7 @@
 
 "use client";
 
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useRef } from 'react';
 import { PageTitle } from '@/components/shared/PageTitle';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
@@ -9,10 +9,11 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { GitBranch, Users, Minus, Plus, Loader2 } from 'lucide-react';
+import { GitBranch, Users, Minus, Plus, Loader2, Upload } from 'lucide-react';
 import { db } from '@/lib/firebase';
 import { doc, setDoc, Timestamp } from 'firebase/firestore';
 import { ageCategories, tgrCategoriesList, type TGRCategoryType, type Scheme, type SchemeParticipant, type SchemeRound, type SchemeMatch } from '@/lib/types';
+import * as XLSX from 'xlsx';
 
 // Helper function to shuffle an array
 function shuffleArray<T>(array: T[]): T[] {
@@ -33,6 +34,10 @@ interface Participant {
 export default function SchemeManagementPage() {
   const [activeTab, setActiveTab] = useState('tanding');
   const [isLoading, setIsLoading] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // General State
+  const [gelanggang, setGelanggang] = useState('');
 
   // Tanding State
   const [tandingAge, setTandingAge] = useState<string>('Dewasa');
@@ -75,9 +80,60 @@ export default function SchemeManagementPage() {
     });
   };
 
+  const handleUploadClick = () => {
+    fileInputRef.current?.click();
+  };
+
+  const processUploadedFile = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      try {
+        const data = e.target?.result;
+        if (!data) return alert('Gagal membaca file.');
+        
+        const workbook = XLSX.read(data, { type: 'array' });
+        const sheetName = workbook.SheetNames[0];
+        const worksheet = workbook.Sheets[sheetName];
+        const jsonData = XLSX.utils.sheet_to_json<any>(worksheet);
+
+        const newParticipants: Participant[] = jsonData.map(row => ({
+          name: String(row.Nama || row.nama || row.Name || '').trim(),
+          contingent: String(row.Kontingen || row.kontingen || row.Contingent || '').trim(),
+        })).filter(p => p.name);
+
+        if (newParticipants.length === 0) {
+          alert('Tidak ada data peserta yang valid ditemukan di file. Pastikan kolom "Nama" dan "Kontingen" ada.');
+          return;
+        }
+
+        if (activeTab === 'tanding') {
+          setTandingParticipants(newParticipants);
+          setTandingParticipantCount(newParticipants.length);
+        } else {
+          setTgrParticipants(newParticipants);
+          setTgrParticipantCount(newParticipants.length);
+        }
+
+        alert(`${newParticipants.length} peserta berhasil diimpor.`);
+      } catch (err) {
+        console.error("Error processing file:", err);
+        alert(`Gagal memproses file: ${err instanceof Error ? err.message : String(err)}`);
+      } finally {
+        if (fileInputRef.current) {
+          fileInputRef.current.value = '';
+        }
+      }
+    };
+    reader.readAsArrayBuffer(file);
+  };
+
+
   const handleGenerateTandingScheme = async () => {
-    if (!tandingClass.trim()) {
-      alert("Nama Kelas Tanding tidak boleh kosong.");
+    if (!tandingClass.trim() || !gelanggang.trim()) {
+      alert("Nama Kelas Tanding dan Gelanggang tidak boleh kosong.");
       return;
     }
     if (tandingParticipants.some(p => !p.name.trim() || !p.contingent.trim())) {
@@ -104,73 +160,67 @@ export default function SchemeManagementPage() {
       };
 
       const finalRounds: SchemeRound[] = [];
-      let matchQueue = shuffledParticipants.map(p => ({ type: 'participant', data: p }));
+      let matchQueue: ({ type: 'participant'; data: Participant } | { type: 'placeholder'; matchId: string })[] = shuffledParticipants.map(p => ({ type: 'participant', data: p }));
 
-      // Handle preliminary round if needed
-      if (firstRoundMatchCount > 0) {
-        const preliminaryRoundName = getRoundName(nextPowerOfTwo, participantCount);
-        const preliminaryMatches: SchemeMatch[] = [];
-        const winnersOfPreliminary = [];
-
-        for (let i = 0; i < firstRoundMatchCount; i++) {
-          const p1 = matchQueue.shift()!.data;
-          const p2 = matchQueue.shift()!.data;
-          preliminaryMatches.push({
-            matchInternalId: `${preliminaryRoundName.replace(/\s+/g, '_')}-${i + 1}`,
-            globalMatchNumber: i + 1,
-            roundName: preliminaryRoundName,
-            participant1: { name: p1.name, contingent: p1.contingent },
-            participant2: { name: p2.name, contingent: p2.contingent },
-            winnerToMatchId: null,
-            status: 'PENDING',
-          });
-          winnersOfPreliminary.push({ type: 'placeholder', matchId: preliminaryMatches[i].matchInternalId });
-        }
-        finalRounds.push({ roundNumber: 0, name: preliminaryRoundName, matches: preliminaryMatches });
-        matchQueue.push(...winnersOfPreliminary);
-      }
-
-      let currentRoundPlayers = matchQueue.length;
-      let roundCounter = 1;
-      let globalMatchCounter = firstRoundMatchCount + 1;
-
-      while (currentRoundPlayers > 1) {
-        const roundName = getRoundName(nextPowerOfTwo, currentRoundPlayers);
-        const matchesInThisRound: SchemeMatch[] = [];
-        const nextRoundQueue = [];
-
-        for (let i = 0; i < currentRoundPlayers / 2; i++) {
-          const p1Node = matchQueue.shift();
-          const p2Node = matchQueue.shift();
-          const matchId = `${roundName.replace(/\s+/g, '_')}-${i + 1}`;
+      if (byes > 0) {
+          const participantsForFirstRound = matchQueue.splice(0, firstRoundMatchCount * 2);
+          const byeParticipants = matchQueue; // The rest get a bye
           
-          matchesInThisRound.push({
-            matchInternalId: matchId,
-            globalMatchNumber: globalMatchCounter++,
-            roundName: roundName,
-            participant1: p1Node?.type === 'participant' ? { name: p1Node.data.name, contingent: p1Node.data.contingent } : { name: `(Pemenang ${p1Node?.matchId})`, contingent: '' },
-            participant2: p2Node?.type === 'participant' ? { name: p2Node.data.name, contingent: p2Node.data.contingent } : { name: `(Pemenang ${p2Node?.matchId})`, contingent: '' },
-            winnerToMatchId: null,
-            status: 'PENDING',
+          matchQueue = [...participantsForFirstRound, ...byeParticipants];
+      }
+      
+      let currentRoundMatches: SchemeMatch[] = [];
+      let roundCounter = 1;
+      let globalMatchCounter = 1;
+      let playersInCurrentRound = matchQueue.length;
+      const roundName = getRoundName(nextPowerOfTwo, playersInCurrentRound);
+
+      while(matchQueue.length > 1) {
+          const p1Node = matchQueue.shift()!;
+          const p2Node = matchQueue.shift()!;
+
+          const p1 = p1Node.type === 'participant' ? { name: p1Node.data.name, contingent: p1Node.data.contingent } : { name: `(Pemenang ${p1Node.matchId})`, contingent: '' };
+          const p2 = p2Node.type === 'participant' ? { name: p2Node.data.name, contingent: p2Node.data.contingent } : { name: `(Pemenang ${p2Node.matchId})`, contingent: '' };
+
+          currentRoundMatches.push({
+              matchInternalId: `${roundName.replace(/\s+/g, '_')}-${globalMatchCounter}`,
+              globalMatchNumber: globalMatchCounter++,
+              roundName: roundName,
+              participant1: p1,
+              participant2: p2,
+              winnerToMatchId: null,
+              status: 'PENDING',
           });
-          nextRoundQueue.push({ type: 'placeholder', matchId: matchId });
-        }
-        finalRounds.push({ roundNumber: roundCounter++, name: roundName, matches: matchesInThisRound });
-        matchQueue = nextRoundQueue;
-        currentRoundPlayers = matchQueue.length;
       }
 
-      // Link matches to the next round
-      for (let i = 0; i < finalRounds.length - 1; i++) {
-        const currentRound = finalRounds[i];
-        const nextRound = finalRounds[i + 1];
-        for (let j = 0; j < currentRound.matches.length; j++) {
-          const winnerToMatchIndex = Math.floor(j / 2);
-          if (nextRound.matches[winnerToMatchIndex]) {
-            currentRound.matches[j].winnerToMatchId = nextRound.matches[winnerToMatchIndex].matchInternalId;
-          }
-        }
+      if (currentRoundMatches.length > 0) {
+          finalRounds.push({ roundNumber: roundCounter++, name: roundName, matches: currentRoundMatches });
       }
+
+      while (finalRounds[finalRounds.length-1].matches.length > 1) {
+          const lastRound = finalRounds[finalRounds.length - 1];
+          const nextRoundName = getRoundName(nextPowerOfTwo, lastRound.matches.length);
+          const nextRoundMatches: SchemeMatch[] = [];
+          for(let i=0; i < lastRound.matches.length; i+=2) {
+              const match1 = lastRound.matches[i];
+              const match2 = lastRound.matches[i+1];
+              
+              const newMatch: SchemeMatch = {
+                  matchInternalId: `${nextRoundName.replace(/\s+/g, '_')}-${globalMatchCounter}`,
+                  globalMatchNumber: globalMatchCounter++,
+                  roundName: nextRoundName,
+                  participant1: { name: `(Pemenang Partai ${match1.globalMatchNumber})`, contingent: ''},
+                  participant2: { name: `(Pemenang Partai ${match2.globalMatchNumber})`, contingent: ''},
+                  winnerToMatchId: null,
+                  status: 'PENDING'
+              };
+              nextRoundMatches.push(newMatch);
+              match1.winnerToMatchId = newMatch.matchInternalId;
+              match2.winnerToMatchId = newMatch.matchInternalId;
+          }
+          finalRounds.push({roundNumber: roundCounter++, name: nextRoundName, matches: nextRoundMatches});
+      }
+
 
       const safeAge = tandingAge.replace(/\s+/g, '_').toLowerCase();
       const safeClass = tandingClass.replace(/\s+/g, '_').toLowerCase();
@@ -187,6 +237,7 @@ export default function SchemeManagementPage() {
         type: 'Tanding',
         ageCategory: tandingAge,
         tandingClass: tandingClass,
+        gelanggang: gelanggang.trim(),
         participantCount: tandingParticipantCount,
         participants: schemeParticipants,
         rounds: finalRounds,
@@ -209,6 +260,10 @@ export default function SchemeManagementPage() {
       alert("Semua Nama Peserta dan Kontingen TGR harus diisi.");
       return;
     }
+     if (!gelanggang.trim()) {
+      alert("Gelanggang tidak boleh kosong.");
+      return;
+    }
     setIsLoading(true);
     try {
       const schemeParticipants: SchemeParticipant[] = tgrParticipants.map((p, index) => ({
@@ -227,6 +282,7 @@ export default function SchemeManagementPage() {
         type: 'TGR',
         ageCategory: tgrAge,
         tgrCategory: tgrCategory,
+        gelanggang: gelanggang.trim(),
         participantCount: tgrParticipantCount,
         participants: schemeParticipants,
         rounds: [], // TGR doesn't use bracket rounds in this model
@@ -248,6 +304,8 @@ export default function SchemeManagementPage() {
     <>
       <PageTitle title="Manajemen Skema Pertandingan" description="Buat bagan pertandingan atau daftar peserta secara interaktif." />
       
+      <input type="file" ref={fileInputRef} onChange={processUploadedFile} style={{ display: 'none' }} accept=".xlsx, .xls" />
+
       <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
         <TabsList className="grid w-full grid-cols-2">
           <TabsTrigger value="tanding">
@@ -265,7 +323,7 @@ export default function SchemeManagementPage() {
               <CardDescription>Atur detail kelas, jumlah peserta, dan masukkan data peserta untuk membuat bagan pertandingan sistem gugur secara otomatis.</CardDescription>
             </CardHeader>
             <CardContent className="space-y-6">
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
                 <div>
                   <Label htmlFor="tandingAge">Kategori Usia</Label>
                   <Select onValueChange={setTandingAge} value={tandingAge} disabled={isLoading}>
@@ -280,12 +338,16 @@ export default function SchemeManagementPage() {
                   <Input id="tandingClass" value={tandingClass} onChange={(e) => setTandingClass(e.target.value)} placeholder="cth: Kelas A Putra" disabled={isLoading} />
                 </div>
                 <div>
+                  <Label htmlFor="gelanggangTanding">Gelanggang</Label>
+                  <Input id="gelanggangTanding" value={gelanggang} onChange={(e) => setGelanggang(e.target.value)} placeholder="cth: Gelanggang A" disabled={isLoading} />
+                </div>
+                <div>
                   <Label htmlFor="tandingParticipants">Jumlah Peserta</Label>
                   <div className="flex items-center gap-2">
                     <Button variant="outline" size="icon" onClick={() => handleParticipantCountChange(tandingParticipantCount - 1, setTandingParticipantCount, setTandingParticipants)} disabled={isLoading}>
                       <Minus className="h-4 w-4" />
                     </Button>
-                    <Input id="tandingParticipants" type="number" className="text-center" value={tandingParticipantCount} onChange={(e) => handleParticipantCountChange(parseInt(e.target.value) || 2, setTandingParticipantCount, setTandingParticipants)} disabled={isLoading} />
+                    <Input id="tandingParticipants" type="number" className="text-center" value={tandingParticipantCount} onChange={(e) => handleParticipantCountChange(parseInt(e.target.value) || 0, setTandingParticipantCount, setTandingParticipants)} disabled={isLoading} />
                     <Button variant="outline" size="icon" onClick={() => handleParticipantCountChange(tandingParticipantCount + 1, setTandingParticipantCount, setTandingParticipants)} disabled={isLoading}>
                       <Plus className="h-4 w-4" />
                     </Button>
@@ -294,7 +356,13 @@ export default function SchemeManagementPage() {
               </div>
 
               <div className="border-t pt-4">
-                <h3 className="text-lg font-semibold mb-2">Data Peserta</h3>
+                <div className="flex justify-between items-center mb-2">
+                  <h3 className="text-lg font-semibold">Data Peserta</h3>
+                  <Button variant="outline" size="sm" onClick={handleUploadClick} disabled={isLoading}>
+                    <Upload className="mr-2 h-4 w-4" /> Unggah Peserta (.xlsx)
+                  </Button>
+                </div>
+                 <p className="text-xs text-muted-foreground mb-2">Pastikan file Excel memiliki kolom "Nama" dan "Kontingen".</p>
                 <div className="space-y-2 max-h-96 overflow-y-auto pr-2">
                   {tandingParticipants.map((p, index) => (
                     <div key={index} className="grid grid-cols-[auto_1fr_1fr] items-center gap-2">
@@ -321,7 +389,7 @@ export default function SchemeManagementPage() {
               <CardDescription>Masukkan detail dan daftar peserta TGR untuk membuat daftar tampil yang terstruktur.</CardDescription>
             </CardHeader>
             <CardContent className="space-y-6">
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
                  <div>
                   <Label htmlFor="tgrAge">Kategori Usia</Label>
                    <Select onValueChange={setTgrAge} value={tgrAge} disabled={isLoading}>
@@ -340,13 +408,17 @@ export default function SchemeManagementPage() {
                     </SelectContent>
                   </Select>
                 </div>
+                 <div>
+                  <Label htmlFor="gelanggangTgr">Gelanggang</Label>
+                  <Input id="gelanggangTgr" value={gelanggang} onChange={(e) => setGelanggang(e.target.value)} placeholder="cth: Gelanggang B" disabled={isLoading} />
+                </div>
                 <div>
                   <Label htmlFor="tgrParticipants">Jumlah Peserta/Tim</Label>
                   <div className="flex items-center gap-2">
                     <Button variant="outline" size="icon" onClick={() => handleParticipantCountChange(tgrParticipantCount - 1, setTgrParticipantCount, setTgrParticipants)} disabled={isLoading}>
                       <Minus className="h-4 w-4" />
                     </Button>
-                    <Input id="tgrParticipants" type="number" className="text-center" value={tgrParticipantCount} onChange={(e) => handleParticipantCountChange(parseInt(e.target.value) || 1, setTgrParticipantCount, setTgrParticipants)} disabled={isLoading} />
+                    <Input id="tgrParticipants" type="number" className="text-center" value={tgrParticipantCount} onChange={(e) => handleParticipantCountChange(parseInt(e.target.value) || 0, setTgrParticipantCount, setTgrParticipants)} disabled={isLoading} />
                     <Button variant="outline" size="icon" onClick={() => handleParticipantCountChange(tgrParticipantCount + 1, setTgrParticipantCount, setTgrParticipants)} disabled={isLoading}>
                       <Plus className="h-4 w-4" />
                     </Button>
@@ -355,8 +427,13 @@ export default function SchemeManagementPage() {
               </div>
               
                <div className="border-t pt-4">
-                <h3 className="text-lg font-semibold mb-2">Data Peserta</h3>
-                 <p className="text-xs text-muted-foreground mb-2">Untuk Ganda/Regu, pisahkan nama dengan koma pada kolom "Nama Peserta".</p>
+                 <div className="flex justify-between items-center mb-2">
+                    <h3 className="text-lg font-semibold">Data Peserta</h3>
+                    <Button variant="outline" size="sm" onClick={handleUploadClick} disabled={isLoading}>
+                      <Upload className="mr-2 h-4 w-4" /> Unggah Peserta (.xlsx)
+                    </Button>
+                  </div>
+                 <p className="text-xs text-muted-foreground mb-2">Untuk Ganda/Regu, pisahkan nama dengan koma pada kolom "Nama Peserta". Pastikan file Excel memiliki kolom "Nama" dan "Kontingen".</p>
                 <div className="space-y-2 max-h-96 overflow-y-auto pr-2">
                   {tgrParticipants.map((p, index) => (
                     <div key={index} className="grid grid-cols-[auto_1fr_1fr] items-center gap-2">
@@ -379,5 +456,3 @@ export default function SchemeManagementPage() {
     </>
   );
 }
-
-    

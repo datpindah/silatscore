@@ -357,6 +357,7 @@ export interface Scheme {
   id: string; // e.g., 'tanding-dewasa-kelas-a-putra'
   type: 'Tanding' | 'TGR';
   ageCategory: string;
+  gelanggang: string;
   tandingClass?: string;
   tgrCategory?: TGRCategoryType;
   participantCount: number;
