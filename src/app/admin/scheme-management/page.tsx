@@ -140,17 +140,6 @@ export default function SchemeManagementPage() {
     reader.readAsArrayBuffer(file);
   };
   
-  const getRoundName = (numParticipantsInRound: number, totalRounds: number, currentRoundIndex: number): string => {
-    const roundsLeft = totalRounds - currentRoundIndex;
-    if (roundsLeft === 1) return "Final";
-    if (roundsLeft === 2) return "Semi Final";
-    if (roundsLeft === 3) return "Perempat Final";
-    if (roundsLeft === 4) return "Babak 16 Besar";
-    if (roundsLeft === 5) return "Babak 32 Besar";
-    if (roundsLeft === 6) return "Babak 64 Besar";
-    return `Penyisihan (${numParticipantsInRound} Peserta)`;
-  };
-
   const handleGenerateTandingScheme = () => {
     if (!tandingClass.trim() || !gelanggang.trim() || !eventDate || !eventRound) {
       alert("Nama Kelas, Gelanggang, Tanggal, dan Babak tidak boleh kosong.");
@@ -171,74 +160,92 @@ export default function SchemeManagementPage() {
         return;
       }
       
-      const safeAge = tandingAge.replace(/\s+/g, '_').toLowerCase();
-      const safeClass = tandingClass.replace(/\s+/g, '_').toLowerCase();
-      const schemeId = `tanding-${safeAge}-${safeClass}-${Date.now()}`;
+      const schemeId = `tanding-${tandingAge.replace(/\s+/g, '_').toLowerCase()}-${tandingClass.replace(/\s+/g, '_').toLowerCase()}-${Date.now()}`;
       
+      // Correctly calculate bracket size and byes
       const bracketSize = Math.pow(2, Math.ceil(Math.log2(numParticipants)));
       const numByes = bracketSize - numParticipants;
-      
-      const allPositions = Array.from({ length: bracketSize }, (_, i) => i);
-      const seededParticipants: ({ name: string; contingent: string } | null)[] = Array(bracketSize).fill(null);
 
-      // Distribute participants into seeded positions
-      participants.forEach((p, i) => {
-        seededParticipants[i] = p;
-      });
+      // Split participants into those with byes and those in the first round
+      const byes = participants.slice(0, numByes);
+      const firstRounders = participants.slice(numByes);
 
       let rounds: SchemeRound[] = [];
-      let currentCompetitors = seededParticipants;
-      let roundNumber = 1;
       let globalMatchCounter = 1;
+      let nextRoundCompetitors: ({ name: string; contingent: string } | null)[] = [];
 
-      while (currentCompetitors.length > 1) {
-        const matches: SchemeMatch[] = [];
-        const nextCompetitors: ({ name: string; contingent: string } | null)[] = [];
-
-        for (let i = 0; i < currentCompetitors.length; i += 2) {
-          const p1 = currentCompetitors[i];
-          const p2 = currentCompetitors[i + 1];
-
-          // If one participant has a bye (is null), the other advances automatically
-          if (p1 === null && p2 !== null) {
-            nextCompetitors.push(p2);
-            continue;
-          }
-          if (p2 === null && p1 !== null) {
-            nextCompetitors.push(p1);
-            continue;
-          }
-
-          matches.push({
-            matchInternalId: `${schemeId}-R${roundNumber}-M${globalMatchCounter}`,
+      // --- Round 1: Preliminary/Play-in Round (if any) ---
+      if (firstRounders.length > 0) {
+        const firstRoundMatches: SchemeMatch[] = [];
+        for (let i = 0; i < firstRounders.length; i += 2) {
+          const match = {
+            matchInternalId: `${schemeId}-R1-M${globalMatchCounter}`,
             globalMatchNumber: globalMatchCounter,
-            roundName: '', // Will be filled later
-            participant1: p1,
-            participant2: p2,
+            roundName: 'Babak Penyisihan',
+            participant1: firstRounders[i],
+            participant2: firstRounders[i + 1] || null, // Handle odd numbers if needed, though shouldn't happen with this logic
             winnerToMatchId: null,
-            status: 'PENDING',
-          });
-          nextCompetitors.push({ name: `Pemenang Partai ${globalMatchCounter}`, contingent: '' });
+            status: 'PENDING' as const,
+          };
+          firstRoundMatches.push(match);
+          // Create a placeholder for the winner of this match
+          nextRoundCompetitors.push({ name: `Pemenang Partai ${globalMatchCounter}`, contingent: '' });
           globalMatchCounter++;
         }
-        
-        if (matches.length > 0) {
-          rounds.push({
-            roundNumber: roundNumber,
-            name: '', // Will be filled later
-            matches: matches,
-          });
+        rounds.push({
+          roundNumber: 1,
+          name: 'Babak Penyisihan',
+          matches: firstRoundMatches,
+        });
+      }
+
+      // --- Main Bracket Rounds ---
+      // Combine byes with the placeholders for winners from the first round
+      let currentCompetitors: ({ name: string; contingent: string } | null)[] = [...byes, ...nextRoundCompetitors];
+      let roundNumber = rounds.length + 1;
+
+      while (currentCompetitors.length > 1) {
+        const currentRoundMatches: SchemeMatch[] = [];
+        const winnersForNextRound: ({ name: string; contingent: string } | null)[] = [];
+
+        for (let i = 0; i < currentCompetitors.length; i += 2) {
+          const match = {
+            matchInternalId: `${schemeId}-R${roundNumber}-M${globalMatchCounter}`,
+            globalMatchNumber: globalMatchCounter,
+            roundName: '', // Placeholder, to be named later
+            participant1: currentCompetitors[i],
+            participant2: currentCompetitors[i + 1],
+            winnerToMatchId: null,
+            status: 'PENDING' as const,
+          };
+          currentRoundMatches.push(match);
+          winnersForNextRound.push({ name: `Pemenang Partai ${globalMatchCounter}`, contingent: '' });
+          globalMatchCounter++;
         }
+
+        rounds.push({
+          roundNumber: roundNumber,
+          name: '', // Placeholder
+          matches: currentRoundMatches,
+        });
         
-        currentCompetitors = nextCompetitors;
+        currentCompetitors = winnersForNextRound;
         roundNumber++;
       }
-      
-      const totalRounds = rounds.length;
-      rounds.forEach((round, index) => {
-          round.name = getRoundName(round.matches.length * 2, totalRounds, index);
-          round.matches.forEach(m => { m.roundName = round.name; });
+
+      // --- Name the rounds correctly based on their size ---
+      rounds.forEach((round) => {
+        const participantsInRound = round.matches.length * 2;
+        if (participantsInRound === 2) round.name = "Final";
+        else if (participantsInRound === 4) round.name = "Semi Final";
+        else if (participantsInRound === 8) round.name = "Perempat Final";
+        else if (participantsInRound === 16) round.name = "Babak 16 Besar";
+        // The first round was already named 'Babak Penyisihan' if it exists
+        else if (round.name === '') round.name = `Babak ${participantsInRound}`;
+        
+        round.matches.forEach(m => { m.roundName = round.name; });
       });
+
 
       const finalSchemeParticipants: SchemeParticipant[] = participants.map((p, i) => ({
         id: `${p.contingent}-${p.name}-${i}`.replace(/\s+/g, '-'),
@@ -271,6 +278,7 @@ export default function SchemeManagementPage() {
         setIsLoading(false);
     }
   };
+
 
   const handleGenerateTgrScheme = () => {
      if (tgrParticipants.some(p => !p.name.trim() || !p.contingent.trim())) {
@@ -319,10 +327,11 @@ export default function SchemeManagementPage() {
     setIsLoading(true);
     try {
         const dataToSave: Omit<Scheme, 'tandingClass' | 'tgrCategory'> & { tandingClass?: string, tgrCategory?: TGRCategoryType } = { ...generatedScheme };
-        if(dataToSave.type === 'TGR') {
-            delete dataToSave.tandingClass;
+        
+        if (dataToSave.type === 'TGR') {
+            if ('tandingClass' in dataToSave) delete dataToSave.tandingClass;
         } else {
-            delete dataToSave.tgrCategory;
+            if ('tgrCategory' in dataToSave) delete dataToSave.tgrCategory;
         }
 
         await setDoc(doc(db, "schemes", generatedScheme.id), dataToSave);
@@ -538,3 +547,4 @@ export default function SchemeManagementPage() {
     </>
   );
 }
+
