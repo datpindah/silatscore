@@ -31,45 +31,55 @@ export function BracketView({ scheme }: { scheme: Scheme | null }) {
   }
 
   const roundGap = "5rem"; // Space between rounds
+  const boxHeight = 80;
+  const boxWidth = 220;
+  
+  // Custom vertical gaps for specific rounds
+  const getMatchVerticalGap = (roundMatchCount: number, roundIndex: number): number => {
+    if (roundIndex === scheme.rounds.length - 2) return 200; // Larger gap for semi-finals
+    if (roundIndex === scheme.rounds.length - 3) return 120; // Slightly larger for quarter-finals
+    return 100;
+  };
+
 
   return (
-    <Card className="mt-8 bg-background/95 text-card-foreground border-border overflow-hidden">
+    <Card className="mt-8 bg-card text-card-foreground border-border overflow-hidden">
       <CardContent className="p-0">
-        <div className="flex justify-start items-stretch overflow-x-auto p-6 md:p-10 min-h-[500px]" style={{ gap: roundGap }}>
+        <div className="flex justify-start items-stretch overflow-x-auto p-6 md:p-10 min-h-[600px]" style={{ gap: roundGap }}>
           {scheme.rounds.map((round, roundIndex) => {
-            const isFirstRound = roundIndex === 0;
+            const verticalGap = getMatchVerticalGap(round.matches.length, roundIndex);
+            const roundHeight = round.matches.length * verticalGap;
             const isLastRound = roundIndex === scheme.rounds.length - 1;
 
             return (
-              <div key={round.roundNumber} className="flex flex-col flex-shrink-0" style={{ width: '220px' }}>
+              <div key={round.roundNumber} className="flex flex-col flex-shrink-0" style={{ width: `${boxWidth}px`, minHeight: `${roundHeight}px`}}>
                 <h3 className="text-lg font-bold text-center text-primary uppercase tracking-wider mb-8 h-8">
                   {round.name}
                 </h3>
-                <div className="flex flex-col justify-around flex-grow relative">
+                <div className="relative flex-grow">
                   {round.matches.map((match, matchIndex) => {
-                    // Calculate the vertical gap between matches
-                    const matchGap = 100 / round.matches.length;
-                    const topPosition = `calc(${matchGap * (matchIndex + 0.5)}% - 40px)`; // 40px is half the match box height
+                     // Position the box in the middle of its allocated vertical space
+                    const topPosition = matchIndex * verticalGap + (verticalGap - boxHeight) / 2;
 
                     return (
                       <Fragment key={match.matchInternalId}>
                         {/* Match Box */}
                         <div
                           className="absolute"
-                          style={{ top: topPosition, left: 0, width: '100%' }}
+                          style={{ top: `${topPosition}px`, left: 0, width: '100%', height: `${boxHeight}px` }}
                         >
-                          <div className="relative z-10 flex items-center">
+                          <div className="relative z-10 flex items-center h-full">
                             <span className="absolute -left-7 top-1/2 -translate-y-1/2 bg-muted text-muted-foreground rounded-full size-6 flex items-center justify-center text-xs font-sans font-bold border">
                               {match.globalMatchNumber}
                             </span>
-                            <div className="bg-card rounded-lg p-2 shadow-sm border border-border w-full h-[80px] text-sm flex flex-col justify-around">
+                            <div className="bg-background rounded-lg p-2 shadow-sm border border-border w-full h-full text-sm flex flex-col justify-around">
                                 <div className="truncate">
                                   <p className="font-semibold">{match.participant1?.name || '(Bye)'}</p>
                                   <p className="text-xs text-muted-foreground">{match.participant1?.contingent || ''}</p>
                                 </div>
-                                <div className="border-t border-border" />
+                                <div className="border-t border-border/80" />
                                 <div className="truncate">
-                                  <p className="font-semibold">{match.participant2?.name || (isFirstRound ? '(Bye)' : 'Pemenang ...')}</p>
+                                  <p className="font-semibold">{match.participant2?.name || (roundIndex === 0 ? '(Bye)' : 'Pemenang ...')}</p>
                                   <p className="text-xs text-muted-foreground">{match.participant2?.contingent || ''}</p>
                                 </div>
                             </div>
@@ -84,7 +94,7 @@ export function BracketView({ scheme }: { scheme: Scheme | null }) {
                               className="bg-border absolute"
                               style={{
                                 left: '100%',
-                                top: `calc(${topPosition} + 40px)`,
+                                top: `${topPosition + boxHeight / 2}px`,
                                 width: `calc(${roundGap} / 2)`,
                                 height: '2px',
                               }}
@@ -94,9 +104,9 @@ export function BracketView({ scheme }: { scheme: Scheme | null }) {
                                 <div className="bg-border absolute"
                                 style={{
                                     left: `calc(100% + ${roundGap} / 2)`,
-                                    top: `calc(${topPosition} + 40px)`, // from top match center
+                                    top: `${topPosition + boxHeight / 2}px`,
                                     width: '2px',
-                                    height: `calc(${matchGap}% + 2px)`, // height to center of next match
+                                    height: `${verticalGap}px`,
                                 }}
                                 />
                             )}
@@ -105,7 +115,7 @@ export function BracketView({ scheme }: { scheme: Scheme | null }) {
                                 <div className="bg-border absolute"
                                 style={{
                                     left: `calc(100% + ${roundGap} / 2)`,
-                                    top: `calc(${topPosition} + ${matchGap / 2}%)`,
+                                    top: `${topPosition + boxHeight / 2 + verticalGap / 2}px`,
                                     width: `calc(${roundGap} / 2)`,
                                     height: '2px',
                                 }}

@@ -1,7 +1,7 @@
 
 "use client";
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { useParams } from 'next/navigation';
 import { PageTitle } from '@/components/shared/PageTitle';
 import { Button } from '@/components/ui/button';
@@ -9,8 +9,9 @@ import { BracketView } from '@/components/admin/BracketView';
 import { db } from '@/lib/firebase';
 import { doc, onSnapshot } from 'firebase/firestore';
 import type { Scheme } from '@/lib/types';
-import { Loader2, ArrowLeft } from 'lucide-react';
+import { Loader2, ArrowLeft, Download } from 'lucide-react';
 import Link from 'next/link';
+import { toJpeg } from 'html-to-image';
 
 export default function ViewSchemePage() {
   const params = useParams();
@@ -19,6 +20,9 @@ export default function ViewSchemePage() {
   const [scheme, setScheme] = useState<Scheme | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [isDownloading, setIsDownloading] = useState(false);
+
+  const bracketRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     if (!schemeId) return;
@@ -43,6 +47,36 @@ export default function ViewSchemePage() {
 
     return () => unsubscribe();
   }, [schemeId]);
+
+  const handleDownload = useCallback(() => {
+    if (!bracketRef.current) {
+      alert("Referensi bagan tidak ditemukan. Coba lagi.");
+      return;
+    }
+    
+    setIsDownloading(true);
+
+    toJpeg(bracketRef.current, { 
+        quality: 0.95, 
+        backgroundColor: '#F5F5DC', // Light beige background
+        cacheBust: true,
+        pixelRatio: 2, // Higher resolution for better quality
+    })
+      .then((dataUrl) => {
+        const link = document.createElement('a');
+        const fileName = `bagan-${scheme?.tandingClass || scheme?.tgrCategory || schemeId}.jpg`.replace(/\s+/g, '_').toLowerCase();
+        link.download = fileName;
+        link.href = dataUrl;
+        link.click();
+      })
+      .catch((err) => {
+        console.error('Gagal mengkonversi bagan ke JPG', err);
+        alert('Maaf, terjadi kesalahan saat mencoba membuat gambar bagan.');
+      })
+      .finally(() => {
+        setIsDownloading(false);
+      });
+  }, [scheme, schemeId]);
 
   if (isLoading) {
     return (
@@ -70,12 +104,20 @@ export default function ViewSchemePage() {
         title={scheme?.tandingClass || scheme?.tgrCategory || "Detail Bagan"}
         description={`${scheme?.type || ''} - ${scheme?.ageCategory || ''} | Gel: ${scheme?.gelanggang} | Babak: ${scheme?.round}`}
       >
-        <Button asChild variant="outline">
-          <Link href="/admin/scheme-list"><ArrowLeft className="mr-2 h-4 w-4" /> Kembali ke Daftar Bagan</Link>
-        </Button>
+        <div className="flex gap-2">
+            <Button onClick={handleDownload} disabled={isDownloading} variant="default" className="bg-accent hover:bg-accent/90 text-accent-foreground">
+                {isDownloading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Download className="mr-2 h-4 w-4" />}
+                Download (.jpg)
+            </Button>
+            <Button asChild variant="outline">
+              <Link href="/admin/scheme-list"><ArrowLeft className="mr-2 h-4 w-4" /> Kembali ke Daftar Bagan</Link>
+            </Button>
+        </div>
       </PageTitle>
       
-      {scheme ? <BracketView scheme={scheme} /> : <p>Tidak ada data untuk ditampilkan.</p>}
+      <div ref={bracketRef} className="p-4 bg-background">
+        {scheme ? <BracketView scheme={scheme} /> : <p>Tidak ada data untuk ditampilkan.</p>}
+      </div>
     </>
   );
 }
