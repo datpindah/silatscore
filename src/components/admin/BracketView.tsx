@@ -85,9 +85,13 @@ export function BracketView({ scheme }: { scheme: Scheme | null }) {
                       const prevRound = scheme.rounds[roundIndex - 1];
                       const prevRoundIsSemifinal = prevRound.matches.length === 2 && roundIndex -1 !== scheme.rounds.length -1;
                       const prevRoundGap = getMatchVerticalGap(prevRound.matches.length, prevRoundIsSemifinal);
-                      // Total height occupied by previous round's matches and gaps
-                      const totalHeightOfPrevRound = (prevRound.matches.length -1) * prevRoundGap + boxHeight;
-                      topPosition = totalHeightOfPrevRound / 2 - boxHeight / 2;
+                      
+                      // Calculate the correct centered position for the final match
+                      const prevRoundFirstBoxTop = (prevRoundGap - boxHeight) / 2;
+                      const totalHeightOfPrevRound = (prevRound.matches.length - 1) * prevRoundGap + boxHeight;
+                      const centerOfPrevRound = prevRoundFirstBoxTop + totalHeightOfPrevRound / 2;
+                      topPosition = centerOfPrevRound - boxHeight / 2;
+
                     } else {
                       topPosition = matchIndex * verticalGap + (verticalGap - boxHeight) / 2;
                     }
@@ -135,7 +139,7 @@ export function BracketView({ scheme }: { scheme: Scheme | null }) {
                                     {/* H-line from source */}
                                     <div className="bg-border absolute" style={{ top: `${sourceY - 1}px`, left: '100%', width: `calc(${roundGap} / 2)`, height: '2px' }} />
                                     {/* V-line */}
-                                    <div className="bg-border absolute" style={{ top: `${Math.min(sourceY, destY) - 1}px`, left: `calc(100% + ${roundGap} / 2 - 1px)`, width: '2px', height: `${Math.abs(sourceY - destY)}px` }} />
+                                    <div className="bg-border absolute" style={{ top: `${Math.min(sourceY, destY) - 1}px`, left: `calc(100% + ${roundGap} / 2 - 1px)`, width: '2px', height: `${Math.abs(sourceY - destY) + 2}px` }} />
                                     {/* H-line to destination */}
                                     <div className="bg-border absolute" style={{ top: `${destY - 1}px`, left: `calc(100% + ${roundGap} / 2)`, width: `calc(${roundGap} / 2)`, height: '2px' }} />
                                   </Fragment>
