@@ -24,6 +24,7 @@ interface Participant {
 
 const roundOptions = [
   { value: 'Penyisihan', label: 'Penyisihan' },
+  { value: 'Babak 32 Besar', label: 'Babak 32 Besar' },
   { value: 'Babak 16 Besar', label: 'Babak 16 Besar' },
   { value: 'Perempat Final', label: 'Perempat Final' },
   { value: 'Semi Final', label: 'Semi Final' },
@@ -145,11 +146,11 @@ export default function SchemeManagementPage() {
   };
   
   const getRoundName = (numParticipantsInRound: number): string => {
-    if (numParticipantsInRound === 2) return "Final";
-    if (numParticipantsInRound === 4) return "Semi Final";
-    if (numParticipantsInRound === 8) return "Perempat Final";
-    if (numParticipantsInRound === 16) return "Babak 16 Besar";
-    if (numParticipantsInRound === 32) return "Babak 32 Besar";
+    if (numParticipantsInRound <= 2) return "Final";
+    if (numParticipantsInRound <= 4) return "Semi Final";
+    if (numParticipantsInRound <= 8) return "Perempat Final";
+    if (numParticipantsInRound <= 16) return "Babak 16 Besar";
+    if (numParticipantsInRound <= 32) return "Babak 32 Besar";
     return `Penyisihan (${numParticipantsInRound} Besar)`;
   };
 
@@ -166,54 +167,83 @@ export default function SchemeManagementPage() {
     setGeneratedScheme(null);
 
     try {
+        // Standard seeding orders for powers of 2. This ensures top seeds don't meet in early rounds.
+        // The user's input order determines the seeds (1st input is seed #1, etc.).
+        const seedOrders: { [key: number]: number[] } = {
+            2: [1, 2],
+            4: [1, 4, 3, 2],
+            8: [1, 8, 5, 4, 3, 6, 7, 2],
+            16: [1, 16, 9, 8, 5, 12, 13, 4, 3, 14, 11, 6, 7, 10, 15, 2],
+            32: [1, 32, 17, 16, 9, 24, 25, 8, 5, 28, 21, 12, 13, 20, 29, 4, 3, 30, 19, 14, 11, 22, 27, 6, 7, 26, 23, 10, 15, 18, 31, 2],
+            64: [1, 64, 33, 32, 17, 48, 49, 16, 9, 56, 41, 24, 25, 40, 57, 8, 5, 60, 37, 28, 21, 44, 53, 12, 13, 52, 45, 20, 29, 36, 61, 4, 3, 62, 35, 30, 19, 46, 51, 14, 11, 54, 43, 22, 27, 38, 59, 6, 7, 58, 39, 26, 23, 42, 55, 10, 15, 50, 47, 18, 31, 34, 63, 2],
+        };
+
         const initialParticipants = [...tandingParticipants];
         const numParticipants = initialParticipants.length;
 
+        // Determine the bracket size (next power of 2)
         const bracketSize = Math.pow(2, Math.ceil(Math.log2(Math.max(2, numParticipants))));
-        const numByes = bracketSize - numParticipants;
         
-        const participantsWithBye = initialParticipants.slice(0, numByes);
-        const participantsInPrelim = initialParticipants.slice(numByes);
+        const seedOrder = seedOrders[bracketSize];
+        if (!seedOrder) {
+            alert(`Ukuran bracket (${bracketSize}) tidak didukung untuk pembuatan otomatis.`);
+            setIsLoading(false);
+            return;
+        }
+
+        // Create slots, placing BYEs for seeds that don't have a participant
+        const slots: (Participant | 'BYE')[] = new Array(bracketSize).fill('BYE');
+        seedOrder.forEach((seed, index) => {
+            if (seed <= numParticipants) {
+                slots[index] = initialParticipants[seed - 1];
+            }
+        });
 
         const rounds: SchemeRound[] = [];
-        let currentCompetitors: any[] = [];
+        let currentCompetitors: (Participant | { name: string; contingent: string })[] = [];
         let globalMatchCounter = 1;
         let roundNumber = 1;
 
-        if (participantsInPrelim.length > 0) {
-            const prelimRoundName = getRoundName(participantsInPrelim.length);
-            const prelimMatches: SchemeMatch[] = [];
-            
-            currentCompetitors = participantsWithBye.map(p => ({ name: p.name, contingent: p.contingent }));
-            
-            for (let i = 0; i < participantsInPrelim.length; i += 2) {
-                const p1 = participantsInPrelim[i];
-                const p2 = participantsInPrelim[i + 1] || null;
+        // --- Round 1 Generation (handles byes) ---
+        const round1Matches: SchemeMatch[] = [];
+        const round1Name = getRoundName(bracketSize);
+        
+        for (let i = 0; i < bracketSize; i += 2) {
+            const p1 = slots[i];
+            const p2 = slots[i + 1];
 
+            if (p1 === 'BYE') { // p2 advances automatically
+                currentCompetitors.push(p2 as Participant);
+            } else if (p2 === 'BYE') { // p1 advances automatically
+                currentCompetitors.push(p1 as Participant);
+            } else { // It's a real match
                 const match: SchemeMatch = {
-                     matchInternalId: `R${roundNumber}-M${globalMatchCounter}`,
-                     globalMatchNumber: globalMatchCounter,
-                     roundName: prelimRoundName,
-                     participant1: p1 ? { name: p1.name, contingent: p1.contingent } : null,
-                     participant2: p2 ? { name: p2.name, contingent: p2.contingent } : null,
-                     winnerToMatchId: null,
-                     status: 'PENDING',
+                    matchInternalId: `R${roundNumber}-M${globalMatchCounter}`,
+                    globalMatchNumber: globalMatchCounter,
+                    roundName: round1Name,
+                    participant1: p1 as Participant,
+                    participant2: p2 as Participant,
+                    winnerToMatchId: null,
+                    status: 'PENDING',
                 };
-                prelimMatches.push(match);
-                currentCompetitors.push({ name: `(Pemenang Partai ${globalMatchCounter})`, contingent: ''});
+                round1Matches.push(match);
+                currentCompetitors.push({ name: `(Pemenang Partai ${globalMatchCounter})`, contingent: '' });
                 globalMatchCounter++;
             }
-            rounds.push({ roundNumber, name: prelimRoundName, matches: prelimMatches });
+        }
+        
+        // Only add the first round to the rounds array if it had actual matches
+        if (round1Matches.length > 0) {
+            rounds.push({ roundNumber, name: round1Name, matches: round1Matches });
             roundNumber++;
-        } else {
-            currentCompetitors = initialParticipants.map(p => ({ name: p.name, contingent: p.contingent }));
         }
 
-        while(currentCompetitors.length > 1) {
+        // --- Subsequent Rounds Generation ---
+        while (currentCompetitors.length > 1) {
             const roundName = getRoundName(currentCompetitors.length);
             const matchesForThisRound: SchemeMatch[] = [];
-            const winnersForNextRound: any[] = [];
-            
+            const winnersForNextRound: { name: string; contingent: string }[] = [];
+
             for (let i = 0; i < currentCompetitors.length; i += 2) {
                 const p1 = currentCompetitors[i];
                 const p2 = currentCompetitors[i + 1] || null;
@@ -228,7 +258,7 @@ export default function SchemeManagementPage() {
                     status: 'PENDING',
                 };
                 matchesForThisRound.push(match);
-                winnersForNextRound.push({ name: `(Pemenang Partai ${globalMatchCounter})`, contingent: ''});
+                winnersForNextRound.push({ name: `(Pemenang Partai ${globalMatchCounter})`, contingent: '' });
                 globalMatchCounter++;
             }
             rounds.push({ roundNumber, name: roundName, matches: matchesForThisRound });
@@ -332,14 +362,14 @@ export default function SchemeManagementPage() {
         const batch = writeBatch(db);
         if (generatedScheme.type === 'Tanding') {
           if (!generatedScheme.rounds || generatedScheme.rounds.length === 0) {
-            alert("Skema Tanding tidak memiliki babak untuk dijadwalkan.");
+            alert("Skema Tanding tidak memiliki pertandingan untuk dijadwalkan. Ini bisa terjadi jika semua peserta mendapat 'bye'.");
             return;
           }
-          // Only schedule matches from the very first round
-          const firstRoundMatches = generatedScheme.rounds[0].matches;
+          // Only schedule matches from the very first round of actual play
+          const firstPlayableRound = generatedScheme.rounds[0];
           let generatedCount = 0;
 
-          firstRoundMatches.forEach(match => {
+          firstPlayableRound.matches.forEach(match => {
             // Only create schedules for matches with two participants (not byes)
             if (!match.participant1 || !match.participant2) return;
 
@@ -347,7 +377,7 @@ export default function SchemeManagementPage() {
               matchNumber: match.globalMatchNumber,
               date: generatedScheme.date,
               place: generatedScheme.gelanggang,
-              round: generatedScheme.round, // Use the round from the form
+              round: generatedScheme.round, // Use the round from the form for initial scheduling
               class: generatedScheme.tandingClass || '',
               pesilatMerahName: match.participant1.name,
               pesilatMerahContingent: match.participant1.contingent,
@@ -356,7 +386,10 @@ export default function SchemeManagementPage() {
             };
             
             const scheduleDocRef = doc(collection(db, 'schedules_tanding'));
-            batch.set(scheduleDocRef, scheduleData);
+            batch.set(scheduleDocRef, {
+              ...scheduleData,
+              date: Timestamp.fromDate(new Date(scheduleData.date + "T00:00:00")),
+            });
             generatedCount++;
           });
           await batch.commit();
@@ -376,7 +409,10 @@ export default function SchemeManagementPage() {
                 pesilatBiruContingent: '',
             };
             const scheduleDocRef = doc(collection(db, 'schedules_tgr'));
-            batch.set(scheduleDocRef, scheduleData);
+            batch.set(scheduleDocRef, {
+              ...scheduleData,
+              date: Timestamp.fromDate(new Date(scheduleData.date + "T00:00:00")),
+            });
           });
           await batch.commit();
           alert(`${generatedScheme.participants.length} jadwal TGR berhasil dibuat dan ditambahkan ke halaman Jadwal TGR!`);
@@ -590,5 +626,3 @@ export default function SchemeManagementPage() {
     </>
   );
 }
-
-    
