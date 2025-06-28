@@ -160,13 +160,12 @@ export default function SchemeManagementPage() {
     setIsLoading(true);
     setGeneratedScheme(null);
 
-    // Use a timeout to allow the loading state to render before the heavy computation
     setTimeout(() => {
         try {
             const numParticipants = finalParticipants.length;
             const bracketSize = Math.pow(2, Math.ceil(Math.log2(numParticipants)));
-            const numPlayInMatches = numParticipants - bracketSize / 2;
             const numByes = bracketSize - numParticipants;
+            const numPlayInMatches = numParticipants > (bracketSize / 2) ? numParticipants - (bracketSize / 2) : 0;
             
             const participants: SchemeParticipant[] = finalParticipants.map((p, index) => ({
                 id: `p-${index}`,
@@ -180,48 +179,47 @@ export default function SchemeManagementPage() {
 
             let allRounds: SchemeRound[] = [];
             let globalMatchCounter = 1;
+            let competitorsForNextRound: (SchemeParticipant | { name: string, contingent: string })[] = [];
+            
+            // Add participants with byes directly to the next round's list
+            competitorsForNextRound.push(...byeParticipants);
 
-            let nextRoundCompetitors: ({ name: string; contingent: string } | null)[] = [];
-
-            // 1. Create Preliminary Round if needed
-            if (numPlayInMatches > 0) {
+            if (playInParticipants.length > 0) {
                 const preliminaryRound: SchemeRound = {
                     roundNumber: 1,
                     name: "Babak Penyisihan",
                     matches: [],
                 };
                 for (let i = 0; i < numPlayInMatches; i++) {
-                    const p1 = playInParticipants[i];
-                    const p2 = playInParticipants[numPlayInMatches + i];
-                    preliminaryRound.matches.push({
-                        matchInternalId: `R1-M${globalMatchCounter}`,
+                    const p1 = playInParticipants[i * 2];
+                    const p2 = playInParticipants[i * 2 + 1];
+                    const match: SchemeMatch = {
+                        matchInternalId: `R0-M${globalMatchCounter}`,
                         globalMatchNumber: globalMatchCounter,
                         roundName: 'Babak Penyisihan',
                         participant1: p1,
                         participant2: p2,
                         status: 'PENDING',
                         winnerId: null,
-                    });
-                    nextRoundCompetitors.push({ name: `Pemenang Partai ${globalMatchCounter}`, contingent: '' });
+                    };
+                    preliminaryRound.matches.push(match);
+                    competitorsForNextRound.push({ name: `Pemenang Partai ${globalMatchCounter}`, contingent: 'TBD' });
                     globalMatchCounter++;
                 }
                 allRounds.push(preliminaryRound);
             }
+
+            let currentRoundCompetitors = competitorsForNextRound;
             
-            // Combine bye participants with placeholders for winners
-            let mainDrawCompetitors = [...byeParticipants, ...nextRoundCompetitors];
-
-            // 2. Create main bracket rounds
-            let currentRoundNumber = allRounds.length + 1;
-            while (mainDrawCompetitors.length > 1) {
+            while (currentRoundCompetitors.length > 1) {
                 const roundMatches: SchemeMatch[] = [];
-                const winnersForNextRound: ({ name: string; contingent: string } | null)[] = [];
+                const winnersForNextRound: ({ name: string, contingent: string })[] = [];
 
-                for (let i = 0; i < mainDrawCompetitors.length; i += 2) {
-                    const p1 = mainDrawCompetitors[i] || null;
-                    const p2 = mainDrawCompetitors[i + 1] || null;
+                for (let i = 0; i < currentRoundCompetitors.length; i += 2) {
+                    const p1 = currentRoundCompetitors[i] || null;
+                    const p2 = currentRoundCompetitors[i + 1] || null;
                     const match: SchemeMatch = {
-                        matchInternalId: `R${currentRoundNumber}-M${globalMatchCounter}`,
+                        matchInternalId: `R${allRounds.length + 1}-M${globalMatchCounter}`,
                         globalMatchNumber: globalMatchCounter,
                         roundName: '', // Will be set later
                         participant1: p1,
@@ -230,28 +228,26 @@ export default function SchemeManagementPage() {
                         winnerId: null,
                     };
                     roundMatches.push(match);
-                    winnersForNextRound.push({ name: `Pemenang Partai ${globalMatchCounter}`, contingent: '' });
+                    winnersForNextRound.push({ name: `Pemenang Partai ${globalMatchCounter}`, contingent: 'TBD' });
                     globalMatchCounter++;
                 }
                 
-                let roundName = `Babak ${currentRoundNumber}`;
-                const numMatches = roundMatches.length;
-                if (numMatches === 1) roundName = "Final";
-                else if (numMatches === 2) roundName = "Semi Final";
-                else if (numMatches === 4) roundName = "Perempat Final";
-                else if (numMatches === 8) roundName = "Babak 16 Besar";
-                else if (numMatches === 16) roundName = "Babak 32 Besar";
+                let roundName: string;
+                const numMatchesInRound = roundMatches.length;
+                if (numMatchesInRound === 1) roundName = "Final";
+                else if (numMatchesInRound === 2) roundName = "Semi Final";
+                else if (numMatchesInRound === 4) roundName = "Perempat Final";
+                else roundName = `Babak ${numMatchesInRound * 2} Besar`;
 
                 roundMatches.forEach(m => m.roundName = roundName);
                 
                 allRounds.push({
-                    roundNumber: currentRoundNumber,
+                    roundNumber: allRounds.length + 1,
                     name: roundName,
                     matches: roundMatches,
                 });
                 
-                mainDrawCompetitors = winnersForNextRound;
-                currentRoundNumber++;
+                currentRoundCompetitors = winnersForNextRound;
             }
             
             const newScheme: Scheme = {
