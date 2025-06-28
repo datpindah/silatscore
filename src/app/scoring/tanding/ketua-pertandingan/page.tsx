@@ -341,7 +341,7 @@ function KetuaPertandinganPageComponent({ gelanggangName }: { gelanggangName: st
     try {
         const schemeId = matchId.split('-R')[0];
         if (!schemeId) {
-            console.log("Not part of a scheme, skipping bracket update.");
+            console.log("Match not part of a scheme, skipping bracket and schedule update.");
             return;
         }
 
@@ -353,21 +353,18 @@ function KetuaPertandinganPageComponent({ gelanggangName }: { gelanggangName: st
         }
 
         const schemeData = schemeDoc.data() as Scheme;
+        const batch = writeBatch(db); // Use a batch for atomic updates
         let completedMatch: SchemeMatch | null = null;
-        let matchFound = false;
 
-        // Find the completed match to get its globalMatchNumber
+        // Find the completed match and mark it as complete
         for (const round of schemeData.rounds) {
-            for (const match of round.matches) {
-                if (match.matchInternalId === matchId) {
-                    completedMatch = match;
-                    match.status = 'COMPLETED';
-                    match.winnerId = winnerInfo.name; 
-                    matchFound = true;
-                    break;
-                }
+            const match = round.matches.find(m => m.matchInternalId === matchId);
+            if (match) {
+                completedMatch = match;
+                match.status = 'COMPLETED';
+                match.winnerId = winnerInfo.name; 
+                break;
             }
-            if (matchFound) break;
         }
 
         if (!completedMatch) {
@@ -376,20 +373,38 @@ function KetuaPertandinganPageComponent({ gelanggangName }: { gelanggangName: st
         }
 
         const placeholderText = `Pemenang Partai ${completedMatch.globalMatchNumber}`;
-
-        // Find the placeholder in subsequent rounds and replace it with the winner
         let placeholderFoundAndReplaced = false;
+
+        // Find the placeholder in subsequent rounds to update scheme and schedule
         for (const round of schemeData.rounds) {
             for (const match of round.matches) {
-                // Check and replace participant 1
+                let participantToUpdate: 'participant1' | 'participant2' | null = null;
+                
                 if (match.participant1?.name === placeholderText) {
-                    match.participant1 = winnerInfo;
-                    placeholderFoundAndReplaced = true;
-                    break;
+                    participantToUpdate = 'participant1';
+                } else if (match.participant2?.name === placeholderText) {
+                    participantToUpdate = 'participant2';
                 }
-                // Check and replace participant 2
-                if (match.participant2?.name === placeholderText) {
-                    match.participant2 = winnerInfo;
+
+                if (participantToUpdate) {
+                    // Update the scheme data in memory
+                    match[participantToUpdate] = winnerInfo;
+
+                    // Prepare the update for the corresponding schedule document
+                    const scheduleDocRefToUpdate = doc(db, 'schedules_tanding', match.matchInternalId);
+                    const scheduleUpdatePayload: { [key: string]: string } = {};
+
+                    if (participantToUpdate === 'participant1') {
+                        scheduleUpdatePayload.pesilatMerahName = winnerInfo.name;
+                        scheduleUpdatePayload.pesilatMerahContingent = winnerInfo.contingent;
+                    } else { // participant2
+                        scheduleUpdatePayload.pesilatBiruName = winnerInfo.name;
+                        scheduleUpdatePayload.pesilatBiruContingent = winnerInfo.contingent;
+                    }
+                    
+                    // Add schedule update to the batch
+                    batch.update(scheduleDocRefToUpdate, scheduleUpdatePayload);
+                    
                     placeholderFoundAndReplaced = true;
                     break;
                 }
@@ -398,18 +413,24 @@ function KetuaPertandinganPageComponent({ gelanggangName }: { gelanggangName: st
         }
 
         if (placeholderFoundAndReplaced) {
-            console.log(`Updated bracket: ${winnerInfo.name} advances.`);
+            console.log(`Updated schedule and bracket: ${winnerInfo.name} advances.`);
         } else {
-            console.log(`Winner of match ${completedMatch.globalMatchNumber} is determined, but no placeholder was found in subsequent rounds (might be final match).`);
+            console.log(`Winner of match ${completedMatch.globalMatchNumber} determined. This may be the final match.`);
         }
         
-        await updateDoc(schemeDocRef, { rounds: schemeData.rounds });
+        // Add the scheme update to the batch
+        batch.update(schemeDocRef, { rounds: schemeData.rounds });
+        
+        // Commit all changes atomically
+        await batch.commit();
 
     } catch (e) {
-        console.error("Error advancing winner in scheme:", e);
-        setError("Gagal memperbarui bagan pertandingan.");
+        console.error("Error advancing winner in scheme and schedule:", e);
+        setError("Gagal memperbarui bagan dan jadwal pertandingan.");
+        alert("Gagal memperbarui bagan dan jadwal pertandingan.");
     }
   };
+
 
   const handleConfirmMatchResult = async () => {
     if (!activeMatchId || !matchDetails || !winnerSelectionDialog || !victoryTypeDialog) {
