@@ -9,7 +9,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { GitBranch, Users, Minus, Plus, Loader2, Upload } from 'lucide-react';
+import { GitBranch, Users, Minus, Plus, Loader2, Upload, Download } from 'lucide-react';
 import { db } from '@/lib/firebase';
 import { doc, setDoc, Timestamp } from 'firebase/firestore';
 import { ageCategories, tgrCategoriesList, type TGRCategoryType, type Scheme, type SchemeParticipant, type SchemeRound, type SchemeMatch } from '@/lib/types';
@@ -78,6 +78,16 @@ export default function SchemeManagementPage() {
       newParticipants[index] = { ...newParticipants[index], [field]: value };
       return newParticipants;
     });
+  };
+  
+  const handleDownloadTemplate = () => {
+    const headers = ["Nama", "Kontingen"];
+    const ws = XLSX.utils.aoa_to_sheet([headers]);
+    ws['!cols'] = [{ wch: 35 }, { wch: 35 }]; // Set column widths
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "Daftar Peserta");
+    XLSX.writeFile(wb, "Template_Unggah_Peserta.xlsx");
+    alert("Template untuk unggah data peserta telah berhasil diunduh.");
   };
 
   const handleUploadClick = () => {
@@ -216,7 +226,7 @@ export default function SchemeManagementPage() {
               };
               nextRoundMatches.push(newMatch);
               match1.winnerToMatchId = newMatch.matchInternalId;
-              match2.winnerToMatchId = newMatch.matchInternalId;
+              if(match2) match2.winnerToMatchId = newMatch.matchInternalId;
           }
           finalRounds.push({roundNumber: roundCounter++, name: nextRoundName, matches: nextRoundMatches});
       }
@@ -358,11 +368,16 @@ export default function SchemeManagementPage() {
               <div className="border-t pt-4">
                 <div className="flex justify-between items-center mb-2">
                   <h3 className="text-lg font-semibold">Data Peserta</h3>
-                  <Button variant="outline" size="sm" onClick={handleUploadClick} disabled={isLoading}>
-                    <Upload className="mr-2 h-4 w-4" /> Unggah Peserta (.xlsx)
-                  </Button>
+                  <div className="flex items-center gap-2">
+                    <Button variant="outline" size="sm" onClick={handleDownloadTemplate} disabled={isLoading}>
+                      <Download className="mr-2 h-4 w-4" /> Download Template
+                    </Button>
+                    <Button variant="outline" size="sm" onClick={handleUploadClick} disabled={isLoading}>
+                      <Upload className="mr-2 h-4 w-4" /> Unggah Peserta (.xlsx)
+                    </Button>
+                  </div>
                 </div>
-                 <p className="text-xs text-muted-foreground mb-2">Pastikan file Excel memiliki kolom "Nama" dan "Kontingen".</p>
+                 <p className="text-xs text-muted-foreground mb-2">Unduh template, isi data, lalu unggah file. Pastikan file Excel memiliki kolom "Nama" dan "Kontingen".</p>
                 <div className="space-y-2 max-h-96 overflow-y-auto pr-2">
                   {tandingParticipants.map((p, index) => (
                     <div key={index} className="grid grid-cols-[auto_1fr_1fr] items-center gap-2">
@@ -429,11 +444,16 @@ export default function SchemeManagementPage() {
                <div className="border-t pt-4">
                  <div className="flex justify-between items-center mb-2">
                     <h3 className="text-lg font-semibold">Data Peserta</h3>
-                    <Button variant="outline" size="sm" onClick={handleUploadClick} disabled={isLoading}>
-                      <Upload className="mr-2 h-4 w-4" /> Unggah Peserta (.xlsx)
-                    </Button>
+                    <div className="flex items-center gap-2">
+                      <Button variant="outline" size="sm" onClick={handleDownloadTemplate} disabled={isLoading}>
+                        <Download className="mr-2 h-4 w-4" /> Download Template
+                      </Button>
+                      <Button variant="outline" size="sm" onClick={handleUploadClick} disabled={isLoading}>
+                        <Upload className="mr-2 h-4 w-4" /> Unggah Peserta (.xlsx)
+                      </Button>
+                    </div>
                   </div>
-                 <p className="text-xs text-muted-foreground mb-2">Untuk Ganda/Regu, pisahkan nama dengan koma pada kolom "Nama Peserta". Pastikan file Excel memiliki kolom "Nama" dan "Kontingen".</p>
+                 <p className="text-xs text-muted-foreground mb-2">Unduh template, isi data, lalu unggah file. Untuk Ganda/Regu, pisahkan nama dengan koma di dalam satu sel pada kolom "Nama".</p>
                 <div className="space-y-2 max-h-96 overflow-y-auto pr-2">
                   {tgrParticipants.map((p, index) => (
                     <div key={index} className="grid grid-cols-[auto_1fr_1fr] items-center gap-2">
