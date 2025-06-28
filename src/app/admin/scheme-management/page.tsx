@@ -2,6 +2,7 @@
 "use client";
 
 import { useState, useCallback, useRef } from 'react';
+import { useRouter } from 'next/navigation';
 import { PageTitle } from '@/components/shared/PageTitle';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
@@ -9,12 +10,11 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { GitBranch, Users, Minus, Plus, Loader2, Upload, Download, CalendarPlus } from 'lucide-react';
+import { GitBranch, Users, Minus, Plus, Loader2, Upload, Download } from 'lucide-react';
 import { db } from '@/lib/firebase';
-import { doc, setDoc, Timestamp, writeBatch, collection } from 'firebase/firestore';
-import { ageCategories, tgrCategoriesList, type TGRCategoryType, type Scheme, type SchemeParticipant, type SchemeRound, type SchemeMatch, type ScheduleTanding, type ScheduleTGR } from '@/lib/types';
+import { doc, setDoc, Timestamp } from 'firebase/firestore';
+import { ageCategories, tgrCategoriesList, type TGRCategoryType, type Scheme, type SchemeParticipant, type SchemeRound, type SchemeMatch } from '@/lib/types';
 import * as XLSX from 'xlsx';
-import { BracketView } from '@/components/admin/BracketView';
 import { FormField } from '@/components/admin/ScheduleFormFields';
 
 interface Participant {
@@ -32,17 +32,15 @@ const roundOptions = [
 ];
 
 export default function SchemeManagementPage() {
+  const router = useRouter();
   const [activeTab, setActiveTab] = useState('tanding');
   const [isLoading, setIsLoading] = useState(false);
-  const [isGeneratingSchedule, setIsGeneratingSchedule] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const [generatedScheme, setGeneratedScheme] = useState<Scheme | null>(null);
 
   // General State
   const [gelanggang, setGelanggang] = useState('');
   const [eventDate, setEventDate] = useState(new Date().toISOString().split('T')[0]);
   const [eventRound, setEventRound] = useState('Penyisihan');
-
 
   // Tanding State
   const [tandingAge, setTandingAge] = useState<string>('Dewasa');
@@ -165,10 +163,9 @@ export default function SchemeManagementPage() {
       return;
     }
     setIsLoading(true);
-    setGeneratedScheme(null);
 
     try {
-      let initialParticipants = [...tandingParticipants];
+      const initialParticipants = [...tandingParticipants];
       const numParticipants = initialParticipants.length;
 
       if (numParticipants < 2) {
@@ -187,71 +184,62 @@ export default function SchemeManagementPage() {
       const bracketSize = Math.pow(2, Math.ceil(Math.log2(numParticipants)));
       const byes = bracketSize - numParticipants;
       
-      // Create seeded participant list
-      let seededParticipants: (Participant | null)[] = [...initialParticipants];
-      while(seededParticipants.length < bracketSize) {
-        seededParticipants.push(null); // Pad with null for bye representation
-      }
+      const prelimMatchesCount = numParticipants - byes;
+      const participantsInPrelims = initialParticipants.slice(byes);
 
-      // Reorder for standard seeding (1 vs n, 2 vs n-1 etc.)
-      const finalSeedingOrder: (Participant | null)[] = new Array(bracketSize).fill(null);
-      const highSeeds = seededParticipants.slice(0, bracketSize / 2);
-      const lowSeeds = seededParticipants.slice(bracketSize / 2).reverse();
+      const prelimRoundName = getRoundName(prelimMatchesCount * 2);
+      const prelimMatches: SchemeMatch[] = [];
+
+      for(let i=0; i < prelimMatchesCount; i++) {
+        const p1 = participantsInPrelims[i * 2];
+        const p2 = participantsInPrelims[i * 2 + 1];
+        prelimMatches.push({
+            matchInternalId: `${schemeId}-R1-M${globalMatchCounter}`,
+            globalMatchNumber: globalMatchCounter,
+            roundName: prelimRoundName,
+            participant1: p1,
+            participant2: p2,
+            winnerToMatchId: null,
+            status: 'PENDING',
+        });
+        globalMatchCounter++;
+      }
       
-      for(let i=0; i < bracketSize / 2; i++) {
-        finalSeedingOrder[i*2] = highSeeds[i];
-        finalSeedingOrder[i*2+1] = lowSeeds[i];
+      if(prelimMatches.length > 0) {
+        rounds.push({ roundNumber: 1, name: prelimRoundName, matches: prelimMatches });
       }
 
-      let currentCompetitors: (Participant | null)[] = finalSeedingOrder;
-      let roundNumber = 1;
-
-      // Build rounds from bottom up
+      let currentCompetitors: (Participant | null)[] = [
+          ...initialParticipants.slice(0, byes),
+          ...prelimMatches.map(m => ({ name: `(Pemenang Partai ${m.globalMatchNumber})`, contingent: '' }))
+      ];
+      
+      let roundNumber = 2;
       while(currentCompetitors.length > 1) {
         const roundName = getRoundName(currentCompetitors.length);
         const matchesForThisRound: SchemeMatch[] = [];
         const nextRoundCompetitors: (Participant | null)[] = [];
 
-        for (let i = 0; i < currentCompetitors.length; i += 2) {
-          const p1 = currentCompetitors[i];
-          const p2 = currentCompetitors[i+1];
-
-          if (p1 === null) {
-            nextRoundCompetitors.push(p2); // p2 gets a bye
-            continue;
-          }
-          if (p2 === null) {
-            nextRoundCompetitors.push(p1); // p1 gets a bye
-            continue;
-          }
-
-          const match: SchemeMatch = {
-              matchInternalId: `${schemeId}-R${roundNumber}-M${globalMatchCounter}`,
-              globalMatchNumber: globalMatchCounter,
-              roundName: roundName,
-              participant1: p1,
-              participant2: p2,
-              winnerToMatchId: null, // This can be calculated later if needed
-              status: 'PENDING',
-          };
-          matchesForThisRound.push(match);
-          nextRoundCompetitors.push({ name: `(Pemenang Partai ${globalMatchCounter})`, contingent: '' });
-          globalMatchCounter++;
+        for(let i = 0; i < currentCompetitors.length; i += 2) {
+            const match: SchemeMatch = {
+                matchInternalId: `${schemeId}-R${roundNumber}-M${globalMatchCounter}`,
+                globalMatchNumber: globalMatchCounter,
+                roundName: roundName,
+                participant1: currentCompetitors[i],
+                participant2: currentCompetitors[i+1],
+                winnerToMatchId: null,
+                status: 'PENDING',
+            };
+            matchesForThisRound.push(match);
+            nextRoundCompetitors.push({ name: `(Pemenang Partai ${globalMatchCounter})`, contingent: '' });
+            globalMatchCounter++;
         }
 
-        if (matchesForThisRound.length > 0) {
-          rounds.unshift({ roundNumber, name: roundName, matches: matchesForThisRound });
-        }
+        rounds.push({ roundNumber, name: roundName, matches: matchesForThisRound });
         currentCompetitors = nextRoundCompetitors;
         roundNumber++;
       }
       
-       // Re-assign correct round numbers
-      rounds.forEach((round, index) => {
-          round.roundNumber = index + 1;
-      });
-
-
       const finalSchemeParticipants: SchemeParticipant[] = tandingParticipants.map((p, i) => ({
         id: `${p.contingent}-${p.name}-${i}`.replace(/\s+/g, '-'),
         name: p.name,
@@ -275,7 +263,7 @@ export default function SchemeManagementPage() {
 
       await setDoc(doc(db, "schemes", schemeId), newScheme);
       alert(`Skema Tanding untuk ${tandingClass} (${tandingAge}) dengan ${numParticipants} peserta berhasil dibuat!`);
-      setGeneratedScheme(newScheme);
+      router.push(`/admin/scheme-list/${schemeId}`);
 
     } catch (err) {
       console.error("Error generating Tanding scheme:", err);
@@ -295,7 +283,6 @@ export default function SchemeManagementPage() {
       return;
     }
     setIsLoading(true);
-    setGeneratedScheme(null);
     try {
       const schemeParticipants: SchemeParticipant[] = tgrParticipants.map((p, index) => ({
         id: `${p.contingent}-${p.name}-${index}`.replace(/\s+/g, '-'),
@@ -324,7 +311,7 @@ export default function SchemeManagementPage() {
 
       await setDoc(doc(db, "schemes", schemeId), newScheme);
       alert(`Daftar Peserta TGR untuk ${tgrCategory} (${tgrAge}) dengan ${tgrParticipantCount} peserta berhasil disimpan.`);
-      setGeneratedScheme(newScheme);
+      router.push(`/admin/scheme-list/${schemeId}`);
 
     } catch(err) {
       console.error("Error generating TGR scheme:", err);
@@ -334,96 +321,9 @@ export default function SchemeManagementPage() {
     }
   }
 
-  const handleGenerateSchedule = async () => {
-      if (!generatedScheme) {
-        alert("Silakan buat skema terlebih dahulu.");
-        return;
-      }
-      setIsGeneratingSchedule(true);
-      try {
-        const batch = writeBatch(db);
-        if (generatedScheme.type === 'Tanding') {
-          if (!generatedScheme.rounds || generatedScheme.rounds.length === 0) {
-            alert("Skema Tanding tidak memiliki pertandingan untuk dijadwalkan.");
-            setIsGeneratingSchedule(false);
-            return;
-          }
-          
-          let generatedCount = 0;
-          // Generate schedule only for the first round of actual matches
-          const firstRoundWithMatches = generatedScheme.rounds.find(r => r.matches.length > 0);
-
-          if (!firstRoundWithMatches) {
-            alert("Tidak ada pertandingan yang valid di skema ini untuk dijadwalkan.");
-            setIsGeneratingSchedule(false);
-            return;
-          }
-
-          firstRoundWithMatches.matches.forEach(match => {
-              if (!match.participant1 || !match.participant2) return; // Skip byes
-
-              const scheduleData: Omit<ScheduleTanding, 'id'> = {
-                  matchNumber: match.globalMatchNumber,
-                  date: generatedScheme.date,
-                  place: generatedScheme.gelanggang,
-                  round: match.roundName, 
-                  class: generatedScheme.tandingClass || '',
-                  pesilatMerahName: match.participant1.name,
-                  pesilatMerahContingent: match.participant1.contingent,
-                  pesilatBiruName: match.participant2.name,
-                  pesilatBiruContingent: match.participant2.contingent,
-                  matchInternalId: match.matchInternalId, // Link back to the scheme match
-              };
-              
-              const scheduleDocRef = doc(db, 'schedules_tanding', match.matchInternalId); // Use internal ID as document ID
-              batch.set(scheduleDocRef, {
-                  ...scheduleData,
-                  date: Timestamp.fromDate(new Date(scheduleData.date + "T00:00:00")),
-              });
-              generatedCount++;
-          });
-
-          if(generatedCount === 0) {
-            alert("Tidak ada pertandingan babak awal yang dapat dijadwalkan secara otomatis dari skema ini.");
-          } else {
-            await batch.commit();
-            alert(`${generatedCount} jadwal Tanding berhasil dibuat dan ditambahkan ke halaman Jadwal Tanding!`);
-          }
-        
-        } else { // TGR
-          generatedScheme.participants.forEach((participant, index) => {
-             const scheduleData: Omit<ScheduleTGR, 'id'> = {
-                lotNumber: participant.seed || index + 1,
-                category: generatedScheme.tgrCategory || 'Tunggal',
-                date: generatedScheme.date,
-                place: generatedScheme.gelanggang,
-                round: generatedScheme.round,
-                pesilatMerahName: participant.name,
-                pesilatMerahContingent: participant.contingent,
-                pesilatBiruName: '',
-                pesilatBiruContingent: '',
-            };
-            const scheduleDocRef = doc(collection(db, 'schedules_tgr'));
-            batch.set(scheduleDocRef, {
-              ...scheduleData,
-              date: Timestamp.fromDate(new Date(scheduleData.date + "T00:00:00")),
-            });
-          });
-          await batch.commit();
-          alert(`${generatedScheme.participants.length} jadwal TGR berhasil dibuat dan ditambahkan ke halaman Jadwal TGR!`);
-        }
-      } catch (err) {
-        console.error("Error generating schedule:", err);
-        alert(`Gagal membuat jadwal: ${err instanceof Error ? err.message : String(err)}`);
-      } finally {
-        setIsGeneratingSchedule(false);
-      }
-    };
-
-
   return (
     <>
-      <PageTitle title="Manajemen Skema Pertandingan" description="Buat bagan pertandingan atau daftar peserta secara interaktif." />
+      <PageTitle title="Buat Skema Pertandingan" description="Buat bagan pertandingan atau daftar peserta secara interaktif." />
       
       <input type="file" ref={fileInputRef} onChange={processUploadedFile} style={{ display: 'none' }} accept=".xlsx, .xls" />
 
@@ -510,7 +410,7 @@ export default function SchemeManagementPage() {
               
               <Button onClick={handleGenerateTandingScheme} className="w-full md:w-auto" disabled={isLoading}>
                 {isLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin"/> : <GitBranch className="mr-2 h-4 w-4" />}
-                Buat Skema Bagan Tanding
+                Buat Skema & Lihat Bagan
               </Button>
             </CardContent>
           </Card>
@@ -597,27 +497,12 @@ export default function SchemeManagementPage() {
 
                <Button onClick={handleGenerateTgrScheme} className="w-full md:w-auto" disabled={isLoading}>
                 {isLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin"/> : <Users className="mr-2 h-4 w-4" />}
-                Buat Daftar Peserta TGR
+                Buat Daftar & Lihat
               </Button>
             </CardContent>
           </Card>
         </TabsContent>
       </Tabs>
-
-      {generatedScheme && (
-        <div className="mt-8">
-            <BracketView scheme={generatedScheme} />
-            <div className="mt-4 text-center">
-                <Button onClick={handleGenerateSchedule} disabled={isGeneratingSchedule} className="bg-green-600 hover:bg-green-700 text-white">
-                    {isGeneratingSchedule ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <CalendarPlus className="mr-2 h-4 w-4" />}
-                    Generate Jadwal dari Skema Ini
-                </Button>
-                <p className="text-xs text-muted-foreground mt-2">
-                    Aksi ini akan membuat jadwal pertandingan babak pertama di halaman Jadwal Tanding/TGR.
-                </p>
-            </div>
-        </div>
-      )}
     </>
   );
 }

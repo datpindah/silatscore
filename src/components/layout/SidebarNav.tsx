@@ -3,7 +3,7 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { Home, CalendarDays, UserCog, BookOpen, ListOrdered, Users, FileSpreadsheet, GitBranch } from 'lucide-react';
+import { Home, CalendarDays, UserCog, BookOpen, ListOrdered, Users, FileSpreadsheet, GitBranch, LayoutGrid } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import {
   Sidebar,
@@ -22,7 +22,8 @@ const adminNavItems = [
   { href: '/admin', label: 'Dashboard', icon: Home },
   { href: '/admin/schedule-tanding', label: 'Jadwal Tanding', icon: CalendarDays },
   { href: '/admin/schedule-tgr', label: 'Jadwal TGR', icon: ListOrdered },
-  { href: '/admin/scheme-management', label: 'Manajemen Skema', icon: GitBranch },
+  { href: '/admin/scheme-management', label: 'Buat Skema', icon: GitBranch },
+  { href: '/admin/scheme-list', label: 'Daftar Bagan', icon: LayoutGrid },
   { href: '/admin/data-recap', label: 'Rekap Data Peserta', icon: FileSpreadsheet },
   { href: '/admin/rule-clarifier', label: 'Klarifikasi Aturan', icon: BookOpen },
   // Add more admin links here if needed
