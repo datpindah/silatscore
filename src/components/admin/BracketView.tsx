@@ -157,6 +157,10 @@ export function BracketView({ scheme }: { scheme: Scheme | null }) {
               const parentMatch1 = mainDrawRounds[roundIndex].matches[2 * round.matches.indexOf(match)];
               const parentMatch2 = mainDrawRounds[roundIndex].matches[2 * round.matches.indexOf(match) + 1];
               
+              if (!parentMatch1 || !parentMatch2) {
+                return null;
+              }
+
               const parent1Pos = positions.get(parentMatch1.matchInternalId);
               const parent2Pos = positions.get(parentMatch2.matchInternalId);
 
