@@ -109,35 +109,53 @@ export function BracketView({ scheme }: { scheme: Scheme | null }) {
       </CardHeader>
       <CardContent className="p-0">
         <div className="relative p-10" style={{ height: `${totalHeight + 40}px`, width: `${totalWidth + 40}px` }}>
-          {/* Render Connectors */}
-          {rounds.map((round, roundIndex) => {
-             if (roundIndex === 0) return null; // No connectors from before the first round
-             
-             return round.matches.map((match, matchIndex) => {
+          <svg className="absolute inset-0 h-full w-full">
+            {/* Render Connectors */}
+            {rounds.slice(1).map((round, roundIndex) => (
+              round.matches.map((match) => {
                 const childPos = positions.get(match.matchInternalId);
                 if (!childPos) return null;
 
-                const parent1 = rounds[roundIndex - 1].matches[matchIndex * 2];
-                const parent2 = rounds[roundIndex - 1].matches[matchIndex * 2 + 1];
+                const parent1Index = 2 * round.matches.indexOf(match);
+                const parent2Index = parent1Index + 1;
+                
+                const parent1 = rounds[roundIndex].matches[parent1Index];
+                const parent2 = rounds[roundIndex].matches[parent2Index];
 
-                const parent1Pos = parent1 ? positions.get(parent1.matchInternalId) : null;
-                const parent2Pos = parent2 ? positions.get(parent2.matchInternalId) : null;
-                
-                const p1_is_bye = parent1 && parent1.participant2 === null;
-                
-                if (p1_is_bye && parent1Pos) {
-                   const sourceX = parent1Pos.x + BOX_WIDTH;
-                   const sourceY = parent1Pos.y + BOX_HEIGHT / 2;
-                   const destX = childPos.x;
-                   const destY = childPos.y + BOX_HEIGHT / 2;
-                   return <path key={`conn-${match.matchInternalId}`} d={`M ${sourceX} ${sourceY} H ${destX}`} className="fill-none stroke-border" strokeWidth="2"/>;
-                }
-                
+                if (!parent1 || !parent2) return null;
+
+                const parent1Pos = positions.get(parent1.matchInternalId);
+                const parent2Pos = positions.get(parent2.matchInternalId);
+
                 if (!parent1Pos || !parent2Pos) return null;
 
+                const lineX = parent1Pos.x + BOX_WIDTH;
+
+                if (parent1.participant1 && !parent1.participant2) { // Parent 1 is a BYE
+                    const lineY = parent1Pos.y + BOX_HEIGHT / 2;
+                     return (
+                        <path
+                            key={`conn-bye-${parent1.matchInternalId}`}
+                            d={`M ${lineX} ${lineY} H ${childPos.x + BOX_WIDTH / 2}`}
+                            className="fill-none stroke-border" strokeWidth="2"
+                        />
+                    );
+                }
+
+                if (parent2.participant1 && !parent2.participant2) { // Parent 2 is a BYE
+                    const lineY = parent2Pos.y + BOX_HEIGHT / 2;
+                     return (
+                        <path
+                            key={`conn-bye-${parent2.matchInternalId}`}
+                            d={`M ${lineX} ${lineY} H ${childPos.x + BOX_WIDTH / 2}`}
+                            className="fill-none stroke-border" strokeWidth="2"
+                        />
+                    );
+                }
+
+                // Standard connector
                 const lineY1 = parent1Pos.y + BOX_HEIGHT / 2;
                 const lineY2 = parent2Pos.y + BOX_HEIGHT / 2;
-                const lineX = parent1Pos.x + BOX_WIDTH;
                 const midPointX = lineX + ROUND_GAP / 2;
                 const midPointY = childPos.y + BOX_HEIGHT / 2;
 
@@ -149,14 +167,17 @@ export function BracketView({ scheme }: { scheme: Scheme | null }) {
                     strokeWidth="2"
                   />
                 )
-             })
-          })}
+              })
+            ))}
+          </svg>
 
           {/* Render Boxes */}
           {rounds.map((round) => (
             round.matches.map((match) => {
               const pos = positions.get(match.matchInternalId);
               if (!pos) return null;
+
+              if (!match.participant1 && !match.participant2) return null;
 
               return (
                 <div
