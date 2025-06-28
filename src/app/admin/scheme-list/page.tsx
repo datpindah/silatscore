@@ -4,7 +4,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { PageTitle } from '@/components/shared/PageTitle';
 import { db } from '@/lib/firebase';
-import { collection, getDocs, query, orderBy, doc, deleteDoc } from 'firebase/firestore';
+import { collection, getDocs, query, orderBy, doc, deleteDoc, writeBatch } from 'firebase/firestore';
 import type { Scheme } from '@/lib/types';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Button } from '@/components/ui/button';
@@ -22,6 +22,7 @@ export default function SchemeListPage() {
   const [filteredSchemes, setFilteredSchemes] = useState<Scheme[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isDeletingId, setIsDeletingId] = useState<string | null>(null);
+  const [isDeletingAll, setIsDeletingAll] = useState(false);
   const [error, setError] = useState<string | null>(null);
   
   const [filterType, setFilterType] = useState('all');
@@ -83,9 +84,54 @@ export default function SchemeListPage() {
     }
   };
 
+  const handleDeleteAllSchemes = async () => {
+    if (!confirm(`Apakah Anda yakin ingin menghapus SEMUA bagan pertandingan secara permanen? Tindakan ini tidak dapat diurungkan.`)) {
+      return;
+    }
+
+    setIsDeletingAll(true);
+    setError(null);
+    try {
+      const q = query(collection(db, 'schemes'));
+      const querySnapshot = await getDocs(q);
+
+      if (querySnapshot.empty) {
+        alert('Tidak ada bagan untuk dihapus.');
+        setIsDeletingAll(false);
+        return;
+      }
+
+      const batch = writeBatch(db);
+      querySnapshot.forEach(docSnap => {
+        batch.delete(docSnap.ref);
+      });
+
+      await batch.commit();
+      await fetchSchemes(); // Re-fetch to show the empty list
+      alert(`${querySnapshot.size} bagan berhasil dihapus.`);
+
+    } catch (err) {
+      console.error("Error deleting all schemes:", err);
+      const errorMessage = err instanceof Error ? err.message : "Terjadi kesalahan yang tidak diketahui.";
+      setError(`Gagal menghapus semua bagan: ${errorMessage}`);
+      alert(`Gagal menghapus semua bagan.`);
+    } finally {
+      setIsDeletingAll(false);
+    }
+  };
+
   return (
     <>
-      <PageTitle title="Daftar Bagan Pertandingan" description="Lihat semua skema dan bagan pertandingan yang telah dibuat." />
+      <PageTitle title="Daftar Bagan Pertandingan" description="Lihat semua skema dan bagan pertandingan yang telah dibuat.">
+        <Button 
+          variant="destructive" 
+          onClick={handleDeleteAllSchemes} 
+          disabled={isLoading || isDeletingId !== null || isDeletingAll || schemes.length === 0}
+        >
+          {isDeletingAll ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Trash2 className="mr-2 h-4 w-4" />}
+          Hapus Semua Bagan
+        </Button>
+      </PageTitle>
       
       {error && (
         <Alert variant="destructive" className="mb-6">
