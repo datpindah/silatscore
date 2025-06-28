@@ -166,16 +166,13 @@ export default function SchemeManagementPage() {
       const numParticipants = participants.length;
       if (numParticipants < 2) throw new Error("Minimal 2 peserta dibutuhkan.");
 
-      // 1. Calculate bracket properties
+      // 1. Calculate bracket size (next power of 2)
       const bracketSize = Math.pow(2, Math.ceil(Math.log2(numParticipants)));
-      
       const schemeId = `tanding-${tandingAge.replace(/\s+/g, '_').toLowerCase()}-${tandingClass.replace(/\s+/g, '_').toLowerCase()}-${Date.now()}`;
-      let allRounds: SchemeRound[] = [];
-      let globalMatchCounter = 1;
-
-      // 2. Create the full list of competitors for the first round of the full bracket
-      // This list will include real participants and nulls for byes
+      
+      // 2. Create the initial list of competitors for the full bracket size, including byes (null)
       const seedingMaps: { [key: number]: number[] } = {
+          2: [1, 2],
           4: [1, 4, 2, 3],
           8: [1, 8, 5, 4, 3, 6, 7, 2],
           16: [1, 16, 9, 8, 5, 12, 13, 4, 3, 14, 11, 6, 7, 10, 15, 2],
@@ -184,35 +181,23 @@ export default function SchemeManagementPage() {
       };
       
       const seedingOrder = seedingMaps[bracketSize] || Array.from({ length: bracketSize }, (_, i) => i + 1);
-      
       const slots: (SchemeParticipant | null)[] = Array(bracketSize).fill(null);
-      participants.forEach((p, i) => slots[i] = p);
+      participants.forEach((p, i) => slots[i] = p as SchemeParticipant);
       
       let competitorsForNextRound: ({ name: string; contingent: string; seed?: number } | null)[] = seedingOrder.map(seed => slots[seed - 1]);
-
+      
       // 3. Generate all rounds from this full list
+      let allRounds: SchemeRound[] = [];
+      let globalMatchCounter = 1;
+      
       while (competitorsForNextRound.length > 1) {
         const roundMatches: SchemeMatch[] = [];
-        const winners: ({ name: string; contingent: string } | null)[] = [];
+        const winnersForNextRound: ({ name: string; contingent: string } | null)[] = [];
         
         for (let i = 0; i < competitorsForNextRound.length; i += 2) {
           const p1 = competitorsForNextRound[i];
-          const p2 = competitorsForNextRound[i + 1];
-
-          // If a participant has a bye (p2 is null), they automatically advance
-          if (p1 && p2 === null) {
-            winners.push(p1);
-            continue;
-          }
-          if (p2 && p1 === null) {
-              winners.push(p2);
-              continue;
-          }
-           if (p1 === null && p2 === null) { // Two byes matched up
-              winners.push(null);
-              continue;
-          }
-
+          const p2 = competitorsForNextRound[i+1];
+          
           const match: SchemeMatch = {
             matchInternalId: `${schemeId}-R${allRounds.length + 1}-M${globalMatchCounter}`,
             globalMatchNumber: globalMatchCounter,
@@ -220,20 +205,35 @@ export default function SchemeManagementPage() {
             participant1: p1,
             participant2: p2,
             status: 'PENDING',
-            winnerToMatchId: null,
+            winnerToMatchId: null, // this can be calculated later if needed
           };
+          
+          if (p1 && p2 === null) {
+            // P1 gets a bye
+            winnersForNextRound.push(p1);
+            match.status = 'COMPLETED'; // auto-complete bye match
+            match.winnerId = p1.name;
+          } else if (p2 && p1 === null) {
+            // P2 gets a bye
+            winnersForNextRound.push(p2);
+            match.status = 'COMPLETED';
+            match.winnerId = p2.name;
+          } else if (p1 === null && p2 === null) {
+            // Two byes matched up, advances a null
+            winnersForNextRound.push(null);
+          } else {
+            // A real match, winner is a placeholder
+            winnersForNextRound.push({ name: `Pemenang Partai ${globalMatchCounter}`, contingent: '' });
+          }
+          
           roundMatches.push(match);
-          winners.push({ name: `Pemenang Partai ${globalMatchCounter}`, contingent: '' });
           globalMatchCounter++;
         }
         
-        // Only add a round if it has actual matches
-        if(roundMatches.length > 0) {
-            allRounds.push({ roundNumber: allRounds.length + 1, name: '', matches: roundMatches });
-        }
-        competitorsForNextRound = winners;
+        allRounds.push({ roundNumber: allRounds.length + 1, name: '', matches: roundMatches });
+        competitorsForNextRound = winnersForNextRound;
       }
-      
+
       // 4. Name rounds correctly
       const totalRounds = allRounds.length;
       allRounds.forEach((round, index) => {
@@ -644,4 +644,3 @@ export default function SchemeManagementPage() {
     </>
   );
 }
-
