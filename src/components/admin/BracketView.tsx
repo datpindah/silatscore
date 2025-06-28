@@ -75,55 +75,57 @@ export function BracketView({ scheme }: { scheme: Scheme | null }) {
         <CardDescription className="text-muted-foreground">Bagan ini dibuat berdasarkan urutan peserta. Pemenang dari setiap partai akan maju ke babak berikutnya.</CardDescription>
       </CardHeader>
       <CardContent>
-        <div className="flex items-start gap-16 md:gap-24 overflow-x-auto p-4">
-          {scheme.rounds.map((round, roundIndex) => (
-            <div key={round.roundNumber} className="flex flex-col justify-center h-full gap-10">
-              <h3 className="text-xl font-bold text-center text-foreground uppercase tracking-wider">{round.name}</h3>
-              <div className="flex flex-col gap-20"> {/* This is the large gap between PAIRS of matches */}
-                {
-                  round.matches.reduce((acc, match, index) => {
-                    if (index % 2 === 0) {
-                      acc.push([match]);
-                    } else {
-                      acc[acc.length - 1].push(match);
-                    }
-                    return acc;
-                  }, [] as SchemeMatch[][]).map((matchPair, pairIndex) => (
-                    <div key={`pair-${roundIndex}-${pairIndex}`} className="flex flex-col gap-10"> {/* This is the smaller gap WITHIN a pair */}
-                      {matchPair.map((match, matchIndexInPair) => (
-                        <div key={match.matchInternalId} className="relative">
-                          <MatchItem match={match} />
-                          {/* Connector Lines Logic */}
-                          {roundIndex < scheme.rounds.length - 1 && (
-                            <>
-                              {/* Horizontal line extending from the match item */}
-                              <div className="absolute top-1/2 left-full w-8 md:w-12 h-px bg-border z-0" />
-                              
-                              {/* Vertical connector for the pair */}
-                              {matchIndexInPair === 0 && matchPair.length > 1 && (
-                                <div
-                                  className="absolute top-1/2 left-[calc(100%_+_2rem)] md:left-[calc(100%_+_3rem)] w-px bg-border z-0"
-                                  style={{ height: `calc(100% + 2.5rem)` }} // 2.5rem is the `gap-10` value
-                                />
-                              )}
-                              
-                              {/* Horizontal line extending from the vertical connector to the next match */}
-                              {matchIndexInPair === 0 && matchPair.length > 1 && (
-                                <div
-                                  className="absolute left-[calc(100%_+_2rem)] md:left-[calc(100%_+_3rem)] w-8 md:w-12 h-px bg-border z-0"
-                                  style={{ top: `calc(100% + 1.25rem)` }} // 1.25rem is half of `gap-10`
-                                />
-                              )}
-                            </>
-                          )}
-                        </div>
-                      ))}
-                    </div>
-                  ))
-                }
+        <div className="flex items-stretch gap-16 md:gap-24 overflow-x-auto p-4">
+          {scheme.rounds.map((round, roundIndex) => {
+            const isSemifinal = round.matches.length === 2 && scheme.rounds[roundIndex + 1]?.matches.length === 1;
+            const pairGapClass = isSemifinal ? "gap-48" : "gap-10"; // 12rem vs 2.5rem
+            const pairGapValue = isSemifinal ? "12rem" : "2.5rem";
+            const halfPairGapValue = isSemifinal ? "6rem" : "1.25rem";
+
+            return (
+              <div key={round.roundNumber} className="flex flex-col justify-center flex-grow gap-10">
+                <h3 className="text-xl font-bold text-center text-foreground uppercase tracking-wider shrink-0">{round.name}</h3>
+                <div className="flex flex-col gap-20">
+                  {
+                    round.matches.reduce((acc, match, index) => {
+                      if (index % 2 === 0) {
+                        acc.push([match]);
+                      } else {
+                        acc[acc.length - 1].push(match);
+                      }
+                      return acc;
+                    }, [] as SchemeMatch[][]).map((matchPair, pairIndex) => (
+                      <div key={`pair-${roundIndex}-${pairIndex}`} className={cn("flex flex-col", pairGapClass)}>
+                        {matchPair.map((match, matchIndexInPair) => (
+                          <div key={match.matchInternalId} className="relative">
+                            <MatchItem match={match} />
+                            {roundIndex < scheme.rounds.length - 1 && (
+                              <>
+                                <div className="absolute top-1/2 left-full w-8 md:w-12 h-px bg-border z-0" />
+                                
+                                {matchIndexInPair === 0 && matchPair.length > 1 && (
+                                  <>
+                                    <div
+                                      className="absolute top-1/2 left-[calc(100%_+_2rem)] md:left-[calc(100%_+_3rem)] w-px bg-border z-0"
+                                      style={{ height: `calc(100% + ${pairGapValue})` }}
+                                    />
+                                    <div
+                                      className="absolute left-[calc(100%_+_2rem)] md:left-[calc(100%_+_3rem)] w-8 md:w-12 h-px bg-border z-0"
+                                      style={{ top: `calc(100% + ${halfPairGapValue})` }}
+                                    />
+                                  </>
+                                )}
+                              </>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    ))
+                  }
+                </div>
               </div>
-            </div>
-          ))}
+            )
+          })}
         </div>
       </CardContent>
     </Card>
