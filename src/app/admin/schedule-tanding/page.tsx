@@ -8,7 +8,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardFooter } from '@/componen
 import { FormField } from '@/components/admin/ScheduleFormFields';
 import { ScheduleTable } from '@/components/admin/ScheduleTable';
 import { PrintScheduleButton } from '@/components/admin/PrintScheduleButton';
-import { Upload, PlusCircle, PlayCircle, Download } from 'lucide-react'; // Added Download
+import { Upload, PlusCircle, PlayCircle, Download, Trash2, Loader2 } from 'lucide-react'; // Added Download
 import type { ScheduleTanding } from '@/lib/types';
 import { TableCell } from '@/components/ui/table';
 import { db } from '@/lib/firebase';
@@ -44,6 +44,7 @@ export default function ScheduleTandingPage() {
   const [isEditing, setIsEditing] = useState<string | null>(null);
   const [activeSchedulesByGelanggang, setActiveSchedulesByGelanggang] = useState<Record<string, string | null>>({});
   const [isLoading, setIsLoading] = useState(true);
+  const [isDeletingAll, setIsDeletingAll] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -98,7 +99,6 @@ export default function ScheduleTandingPage() {
         });
       });
       
-      // Fetch matches that have a result and filter them out
       const finishedMatchesQuery = query(collection(db, MATCHES_TANDING_COLLECTION), where("matchResult", "!=", null));
       const finishedMatchesSnap = await getDocs(finishedMatchesQuery);
       const finishedMatchIds = new Set(finishedMatchesSnap.docs.map(doc => doc.id));
@@ -201,6 +201,47 @@ export default function ScheduleTandingPage() {
     }
   };
   
+  const handleDeleteAllSchedules = async () => {
+    if (!confirm(`Apakah Anda yakin ingin menghapus SEMUA jadwal tanding (${schedules.length} jadwal)? Tindakan ini akan menghapus semua data terkait (skor, log, dll) dan tidak dapat diurungkan.`)) {
+        return;
+    }
+
+    setIsDeletingAll(true);
+    let deletedCount = 0;
+    const totalCount = schedules.length;
+
+    try {
+        for (const schedule of schedules) {
+            const matchDocRef = doc(db, MATCHES_TANDING_COLLECTION, schedule.id);
+            const scheduleDocRef = doc(db, SCHEDULE_TANDING_COLLECTION, schedule.id);
+
+            const subcollectionsToDelete = ['official_actions', 'verifications', 'juri_scores'];
+            for (const sub of subcollectionsToDelete) {
+                const subcollectionRef = collection(db, matchDocRef.path, sub);
+                const snapshot = await getDocs(subcollectionRef);
+                if (!snapshot.empty) {
+                    const deletePromises = snapshot.docs.map(d => deleteDoc(d.ref));
+                    await Promise.all(deletePromises);
+                }
+            }
+            
+            await deleteDoc(matchDocRef);
+            await deleteDoc(scheduleDocRef);
+            deletedCount++;
+        }
+        
+        const venueMapRef = doc(db, ACTIVE_TANDING_MATCHES_BY_GELANGGANG_PATH);
+        await setDoc(venueMapRef, {});
+
+        alert(`${deletedCount} dari ${totalCount} jadwal berhasil dihapus.`);
+    } catch (error) {
+        console.error("Error deleting all schedules: ", error);
+        alert(`Gagal menghapus semua jadwal: ${error instanceof Error ? error.message : String(error)}`);
+    } finally {
+        setIsDeletingAll(false);
+    }
+  };
+
   const handleFileUpload = () => {
     fileInputRef.current?.click();
   };
@@ -312,10 +353,14 @@ export default function ScheduleTandingPage() {
            <Button onClick={handleDownloadTandingTemplate} variant="outline" className="bg-accent hover:bg-accent/90 text-accent-foreground">
             <Download className="mr-2 h-4 w-4" /> Download Template
           </Button>
-          <Button onClick={handleFileUpload} variant="outline">
+          <Button onClick={handleFileUpload} variant="outline" disabled={isLoading || isDeletingAll}>
             <Upload className="mr-2 h-4 w-4" /> Unggah XLS
           </Button>
-          <PrintScheduleButton scheduleType="Tanding" disabled={schedules.length === 0} />
+          <PrintScheduleButton scheduleType="Tanding" disabled={schedules.length === 0 || isLoading || isDeletingAll} />
+          <Button variant="destructive" onClick={handleDeleteAllSchedules} disabled={schedules.length === 0 || isLoading || isDeletingAll}>
+            {isDeletingAll ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Trash2 className="mr-2 h-4 w-4" />}
+            Hapus Semua
+          </Button>
         </div>
       </PageTitle>
 
