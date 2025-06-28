@@ -14,7 +14,7 @@ import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
-import type { ScheduleTanding, KetuaActionLogEntry, PesilatColorIdentity, KetuaActionType, VerificationType, VerificationRequest, JuriVoteValue, JuriVotes, TimerStatus as DewanTimerType, TimerMatchStatus, MatchResultTanding, TandingScoreBreakdown, TandingVictoryType, JuriMatchData as LibJuriMatchData, ScoreEntry as LibScoreEntry, Scheme } from '@/lib/types';
+import type { ScheduleTanding, KetuaActionLogEntry, PesilatColorIdentity, KetuaActionType, VerificationType, VerificationRequest, JuriVoteValue, JuriVotes, TimerStatus as DewanTimerType, TimerMatchStatus, MatchResultTanding, TandingScoreBreakdown, TandingVictoryType, JuriMatchData as LibJuriMatchData, ScoreEntry as LibScoreEntry, Scheme, SchemeMatch } from '@/lib/types';
 import { JATUHAN_POINTS, TEGURAN_POINTS, PERINGATAN_POINTS_FIRST_PRESS, PERINGATAN_POINTS_SECOND_PRESS } from '@/lib/types';
 import { db } from '@/lib/firebase';
 import { doc, onSnapshot, getDoc, Timestamp, collection, addDoc, query, orderBy, deleteDoc, limit, getDocs, serverTimestamp, writeBatch, where, updateDoc } from 'firebase/firestore';
@@ -338,54 +338,78 @@ function KetuaPertandinganPageComponent({ gelanggangName }: { gelanggangName: st
     matchId: string,
     winnerInfo: { name: string; contingent: string }
   ) => {
-      try {
-          const schemeId = matchId.split('-R')[0];
-          if (!schemeId) return; // Not part of a scheme
+    try {
+        const schemeId = matchId.split('-R')[0];
+        if (!schemeId) {
+            console.log("Not part of a scheme, skipping bracket update.");
+            return;
+        }
 
-          const schemeDocRef = doc(db, 'schemes', schemeId);
-          const schemeDoc = await getDoc(schemeDocRef);
-          if (!schemeDoc.exists()) return; // Scheme not found
+        const schemeDocRef = doc(db, 'schemes', schemeId);
+        const schemeDoc = await getDoc(schemeDocRef);
+        if (!schemeDoc.exists()) {
+            console.error(`Scheme with ID ${schemeId} not found.`);
+            return;
+        }
 
-          const schemeData = schemeDoc.data() as Scheme;
-          let completedMatchFound = false;
-          let completedMatchRoundIndex = -1;
-          let completedMatchIndexInRound = -1;
-          
-          for (let i = 0; i < schemeData.rounds.length; i++) {
-              const round = schemeData.rounds[i];
-              const matchIndex = round.matches.findIndex(m => m.matchInternalId === matchId);
-              if (matchIndex !== -1) {
-                  completedMatchFound = true;
-                  completedMatchRoundIndex = i;
-                  completedMatchIndexInRound = matchIndex;
-                  schemeData.rounds[i].matches[matchIndex].status = 'COMPLETED';
-                  break;
-              }
-          }
+        const schemeData = schemeDoc.data() as Scheme;
+        let completedMatch: SchemeMatch | null = null;
+        let matchFound = false;
 
-          if (completedMatchFound && completedMatchRoundIndex < schemeData.rounds.length - 1) {
-              const nextRoundIndex = completedMatchRoundIndex + 1;
-              const nextMatchIndex = Math.floor(completedMatchIndexInRound / 2);
-              
-              if (schemeData.rounds[nextRoundIndex]?.matches[nextMatchIndex]) {
-                  const nextMatch = schemeData.rounds[nextRoundIndex].matches[nextMatchIndex];
-                  if (completedMatchIndexInRound % 2 === 0) {
-                      nextMatch.participant1 = winnerInfo;
-                  } else {
-                      nextMatch.participant2 = winnerInfo;
-                  }
-              }
-          }
-          
-          await updateDoc(schemeDocRef, { rounds: schemeData.rounds });
+        // Find the completed match to get its globalMatchNumber
+        for (const round of schemeData.rounds) {
+            for (const match of round.matches) {
+                if (match.matchInternalId === matchId) {
+                    completedMatch = match;
+                    match.status = 'COMPLETED';
+                    match.winnerId = winnerInfo.name; 
+                    matchFound = true;
+                    break;
+                }
+            }
+            if (matchFound) break;
+        }
 
-      } catch (e) {
-          console.error("Error advancing winner in scheme:", e);
-          // Don't block the main flow for this, but log it.
-          setError("Gagal memperbarui bagan pertandingan.");
-      }
+        if (!completedMatch) {
+            console.error(`Match with internal ID ${matchId} not found in scheme.`);
+            return;
+        }
+
+        const placeholderText = `Pemenang Partai ${completedMatch.globalMatchNumber}`;
+
+        // Find the placeholder in subsequent rounds and replace it with the winner
+        let placeholderFoundAndReplaced = false;
+        for (const round of schemeData.rounds) {
+            for (const match of round.matches) {
+                // Check and replace participant 1
+                if (match.participant1?.name === placeholderText) {
+                    match.participant1 = winnerInfo;
+                    placeholderFoundAndReplaced = true;
+                    break;
+                }
+                // Check and replace participant 2
+                if (match.participant2?.name === placeholderText) {
+                    match.participant2 = winnerInfo;
+                    placeholderFoundAndReplaced = true;
+                    break;
+                }
+            }
+            if (placeholderFoundAndReplaced) break;
+        }
+
+        if (placeholderFoundAndReplaced) {
+            console.log(`Updated bracket: ${winnerInfo.name} advances.`);
+        } else {
+            console.log(`Winner of match ${completedMatch.globalMatchNumber} is determined, but no placeholder was found in subsequent rounds (might be final match).`);
+        }
+        
+        await updateDoc(schemeDocRef, { rounds: schemeData.rounds });
+
+    } catch (e) {
+        console.error("Error advancing winner in scheme:", e);
+        setError("Gagal memperbarui bagan pertandingan.");
+    }
   };
-
 
   const handleConfirmMatchResult = async () => {
     if (!activeMatchId || !matchDetails || !winnerSelectionDialog || !victoryTypeDialog) {
@@ -413,8 +437,7 @@ function KetuaPertandinganPageComponent({ gelanggangName }: { gelanggangName: st
       const matchDocRef = doc(db, MATCHES_TANDING_COLLECTION, activeMatchId);
       await updateDoc(matchDocRef, { matchResult: resultData });
       
-      // Advance winner in the scheme
-      if (winnerSelectionDialog !== 'seri') {
+      if (winnerSelectionDialog !== 'seri' && activeMatchId.includes('-R')) {
         const winnerInfo = {
           name: winnerSelectionDialog === 'merah' ? matchDetails.pesilatMerahName : matchDetails.pesilatBiruName,
           contingent: winnerSelectionDialog === 'merah' ? matchDetails.pesilatMerahContingent : matchDetails.pesilatBiruContingent,
