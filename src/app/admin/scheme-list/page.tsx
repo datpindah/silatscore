@@ -4,13 +4,13 @@
 import { useState, useEffect } from 'react';
 import { PageTitle } from '@/components/shared/PageTitle';
 import { db } from '@/lib/firebase';
-import { collection, getDocs, query, orderBy } from 'firebase/firestore';
+import { collection, getDocs, query, orderBy, doc, deleteDoc } from 'firebase/firestore';
 import type { Scheme } from '@/lib/types';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Loader2, Eye, Filter } from 'lucide-react';
+import { Loader2, Eye, Filter, Trash2 } from 'lucide-react';
 import Link from 'next/link';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -20,6 +20,7 @@ export default function SchemeListPage() {
   const [schemes, setSchemes] = useState<Scheme[]>([]);
   const [filteredSchemes, setFilteredSchemes] = useState<Scheme[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [isDeletingId, setIsDeletingId] = useState<string | null>(null);
   
   const [filterType, setFilterType] = useState('all');
   const [filterAge, setFilterAge] = useState('all');
@@ -56,6 +57,24 @@ export default function SchemeListPage() {
     }
     setFilteredSchemes(tempSchemes);
   }, [filterType, filterAge, filterClass, schemes]);
+
+  const handleDeleteScheme = async (schemeId: string) => {
+    if (!confirm(`Apakah Anda yakin ingin menghapus bagan ini secara permanen? Tindakan ini tidak dapat diurungkan.`)) {
+        return;
+    }
+
+    setIsDeletingId(schemeId);
+    try {
+      await deleteDoc(doc(db, 'schemes', schemeId));
+      setSchemes(prevSchemes => prevSchemes.filter(s => s.id !== schemeId));
+      alert('Bagan berhasil dihapus.');
+    } catch (err) {
+      console.error("Error deleting scheme:", err);
+      alert('Gagal menghapus bagan.');
+    } finally {
+      setIsDeletingId(null);
+    }
+  };
 
   return (
     <>
@@ -120,11 +139,26 @@ export default function SchemeListPage() {
                       <TableCell>{scheme.participantCount}</TableCell>
                       <TableCell>{scheme.createdAt.toDate().toLocaleDateString('id-ID')}</TableCell>
                       <TableCell>
-                        <Button asChild variant="outline" size="sm">
-                          <Link href={`/admin/scheme-list/${scheme.id}`}>
-                            <Eye className="mr-2 h-4 w-4" /> Lihat Bagan
-                          </Link>
-                        </Button>
+                        <div className="flex gap-2">
+                          <Button asChild variant="outline" size="sm">
+                            <Link href={`/admin/scheme-list/${scheme.id}`}>
+                              <Eye className="mr-2 h-4 w-4" /> Lihat
+                            </Link>
+                          </Button>
+                          <Button 
+                            variant="destructive" 
+                            size="sm" 
+                            onClick={() => handleDeleteScheme(scheme.id)}
+                            disabled={isDeletingId === scheme.id}
+                          >
+                            {isDeletingId === scheme.id ? (
+                                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                            ) : (
+                                <Trash2 className="mr-2 h-4 w-4" />
+                            )}
+                            Hapus
+                          </Button>
+                        </div>
                       </TableCell>
                     </TableRow>
                   ))
