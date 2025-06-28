@@ -1,7 +1,7 @@
 
 "use client";
 
-import type { Scheme } from '@/lib/types';
+import type { Scheme, SchemeMatch } from '@/lib/types';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 
 interface MatchItemProps {
@@ -30,7 +30,7 @@ function MatchItem({ match }: MatchItemProps) {
 }
 
 
-export function BracketView({ scheme }: BracketViewProps) {
+export function BracketView({ scheme }: { scheme: Scheme | null }) {
   if (!scheme) {
     return null;
   }
@@ -74,34 +74,52 @@ export function BracketView({ scheme }: BracketViewProps) {
         <CardDescription className="text-gray-400">Bagan ini dibuat berdasarkan urutan peserta. Pemenang dari setiap partai akan maju ke babak berikutnya.</CardDescription>
       </CardHeader>
       <CardContent>
-        <div className="flex items-start gap-16 md:gap-24 overflow-x-auto p-4 scrollbar-thin scrollbar-thumb-gray-600 scrollbar-track-gray-800">
+        <div className="flex items-center gap-16 md:gap-24 overflow-x-auto p-4 scrollbar-thin scrollbar-thumb-gray-600 scrollbar-track-gray-800">
           {scheme.rounds.map((round, roundIndex) => (
-            <div key={round.roundNumber} className="flex flex-col gap-10">
+            <div key={round.roundNumber} className="flex flex-col justify-center h-full gap-10">
               <h3 className="text-xl font-bold text-center text-gray-300 uppercase tracking-wider">{round.name}</h3>
-              <div className="flex flex-col justify-around flex-grow space-y-10">
-                {round.matches.map((match, matchIndex) => (
-                  <div key={match.matchInternalId} className="relative">
-                    <MatchItem match={match} />
-                    
-                    {/* Connector Lines */}
-                    {roundIndex < scheme.rounds.length - 1 && (
-                      <>
-                        {/* Horizontal line from match to vertical connector */}
-                        <div className="absolute top-1/2 left-full w-8 md:w-12 h-px bg-gray-500 z-0" />
-                        
-                        {/* Vertical connector for a pair of matches */}
-                        {matchIndex % 2 === 0 && (
-                          <div className="absolute top-1/2 left-[calc(100%_+_2rem)] md:left-[calc(100%_+_3rem)] w-px h-[calc(100%_+_2.5rem)] bg-gray-500 z-0" />
-                        )}
-
-                        {/* Horizontal line from vertical connector to next round */}
-                        {matchIndex % 2 === 0 && (
-                           <div className="absolute top-[calc(100%_+_1.25rem)] left-[calc(100%_+_2rem)] md:left-[calc(100%_+_3rem)] w-8 md:w-12 h-px bg-gray-500 z-0" />
-                        )}
-                      </>
-                    )}
-                  </div>
-                ))}
+              <div className="flex flex-col gap-20"> {/* This is the large gap between PAIRS of matches */}
+                {
+                  round.matches.reduce((acc, match, index) => {
+                    if (index % 2 === 0) {
+                      acc.push([match]);
+                    } else {
+                      acc[acc.length - 1].push(match);
+                    }
+                    return acc;
+                  }, [] as SchemeMatch[][]).map((matchPair, pairIndex) => (
+                    <div key={`pair-${roundIndex}-${pairIndex}`} className="flex flex-col gap-10"> {/* This is the smaller gap WITHIN a pair */}
+                      {matchPair.map((match, matchIndexInPair) => (
+                        <div key={match.matchInternalId} className="relative">
+                          <MatchItem match={match} />
+                          {/* Connector Lines Logic */}
+                          {roundIndex < scheme.rounds.length - 1 && (
+                            <>
+                              {/* Horizontal line extending from the match item */}
+                              <div className="absolute top-1/2 left-full w-8 md:w-12 h-px bg-gray-500 z-0" />
+                              
+                              {/* Vertical connector for the pair */}
+                              {matchIndexInPair === 0 && matchPair.length > 1 && (
+                                <div
+                                  className="absolute top-1/2 left-[calc(100%_+_2rem)] md:left-[calc(100%_+_3rem)] w-px bg-gray-500 z-0"
+                                  style={{ height: `calc(100% + 2.5rem)` }} // 2.5rem is the `gap-10` value
+                                />
+                              )}
+                              
+                              {/* Horizontal line extending from the vertical connector to the next match */}
+                              {matchIndexInPair === 0 && matchPair.length > 1 && (
+                                <div
+                                  className="absolute left-[calc(100%_+_2rem)] md:left-[calc(100%_+_3rem)] w-8 md:w-12 h-px bg-gray-500 z-0"
+                                  style={{ top: `calc(100% + 1.25rem)` }} // 1.25rem is half of `gap-10`
+                                />
+                              )}
+                            </>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  ))
+                }
               </div>
             </div>
           ))}
@@ -110,4 +128,3 @@ export function BracketView({ scheme }: BracketViewProps) {
     </Card>
   );
 }
-
