@@ -44,13 +44,14 @@ export function BracketView({ scheme }: { scheme: Scheme | null }) {
 
     const roundDepths = rounds.map((_, i) => i * (BOX_WIDTH + ROUND_GAP));
     
-    // Recursive function to calculate Y positions from the final backwards
     function calculateY(match: SchemeMatch, roundIndex: number): number {
       const memoizedPos = posMap.get(match.matchInternalId);
       if (memoizedPos) return memoizedPos.y;
 
       if (roundIndex === numRounds - 1) { // Final match
-        return 0; // Center of our coordinate system
+        const yPos = (Math.pow(2, numRounds - 1) / 2 - 0.5) * (BOX_HEIGHT + VERTICAL_GAP);
+        posMap.set(match.matchInternalId, { x: roundDepths[roundIndex], y: yPos });
+        return yPos;
       }
 
       const parentIndexInOwnRound = rounds[roundIndex].matches.findIndex(m => m.matchInternalId === match.matchInternalId);
@@ -67,10 +68,8 @@ export function BracketView({ scheme }: { scheme: Scheme | null }) {
       return newY;
     }
 
-    // Trigger the recursion from the last match
     calculateY(rounds[numRounds - 1].matches[0], numRounds - 1);
 
-    // Populate positions for any matches that were not touched by recursion (if any)
     rounds.forEach((round, roundIndex) => {
         round.matches.forEach(match => {
             if (!posMap.has(match.matchInternalId)) {
@@ -79,7 +78,6 @@ export function BracketView({ scheme }: { scheme: Scheme | null }) {
         });
     });
 
-    // Normalize all Y positions to be positive
     const allYPositions = Array.from(posMap.values()).map(p => p.y);
     const minY = Math.min(...allYPositions);
     if (minY < 0) {
@@ -113,7 +111,7 @@ export function BracketView({ scheme }: { scheme: Scheme | null }) {
         <div className="relative p-10" style={{ height: `${totalHeight + 40}px`, width: `${totalWidth + 40}px` }}>
           {/* Render Connectors */}
           {rounds.map((round, roundIndex) => {
-             if (roundIndex === 0) return null; // No connectors before the first round
+             if (roundIndex === 0) return null; // No connectors from before the first round
              
              return round.matches.map((match, matchIndex) => {
                 const childPos = positions.get(match.matchInternalId);
@@ -125,20 +123,16 @@ export function BracketView({ scheme }: { scheme: Scheme | null }) {
                 const parent1Pos = parent1 ? positions.get(parent1.matchInternalId) : null;
                 const parent2Pos = parent2 ? positions.get(parent2.matchInternalId) : null;
                 
-                // This match is the result of a bye, draw a straight line
-                if (parent1 && parent1.participant2 === null && parent1Pos) {
+                const p1_is_bye = parent1 && parent1.participant2 === null;
+                
+                if (p1_is_bye && parent1Pos) {
                    const sourceX = parent1Pos.x + BOX_WIDTH;
                    const sourceY = parent1Pos.y + BOX_HEIGHT / 2;
                    const destX = childPos.x;
-                   return <div key={`conn-${match.matchInternalId}`} className="bg-border absolute" style={{ top: `${sourceY-1}px`, left: `${sourceX}px`, height: '2px', width: `${destX - sourceX}px` }}/>;
+                   const destY = childPos.y + BOX_HEIGHT / 2;
+                   return <path key={`conn-${match.matchInternalId}`} d={`M ${sourceX} ${sourceY} H ${destX}`} className="fill-none stroke-border" strokeWidth="2"/>;
                 }
-                 if (parent2 && parent2.participant2 === null && parent2Pos) {
-                   const sourceX = parent2Pos.x + BOX_WIDTH;
-                   const sourceY = parent2Pos.y + BOX_HEIGHT / 2;
-                   const destX = childPos.x;
-                   return <div key={`conn-${match.matchInternalId}`} className="bg-border absolute" style={{ top: `${sourceY-1}px`, left: `${sourceX}px`, height: '2px', width: `${destX - sourceX}px` }}/>;
-                }
-
+                
                 if (!parent1Pos || !parent2Pos) return null;
 
                 const lineY1 = parent1Pos.y + BOX_HEIGHT / 2;
@@ -148,16 +142,12 @@ export function BracketView({ scheme }: { scheme: Scheme | null }) {
                 const midPointY = childPos.y + BOX_HEIGHT / 2;
 
                 return(
-                  <Fragment key={`conn-${match.matchInternalId}`}>
-                    {/* H-line from parent 1 */}
-                    <div className="bg-border absolute" style={{ top: `${lineY1 - 1}px`, left: `${lineX}px`, width: `${ROUND_GAP / 2}px`, height: '2px' }}/>
-                    {/* H-line from parent 2 */}
-                    <div className="bg-border absolute" style={{ top: `${lineY2 - 1}px`, left: `${lineX}px`, width: `${ROUND_GAP / 2}px`, height: '2px' }}/>
-                    {/* V-line connecting parents */}
-                    <div className="bg-border absolute" style={{ top: `${Math.min(lineY1, lineY2)}px`, left: `${midPointX - 1}px`, width: '2px', height: `${Math.abs(lineY1-lineY2)}px` }}/>
-                    {/* H-line to child */}
-                    <div className="bg-border absolute" style={{ top: `${midPointY - 1}px`, left: `${midPointX}px`, width: `${ROUND_GAP / 2}px`, height: '2px' }}/>
-                  </Fragment>
+                  <path
+                    key={`conn-${match.matchInternalId}`}
+                    d={`M ${lineX} ${lineY1} H ${midPointX} V ${lineY2} H ${lineX} M ${midPointX} ${midPointY} H ${childPos.x}`}
+                    className="fill-none stroke-border"
+                    strokeWidth="2"
+                  />
                 )
              })
           })}
@@ -185,7 +175,7 @@ export function BracketView({ scheme }: { scheme: Scheme | null }) {
                           </div>
                           <div className="border-t border-border/80" />
                           <div className="truncate">
-                            <p className="font-semibold">{match.participant2?.name || (match.participant1 ? '(Bye)' : 'Pemenang ...')}</p>
+                            <p className="font-semibold">{match.participant2?.name || (match.participant1 ? '' : '(Kosong)')}</p>
                             <p className="text-xs text-muted-foreground">{match.participant2?.contingent || ''}</p>
                           </div>
                       </div>
