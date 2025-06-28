@@ -1,14 +1,14 @@
 
 "use client";
 
-import type { Scheme } from '@/lib/types';
+import type { Scheme, SchemeMatch } from '@/lib/types';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { useMemo } from 'react';
 
 const BOX_WIDTH = 220;
-const BOX_HEIGHT = 80;
-const ROUND_GAP = 90;
-const VERTICAL_GAP = 40;
+const BOX_HEIGHT = 70;
+const ROUND_GAP = 80;
+const VERTICAL_GAP = 30;
 
 export function BracketView({ scheme }: { scheme: Scheme | null }) {
   if (!scheme) return null;
@@ -44,39 +44,40 @@ export function BracketView({ scheme }: { scheme: Scheme | null }) {
 
     const roundDepths = rounds.map((_, i) => i * (BOX_WIDTH + ROUND_GAP));
 
-    // Position the final round match first to anchor the layout
-    const finalRound = rounds[numRounds - 1];
-    const finalMatch = finalRound.matches[0];
-    if (finalMatch) {
-      posMap.set(finalMatch.matchInternalId, { x: roundDepths[numRounds - 1], y: 0 });
-    }
+    const calculateY = (roundIndex: number, matchIndex: number): number => {
+      // Base case: Final round is always at y=0 to start.
+      if (roundIndex === numRounds - 1) {
+          return 0;
+      }
+      
+      const nextRound = rounds[roundIndex + 1];
+      const childMatchIndex = Math.floor(matchIndex / 2);
+      const childMatch = nextRound.matches[childMatchIndex];
+      const childKey = childMatch.matchInternalId;
 
-    // Recursively calculate positions backwards from the final
-    const calculateY = (roundIndex: number) => {
-      if (roundIndex < 0) return;
+      if (!posMap.has(childKey)) {
+           const childX = roundDepths[roundIndex + 1];
+           const childY = calculateY(roundIndex + 1, childMatchIndex);
+           posMap.set(childKey, { x: childX, y: childY });
+      }
 
-      rounds[roundIndex].matches.forEach((match, matchIndex) => {
-        // Find the match in the next round that this match's winner feeds into
-        const nextRoundIndex = roundIndex + 1;
-        if (nextRoundIndex < numRounds) {
-          const nextRoundMatchIndex = Math.floor(matchIndex / 2);
-          const childMatch = rounds[nextRoundIndex].matches[nextRoundMatchIndex];
-          if (childMatch) {
-            const childPos = posMap.get(childMatch.matchInternalId);
-            if (childPos) {
-              const ySpread = (BOX_HEIGHT + VERTICAL_GAP) * Math.pow(2, numRounds - 2 - roundIndex);
-              const newY = childPos.y + (matchIndex % 2 === 0 ? -ySpread / 2 : ySpread / 2);
-              posMap.set(match.matchInternalId, { x: roundDepths[roundIndex], y: newY });
-            }
-          }
-        }
-      });
-      calculateY(roundIndex - 1);
+      const childPos = posMap.get(childKey)!;
+      const ySpread = (BOX_HEIGHT + VERTICAL_GAP) * Math.pow(2, numRounds - 2 - roundIndex);
+
+      return childPos.y + (matchIndex % 2 === 0 ? -ySpread / 2 : ySpread / 2);
     };
-    
-    calculateY(numRounds - 2);
 
-    // Normalize coordinates to be non-negative
+    rounds.forEach((round, roundIndex) => {
+        round.matches.forEach((match, matchIndex) => {
+            const key = match.matchInternalId;
+            if (!posMap.has(key)) {
+                const x = roundDepths[roundIndex];
+                const y = calculateY(roundIndex, matchIndex);
+                posMap.set(key, { x, y });
+            }
+        });
+    });
+
     const allYPositions = Array.from(posMap.values()).map(p => p.y);
     const minY = Math.min(...allYPositions, 0);
     if (minY < 0) {
@@ -87,6 +88,7 @@ export function BracketView({ scheme }: { scheme: Scheme | null }) {
     
     return posMap;
   }, [rounds, numRounds]);
+
 
   const totalHeight = useMemo(() => {
     if (positions.size === 0) return BOX_HEIGHT;
@@ -101,71 +103,45 @@ export function BracketView({ scheme }: { scheme: Scheme | null }) {
 
 
   return (
-    <Card className="mt-8 bg-card text-card-foreground border-border overflow-auto">
-       <CardHeader>
-          <CardTitle>{scheme.tandingClass || scheme.tgrCategory || "Detail Bagan"}</CardTitle>
-          <p className="text-md text-muted-foreground">{`${scheme.type || ''} - ${scheme.ageCategory || ''} | Gel: ${scheme.gelanggangs?.join(', ') || 'N/A'} | Babak: ${scheme.round}`}</p>
-      </CardHeader>
-      <CardContent className="p-0">
-        <div className="relative p-10" style={{ height: `${totalHeight + 40}px`, width: `${totalWidth + 40}px` }}>
+    <div className="bg-card text-card-foreground border-border overflow-auto p-4 md:p-10">
+      <div className="relative" style={{ height: `${totalHeight + 40}px`, width: `${totalWidth + 40}px` }}>
           <svg className="absolute inset-0 h-full w-full">
-            {rounds.map((round, roundIndex) => (
-              round.matches.map((match) => {
-                const childPos = positions.get(match.matchInternalId);
-                if (!childPos || roundIndex === 0) return null; // No connectors for the first round
+            {rounds.map((round, roundIndex) => {
+              if (roundIndex === numRounds - 1) return null; // No lines from final round
+              
+              return round.matches.map((match) => {
+                  const matchPos = positions.get(match.matchInternalId);
+                  if (!matchPos) return null;
 
-                // Find parent matches from the previous round
-                const prevRound = rounds[roundIndex - 1];
-                let parent1 = null;
-                let parent2 = null;
+                  // Skip drawing line if the match is a bye
+                  if(match.participant1 && match.participant2 === null) return null;
 
-                // This logic is complex because the winner's placeholder name links them.
-                for (const pMatch of prevRound.matches) {
-                    if (match.participant1?.name.includes(`${pMatch.globalMatchNumber}`)) {
-                        parent1 = pMatch;
-                    }
-                    if (match.participant2?.name.includes(`${pMatch.globalMatchNumber}`)) {
-                        parent2 = pMatch;
-                    }
-                }
-                
-                // If a participant came from a bye, they won't have a parent match generating their name.
-                // We find their original entry in the previous round.
-                if (!parent1 && match.participant1) {
-                    parent1 = prevRound.matches.find(m => m.participant1?.name === match.participant1?.name && m.participant2 === null) || null;
-                }
-                 if (!parent2 && match.participant2) {
-                    parent2 = prevRound.matches.find(m => m.participant1?.name === match.participant2?.name && m.participant2 === null) || null;
-                }
+                  const nextRound = rounds[roundIndex + 1];
+                  const childMatchIndex = Math.floor(round.matches.indexOf(match) / 2);
+                  const childMatch = nextRound.matches[childMatchIndex];
+                  if (!childMatch) return null;
 
+                  const childPos = positions.get(childMatch.matchInternalId);
+                  if (!childPos) return null;
 
-                const parent1Pos = parent1 ? positions.get(parent1.matchInternalId) : null;
-                const parent2Pos = parent2 ? positions.get(parent2.matchInternalId) : null;
-
-                const lineToChildX = childPos.x;
-                const lineToChildY = childPos.y + BOX_HEIGHT / 2;
-
-                const connectors = [];
-
-                if(parent1Pos) {
-                  const lineFromParent1X = parent1Pos.x + BOX_WIDTH;
-                  const lineFromParent1Y = parent1Pos.y + BOX_HEIGHT / 2;
-                  const midPointX = lineFromParent1X + ROUND_GAP / 2;
+                  const startX = matchPos.x + BOX_WIDTH;
+                  const startY = matchPos.y + BOX_HEIGHT / 2;
                   
-                  connectors.push(<path key={`conn1-${match.matchInternalId}`} d={`M ${lineFromParent1X} ${lineFromParent1Y} H ${midPointX} V ${lineToChildY} H ${lineToChildX}`} className="fill-none stroke-border" strokeWidth="2" />);
-                }
-                
-                if(parent2Pos) {
-                   const lineFromParent2X = parent2Pos.x + BOX_WIDTH;
-                   const lineFromParent2Y = parent2Pos.y + BOX_HEIGHT / 2;
-                   const midPointX = lineFromParent2X + ROUND_GAP / 2;
+                  const endX = childPos.x;
+                  const endY = childPos.y + BOX_HEIGHT / 2;
 
-                   connectors.push(<path key={`conn2-${match.matchInternalId}`} d={`M ${lineFromParent2X} ${lineFromParent2Y} H ${midPointX} V ${lineToChildY} H ${lineToChildX}`} className="fill-none stroke-border" strokeWidth="2" />);
-                }
-                
-                return connectors;
-              })
-            ))}
+                  const midX = startX + ROUND_GAP / 2;
+
+                  return (
+                      <path
+                          key={`conn-${match.matchInternalId}`}
+                          d={`M ${startX} ${startY} H ${midX} V ${endY} H ${endX}`}
+                          className="fill-none stroke-border"
+                          strokeWidth="2"
+                      />
+                  );
+              });
+            })}
           </svg>
 
           {rounds.map((round) => (
@@ -202,7 +178,6 @@ export function BracketView({ scheme }: { scheme: Scheme | null }) {
             })
           ))}
         </div>
-      </CardContent>
-    </Card>
+    </div>
   );
 }
