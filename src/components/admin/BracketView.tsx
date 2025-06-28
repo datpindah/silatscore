@@ -1,9 +1,9 @@
 
 "use client";
 
-import type { Scheme, SchemeMatch } from '@/lib/types';
+import type { Scheme } from '@/lib/types';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Fragment, useMemo } from 'react';
+import { useMemo } from 'react';
 
 const BOX_WIDTH = 220;
 const BOX_HEIGHT = 80;
@@ -43,43 +43,42 @@ export function BracketView({ scheme }: { scheme: Scheme | null }) {
     if (numRounds === 0) return posMap;
 
     const roundDepths = rounds.map((_, i) => i * (BOX_WIDTH + ROUND_GAP));
-    
-    function calculateY(match: SchemeMatch, roundIndex: number): number {
-      const memoizedPos = posMap.get(match.matchInternalId);
-      if (memoizedPos) return memoizedPos.y;
 
-      if (roundIndex === numRounds - 1) { // Final match
-        const yPos = (Math.pow(2, numRounds - 1) / 2 - 0.5) * (BOX_HEIGHT + VERTICAL_GAP);
-        posMap.set(match.matchInternalId, { x: roundDepths[roundIndex], y: yPos });
-        return yPos;
-      }
-
-      const parentIndexInOwnRound = rounds[roundIndex].matches.findIndex(m => m.matchInternalId === match.matchInternalId);
-      const childIndexInNextRound = Math.floor(parentIndexInOwnRound / 2);
-      const childMatch = rounds[roundIndex + 1].matches[childIndexInNextRound];
-      
-      const childY = calculateY(childMatch, roundIndex + 1);
-      
-      const ySpread = (BOX_HEIGHT + VERTICAL_GAP) * Math.pow(2, numRounds - 2 - roundIndex);
-
-      const newY = childY + (parentIndexInOwnRound % 2 === 0 ? -ySpread / 2 : ySpread / 2);
-      
-      posMap.set(match.matchInternalId, { x: roundDepths[roundIndex], y: newY });
-      return newY;
+    // Position the final round match first to anchor the layout
+    const finalRound = rounds[numRounds - 1];
+    const finalMatch = finalRound.matches[0];
+    if (finalMatch) {
+      posMap.set(finalMatch.matchInternalId, { x: roundDepths[numRounds - 1], y: 0 });
     }
 
-    calculateY(rounds[numRounds - 1].matches[0], numRounds - 1);
+    // Recursively calculate positions backwards from the final
+    const calculateY = (roundIndex: number) => {
+      if (roundIndex < 0) return;
 
-    rounds.forEach((round, roundIndex) => {
-        round.matches.forEach(match => {
-            if (!posMap.has(match.matchInternalId)) {
-                calculateY(match, roundIndex);
+      rounds[roundIndex].matches.forEach((match, matchIndex) => {
+        // Find the match in the next round that this match's winner feeds into
+        const nextRoundIndex = roundIndex + 1;
+        if (nextRoundIndex < numRounds) {
+          const nextRoundMatchIndex = Math.floor(matchIndex / 2);
+          const childMatch = rounds[nextRoundIndex].matches[nextRoundMatchIndex];
+          if (childMatch) {
+            const childPos = posMap.get(childMatch.matchInternalId);
+            if (childPos) {
+              const ySpread = (BOX_HEIGHT + VERTICAL_GAP) * Math.pow(2, numRounds - 2 - roundIndex);
+              const newY = childPos.y + (matchIndex % 2 === 0 ? -ySpread / 2 : ySpread / 2);
+              posMap.set(match.matchInternalId, { x: roundDepths[roundIndex], y: newY });
             }
-        });
-    });
+          }
+        }
+      });
+      calculateY(roundIndex - 1);
+    };
+    
+    calculateY(numRounds - 2);
 
+    // Normalize coordinates to be non-negative
     const allYPositions = Array.from(posMap.values()).map(p => p.y);
-    const minY = Math.min(...allYPositions);
+    const minY = Math.min(...allYPositions, 0);
     if (minY < 0) {
       for (const [key, pos] of posMap.entries()) {
         posMap.set(key, { ...pos, y: pos.y - minY });
@@ -110,68 +109,65 @@ export function BracketView({ scheme }: { scheme: Scheme | null }) {
       <CardContent className="p-0">
         <div className="relative p-10" style={{ height: `${totalHeight + 40}px`, width: `${totalWidth + 40}px` }}>
           <svg className="absolute inset-0 h-full w-full">
-            {/* Render Connectors */}
-            {rounds.slice(1).map((round, roundIndex) => (
+            {rounds.map((round, roundIndex) => (
               round.matches.map((match) => {
                 const childPos = positions.get(match.matchInternalId);
-                if (!childPos) return null;
+                if (!childPos || roundIndex === 0) return null; // No connectors for the first round
 
-                const parent1Index = 2 * round.matches.indexOf(match);
-                const parent2Index = parent1Index + 1;
+                // Find parent matches from the previous round
+                const prevRound = rounds[roundIndex - 1];
+                let parent1 = null;
+                let parent2 = null;
+
+                // This logic is complex because the winner's placeholder name links them.
+                for (const pMatch of prevRound.matches) {
+                    if (match.participant1?.name.includes(`${pMatch.globalMatchNumber}`)) {
+                        parent1 = pMatch;
+                    }
+                    if (match.participant2?.name.includes(`${pMatch.globalMatchNumber}`)) {
+                        parent2 = pMatch;
+                    }
+                }
                 
-                const parent1 = rounds[roundIndex].matches[parent1Index];
-                const parent2 = rounds[roundIndex].matches[parent2Index];
-
-                if (!parent1 || !parent2) return null;
-
-                const parent1Pos = positions.get(parent1.matchInternalId);
-                const parent2Pos = positions.get(parent2.matchInternalId);
-
-                if (!parent1Pos || !parent2Pos) return null;
-
-                const lineX = parent1Pos.x + BOX_WIDTH;
-
-                if (parent1.participant1 && !parent1.participant2) { // Parent 1 is a BYE
-                    const lineY = parent1Pos.y + BOX_HEIGHT / 2;
-                     return (
-                        <path
-                            key={`conn-bye-${parent1.matchInternalId}`}
-                            d={`M ${lineX} ${lineY} H ${childPos.x + BOX_WIDTH / 2}`}
-                            className="fill-none stroke-border" strokeWidth="2"
-                        />
-                    );
+                // If a participant came from a bye, they won't have a parent match generating their name.
+                // We find their original entry in the previous round.
+                if (!parent1 && match.participant1) {
+                    parent1 = prevRound.matches.find(m => m.participant1?.name === match.participant1?.name && m.participant2 === null) || null;
+                }
+                 if (!parent2 && match.participant2) {
+                    parent2 = prevRound.matches.find(m => m.participant1?.name === match.participant2?.name && m.participant2 === null) || null;
                 }
 
-                if (parent2.participant1 && !parent2.participant2) { // Parent 2 is a BYE
-                    const lineY = parent2Pos.y + BOX_HEIGHT / 2;
-                     return (
-                        <path
-                            key={`conn-bye-${parent2.matchInternalId}`}
-                            d={`M ${lineX} ${lineY} H ${childPos.x + BOX_WIDTH / 2}`}
-                            className="fill-none stroke-border" strokeWidth="2"
-                        />
-                    );
+
+                const parent1Pos = parent1 ? positions.get(parent1.matchInternalId) : null;
+                const parent2Pos = parent2 ? positions.get(parent2.matchInternalId) : null;
+
+                const lineToChildX = childPos.x;
+                const lineToChildY = childPos.y + BOX_HEIGHT / 2;
+
+                const connectors = [];
+
+                if(parent1Pos) {
+                  const lineFromParent1X = parent1Pos.x + BOX_WIDTH;
+                  const lineFromParent1Y = parent1Pos.y + BOX_HEIGHT / 2;
+                  const midPointX = lineFromParent1X + ROUND_GAP / 2;
+                  
+                  connectors.push(<path key={`conn1-${match.matchInternalId}`} d={`M ${lineFromParent1X} ${lineFromParent1Y} H ${midPointX} V ${lineToChildY} H ${lineToChildX}`} className="fill-none stroke-border" strokeWidth="2" />);
                 }
+                
+                if(parent2Pos) {
+                   const lineFromParent2X = parent2Pos.x + BOX_WIDTH;
+                   const lineFromParent2Y = parent2Pos.y + BOX_HEIGHT / 2;
+                   const midPointX = lineFromParent2X + ROUND_GAP / 2;
 
-                // Standard connector
-                const lineY1 = parent1Pos.y + BOX_HEIGHT / 2;
-                const lineY2 = parent2Pos.y + BOX_HEIGHT / 2;
-                const midPointX = lineX + ROUND_GAP / 2;
-                const midPointY = childPos.y + BOX_HEIGHT / 2;
-
-                return(
-                  <path
-                    key={`conn-${match.matchInternalId}`}
-                    d={`M ${lineX} ${lineY1} H ${midPointX} V ${lineY2} H ${lineX} M ${midPointX} ${midPointY} H ${childPos.x}`}
-                    className="fill-none stroke-border"
-                    strokeWidth="2"
-                  />
-                )
+                   connectors.push(<path key={`conn2-${match.matchInternalId}`} d={`M ${lineFromParent2X} ${lineFromParent2Y} H ${midPointX} V ${lineToChildY} H ${lineToChildX}`} className="fill-none stroke-border" strokeWidth="2" />);
+                }
+                
+                return connectors;
               })
             ))}
           </svg>
 
-          {/* Render Boxes */}
           {rounds.map((round) => (
             round.matches.map((match) => {
               const pos = positions.get(match.matchInternalId);
