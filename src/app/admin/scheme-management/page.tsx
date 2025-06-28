@@ -156,106 +156,36 @@ export default function SchemeManagementPage() {
         const initialParticipants = [...tandingParticipants];
         const numParticipants = initialParticipants.length;
 
-        // 1. Determine bracket size (next power of 2) and byes
+        // 1. Determine bracket size (next power of 2)
         const bracketSize = Math.pow(2, Math.ceil(Math.log2(Math.max(2, numParticipants))));
+        
+        // 2. Calculate byes and preliminary matches
         const numByes = bracketSize - numParticipants;
+        const numPrelimMatches = numParticipants > bracketSize / 2 ? numParticipants - (bracketSize / 2) : 0;
         
-        // 2. Create a list of competitors, padding with BYE markers.
-        // We will place BYEs strategically later, not just at the end.
-        const competitors: (Participant | {name: 'BYE'})[] = [...initialParticipants];
+        const participantsWithBye = initialParticipants.slice(0, numByes);
+        const participantsInPrelim = initialParticipants.slice(numByes);
 
-        // 3. Create the seeded list of participants and byes
-        const seededCompetitors: (Participant | {name: 'BYE'})[] = [];
-        let pIndex = 0;
-        let byeIndex = 0;
-
-        // This is a simplified seeding that gives byes to the top seeds.
-        for (let i = 0; i < bracketSize / 2; i++) {
-            // Top half of the mini-bracket
-            if (byeIndex < numByes) {
-                seededCompetitors.push(competitors[pIndex++]);
-                seededCompetitors.push({name: 'BYE'});
-                byeIndex++;
-            } else {
-                seededCompetitors.push(competitors[pIndex++]);
-                seededCompetitors.push(competitors[pIndex++]);
-            }
-        }
-        
-        // This part needs a better seeding algorithm. Let's use a standard one.
-        const seeds = Array.from({ length: bracketSize }, (_, i) => i + 1);
-        const roundsOrder: number[][] = [];
-        let round = seeds;
-
-        while (round.length > 1) {
-            roundsOrder.push([...round]);
-            const nextRound: number[] = [];
-            for (let i = 0; i < round.length; i += 2) {
-                nextRound.push(round[i]);
-            }
-            round = nextRound;
-        }
-
-        const buildPairs = (s: number[]): number[][] => {
-            if (s.length === 2) return [[s[0], s[1]]];
-            const left = buildPairs(s.slice(0, s.length / 2));
-            const right = buildPairs(s.slice(s.length / 2).reverse());
-            return left.concat(right);
-        }
-        const pairs = buildPairs(seeds);
-        
-        const finalSeededList: (Participant | {name: 'BYE'})[] = [];
-        const participantQueue = [...initialParticipants];
-        const byesLeft = numByes;
-
-        // A better seeding approach
-        let players = [...initialParticipants];
-        let byes = numByes;
-        const slots: (Participant | {name: 'BYE'})[] = new Array(bracketSize).fill({name: 'BYE'});
-        
-        // Distribute players into slots, giving top seeds the advantage
-        let playerIdx = 0;
-        for(let i = 0; i < bracketSize; i++) {
-            if(i % 2 === 0 || byes === 0) {
-                if(playerIdx < players.length) {
-                    slots[i] = players[playerIdx++];
-                }
-            } else {
-                byes--;
-            }
-        }
-        // Shuffle to distribute players a bit more
-        for (let i = slots.length - 1; i > 0; i--) {
-            if(slots[i].name !== 'BYE') {
-                const j = Math.floor(Math.random() * (i + 1));
-                if (slots[j].name !== 'BYE') {
-                    [slots[i], slots[j]] = [slots[j], slots[i]];
-                }
-            }
-        }
-
-
-        // Let's use a very standard and reliable seeding algorithm.
         const rounds: SchemeRound[] = [];
-        let currentCompetitors: any[] = [...initialParticipants];
-        let roundNumber = 1;
+        let currentCompetitors: any[] = [];
         let globalMatchCounter = 1;
+        let roundNumber = 1;
 
-        // If not a power of two, run preliminary round
-        const numPrelimMatches = numParticipants - (bracketSize / 2);
+        // 3. Create Preliminary Round (if necessary)
         if (numPrelimMatches > 0) {
             const prelimRoundName = `Penyisihan`;
             const prelimMatches: SchemeMatch[] = [];
-            const participantsInPrelim = currentCompetitors.slice(-2 * numPrelimMatches);
-            const participantsWithBye = currentCompetitors.slice(0, numParticipants - (2 * numPrelimMatches));
             
-            let nextRoundCompetitors: any[] = participantsWithBye.map(p => ({
+            // Add participants with byes to the next round's list
+            currentCompetitors = participantsWithBye.map(p => ({
                 name: p.name, contingent: p.contingent
             }));
-
-            for (let i = 0; i < numPrelimMatches; i++) {
+            
+            // Pair preliminary participants sequentially
+            for (let i = 0; i < participantsInPrelim.length; i += 2) {
                 const p1 = participantsInPrelim[i];
-                const p2 = participantsInPrelim[participantsInPrelim.length - 1 - i];
+                const p2 = participantsInPrelim[i + 1] || null;
+
                 const match: SchemeMatch = {
                      matchInternalId: `R${roundNumber}-M${globalMatchCounter}`,
                      globalMatchNumber: globalMatchCounter,
@@ -266,23 +196,29 @@ export default function SchemeManagementPage() {
                      status: 'PENDING',
                 };
                 prelimMatches.push(match);
-                nextRoundCompetitors.push({ name: `(Pemenang Partai ${globalMatchCounter})`, contingent: ''});
+                currentCompetitors.push({ name: `(Pemenang Partai ${globalMatchCounter})`, contingent: ''});
                 globalMatchCounter++;
             }
             rounds.push({ roundNumber, name: prelimRoundName, matches: prelimMatches });
-            currentCompetitors = nextRoundCompetitors;
             roundNumber++;
+        } else {
+            // No preliminary round, all participants start in the first main round
+            currentCompetitors = initialParticipants.map(p => ({
+                name: p.name, contingent: p.contingent
+            }));
         }
 
-        // Generate main bracket rounds
+        // 4. Generate subsequent main bracket rounds
         while(currentCompetitors.length > 1) {
             const roundName = getRoundName(currentCompetitors.length);
             const matchesForThisRound: SchemeMatch[] = [];
             const winnersForNextRound: any[] = [];
             
-            for (let i = 0; i < currentCompetitors.length / 2; i++) {
+            const half = currentCompetitors.length / 2;
+            for (let i = 0; i < half; i++) {
                 const p1 = currentCompetitors[i];
-                const p2 = currentCompetitors[currentCompetitors.length - 1 - i];
+                const p2 = currentCompetitors[i + half];
+
                 const match: SchemeMatch = {
                     matchInternalId: `R${roundNumber}-M${globalMatchCounter}`,
                     globalMatchNumber: globalMatchCounter,
