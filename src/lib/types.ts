@@ -40,7 +40,7 @@ export interface PesilatMatchData {
 }
 
 export interface Match {
-  id: string;
+  id:string;
   matchNumber: number;
   round: number;
   class: string;
@@ -69,6 +69,7 @@ export interface ScheduleTanding {
   round: string; // Babak
   class: string; // Kelas
   matchNumber: number;
+  matchInternalId?: string; // Link back to the match in a scheme
 }
 
 export type TGRCategoryType = 'Tunggal' | 'Ganda' | 'Regu' | 'Jurus Tunggal Bebas';
@@ -341,8 +342,8 @@ export interface SchemeMatch {
   roundName: string;
   participant1: { name: string; contingent: string } | null;
   participant2: { name: string; contingent: string } | null;
-  winnerToMatchId: string | null;
-  scheduleId?: string;
+  winnerToMatchId: string | null; // Not used in current model but could be useful
+  scheduleId?: string; // Link to the actual schedule document
   status: 'PENDING' | 'SCHEDULED' | 'COMPLETED';
   winnerId?: string | null;
 }
@@ -369,4 +370,3 @@ export interface Scheme {
 }
 // --- END SCHEME MANAGEMENT TYPES ---
 
-    

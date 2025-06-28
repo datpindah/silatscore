@@ -176,75 +176,63 @@ export default function SchemeManagementPage() {
         setIsLoading(false);
         return;
       }
+      
+      const safeAge = tandingAge.replace(/\s+/g, '_').toLowerCase();
+      const safeClass = tandingClass.replace(/\s+/g, '_').toLowerCase();
+      const schemeId = `tanding-${safeAge}-${safeClass}-${Date.now()}`;
 
       const rounds: SchemeRound[] = [];
       let globalMatchCounter = 1;
-
-      // Determine the size of the bracket (next power of 2)
+      
       const bracketSize = Math.pow(2, Math.ceil(Math.log2(numParticipants)));
-      const numByes = bracketSize - numParticipants;
-      const numPrelimMatches = numParticipants - numByes;
-
-      let currentCompetitors: (Participant | { name: string; contingent: string } | null)[] = [...initialParticipants];
-      let roundNumber = 1;
-
-      // 1. Handle preliminary round if necessary
-      if (numByes > 0 && numPrelimMatches > 0) {
-        const prelimRoundName = `Penyisihan Awal`;
-        const prelimMatches: SchemeMatch[] = [];
-        const nextRoundCompetitors: (Participant | { name: string; contingent: string } | null)[] = [];
-        
-        // Participants with byes advance directly. These are the top seeds.
-        const byes = currentCompetitors.slice(0, numByes);
-        nextRoundCompetitors.push(...byes);
-
-        // The rest of the participants play in the preliminary round
-        const prelimParticipants = currentCompetitors.slice(numByes);
-        for (let i = 0; i < prelimParticipants.length; i += 2) {
-            const p1 = prelimParticipants[i];
-            const p2 = prelimParticipants[i+1]; // p2 will be undefined for the last participant if odd
-            
-            const match: SchemeMatch = {
-                matchInternalId: `R${roundNumber}-M${globalMatchCounter}`,
-                globalMatchNumber: globalMatchCounter,
-                roundName: prelimRoundName,
-                participant1: p1,
-                participant2: p2, // p2 can be null here
-                winnerToMatchId: null,
-                status: 'PENDING',
-            };
-            prelimMatches.push(match);
-            nextRoundCompetitors.push({ name: `(Pemenang Partai ${globalMatchCounter})`, contingent: '' });
-            globalMatchCounter++;
-        }
-
-        rounds.push({ roundNumber, name: prelimRoundName, matches: prelimMatches });
-        currentCompetitors = nextRoundCompetitors;
-        roundNumber++;
+      const byes = bracketSize - numParticipants;
+      
+      // Create seeded participant list
+      let seededParticipants: (Participant | null)[] = [...initialParticipants];
+      while(seededParticipants.length < bracketSize) {
+        seededParticipants.push(null); // Pad with null for bye representation
       }
 
-      // 2. Main rounds
-      while (currentCompetitors.length > 1) {
+      // Reorder for standard seeding (1 vs n, 2 vs n-1 etc.)
+      const finalSeedingOrder: (Participant | null)[] = new Array(bracketSize).fill(null);
+      const highSeeds = seededParticipants.slice(0, bracketSize / 2);
+      const lowSeeds = seededParticipants.slice(bracketSize / 2).reverse();
+      
+      for(let i=0; i < bracketSize / 2; i++) {
+        finalSeedingOrder[i*2] = highSeeds[i];
+        finalSeedingOrder[i*2+1] = lowSeeds[i];
+      }
+
+      let currentCompetitors: (Participant | null)[] = finalSeedingOrder;
+      let roundNumber = 1;
+
+      // Build rounds from bottom up
+      while(currentCompetitors.length > 1) {
         const roundName = getRoundName(currentCompetitors.length);
         const matchesForThisRound: SchemeMatch[] = [];
-        const nextRoundCompetitors: ({ name: string; contingent: string })[] = [];
+        const nextRoundCompetitors: (Participant | null)[] = [];
 
-        // Seeding logic for main bracket: 1 vs n, 2 vs n-1, etc.
-        const highSeeds = currentCompetitors.slice(0, currentCompetitors.length / 2);
-        const lowSeeds = currentCompetitors.slice(currentCompetitors.length / 2).reverse();
+        for (let i = 0; i < currentCompetitors.length; i += 2) {
+          const p1 = currentCompetitors[i];
+          const p2 = currentCompetitors[i+1];
 
-        for (let i = 0; i < highSeeds.length; i++) {
-          const p1 = highSeeds[i];
-          const p2 = lowSeeds[i];
+          if (p1 === null) {
+            nextRoundCompetitors.push(p2); // p2 gets a bye
+            continue;
+          }
+          if (p2 === null) {
+            nextRoundCompetitors.push(p1); // p1 gets a bye
+            continue;
+          }
 
           const match: SchemeMatch = {
-            matchInternalId: `R${roundNumber}-M${globalMatchCounter}`,
-            globalMatchNumber: globalMatchCounter,
-            roundName: roundName,
-            participant1: p1,
-            participant2: p2,
-            winnerToMatchId: null,
-            status: 'PENDING',
+              matchInternalId: `${schemeId}-R${roundNumber}-M${globalMatchCounter}`,
+              globalMatchNumber: globalMatchCounter,
+              roundName: roundName,
+              participant1: p1,
+              participant2: p2,
+              winnerToMatchId: null, // This can be calculated later if needed
+              status: 'PENDING',
           };
           matchesForThisRound.push(match);
           nextRoundCompetitors.push({ name: `(Pemenang Partai ${globalMatchCounter})`, contingent: '' });
@@ -252,16 +240,17 @@ export default function SchemeManagementPage() {
         }
 
         if (matchesForThisRound.length > 0) {
-          rounds.push({ roundNumber, name: roundName, matches: matchesForThisRound });
+          rounds.unshift({ roundNumber, name: roundName, matches: matchesForThisRound });
         }
         currentCompetitors = nextRoundCompetitors;
         roundNumber++;
       }
+      
+       // Re-assign correct round numbers
+      rounds.forEach((round, index) => {
+          round.roundNumber = index + 1;
+      });
 
-
-      const safeAge = tandingAge.replace(/\s+/g, '_').toLowerCase();
-      const safeClass = tandingClass.replace(/\s+/g, '_').toLowerCase();
-      const schemeId = `tanding-${safeAge}-${safeClass}-${Date.now()}`;
 
       const finalSchemeParticipants: SchemeParticipant[] = tandingParticipants.map((p, i) => ({
         id: `${p.contingent}-${p.name}-${i}`.replace(/\s+/g, '-'),
@@ -356,38 +345,46 @@ export default function SchemeManagementPage() {
         if (generatedScheme.type === 'Tanding') {
           if (!generatedScheme.rounds || generatedScheme.rounds.length === 0) {
             alert("Skema Tanding tidak memiliki pertandingan untuk dijadwalkan.");
+            setIsGeneratingSchedule(false);
             return;
           }
           
           let generatedCount = 0;
-          generatedScheme.rounds.forEach(round => {
-            round.matches.forEach(match => {
-                // Only create schedules for matches with two actual participants
-                if (!match.participant1 || !match.participant2 || match.participant1.name.startsWith('(') || match.participant2.name.startsWith('(') ) return;
+          // Generate schedule only for the first round of actual matches
+          const firstRoundWithMatches = generatedScheme.rounds.find(r => r.matches.length > 0);
 
-                const scheduleData: Omit<ScheduleTanding, 'id'> = {
-                    matchNumber: match.globalMatchNumber,
-                    date: generatedScheme.date,
-                    place: generatedScheme.gelanggang,
-                    round: match.roundName, 
-                    class: generatedScheme.tandingClass || '',
-                    pesilatMerahName: match.participant1.name,
-                    pesilatMerahContingent: match.participant1.contingent,
-                    pesilatBiruName: match.participant2.name,
-                    pesilatBiruContingent: match.participant2.contingent,
-                };
-                
-                const scheduleDocRef = doc(collection(db, 'schedules_tanding'));
-                batch.set(scheduleDocRef, {
-                    ...scheduleData,
-                    date: Timestamp.fromDate(new Date(scheduleData.date + "T00:00:00")),
-                });
-                generatedCount++;
-            });
+          if (!firstRoundWithMatches) {
+            alert("Tidak ada pertandingan yang valid di skema ini untuk dijadwalkan.");
+            setIsGeneratingSchedule(false);
+            return;
+          }
+
+          firstRoundWithMatches.matches.forEach(match => {
+              if (!match.participant1 || !match.participant2) return; // Skip byes
+
+              const scheduleData: Omit<ScheduleTanding, 'id'> = {
+                  matchNumber: match.globalMatchNumber,
+                  date: generatedScheme.date,
+                  place: generatedScheme.gelanggang,
+                  round: match.roundName, 
+                  class: generatedScheme.tandingClass || '',
+                  pesilatMerahName: match.participant1.name,
+                  pesilatMerahContingent: match.participant1.contingent,
+                  pesilatBiruName: match.participant2.name,
+                  pesilatBiruContingent: match.participant2.contingent,
+                  matchInternalId: match.matchInternalId, // Link back to the scheme match
+              };
+              
+              const scheduleDocRef = doc(db, 'schedules_tanding', match.matchInternalId); // Use internal ID as document ID
+              batch.set(scheduleDocRef, {
+                  ...scheduleData,
+                  date: Timestamp.fromDate(new Date(scheduleData.date + "T00:00:00")),
+              });
+              generatedCount++;
           });
 
           if(generatedCount === 0) {
-            alert("Tidak ada pertandingan babak awal yang dapat dijadwalkan secara otomatis dari skema ini. Anda mungkin perlu membuat jadwal secara manual untuk babak selanjutnya.");
+            alert("Tidak ada pertandingan babak awal yang dapat dijadwalkan secara otomatis dari skema ini.");
           } else {
             await batch.commit();
             alert(`${generatedCount} jadwal Tanding berhasil dibuat dan ditambahkan ke halaman Jadwal Tanding!`);
@@ -441,7 +438,7 @@ export default function SchemeManagementPage() {
         </TabsList>
         
         <TabsContent value="tanding">
-          <Card className="shadow-lg">
+          <Card className="shadow-lg bg-card text-card-foreground border-border">
             <CardHeader>
               <CardTitle className="text-2xl font-headline text-primary">Generator Skema Tanding</CardTitle>
               <CardDescription>Atur detail kelas, jumlah peserta, dan masukkan data peserta untuk membuat bagan pertandingan sistem gugur secara otomatis.</CardDescription>
@@ -520,7 +517,7 @@ export default function SchemeManagementPage() {
         </TabsContent>
 
         <TabsContent value="tgr">
-           <Card className="shadow-lg">
+           <Card className="shadow-lg bg-card text-card-foreground border-border">
             <CardHeader>
               <CardTitle className="text-2xl font-headline text-primary">Generator Daftar Peserta TGR</CardTitle>
               <CardDescription>Masukkan detail dan daftar peserta TGR untuk membuat daftar tampil yang terstruktur.</CardDescription>
