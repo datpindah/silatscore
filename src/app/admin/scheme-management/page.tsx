@@ -220,7 +220,7 @@ export default function SchemeManagementPage() {
                   globalMatchNumber: globalMatchCounter++,
                   roundName: nextRoundName,
                   participant1: { name: `(Pemenang Partai ${match1.globalMatchNumber})`, contingent: ''},
-                  participant2: { name: `(Pemenang Partai ${match2.globalMatchNumber})`, contingent: ''},
+                  participant2: match2 ? { name: `(Pemenang Partai ${match2.globalMatchNumber})`, contingent: ''} : null,
                   winnerToMatchId: null,
                   status: 'PENDING'
               };
