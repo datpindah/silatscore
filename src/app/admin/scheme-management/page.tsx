@@ -9,26 +9,39 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { GitBranch, Users, Minus, Plus, Loader2, Upload, Download } from 'lucide-react';
+import { GitBranch, Users, Minus, Plus, Loader2, Upload, Download, CalendarPlus } from 'lucide-react';
 import { db } from '@/lib/firebase';
-import { doc, setDoc, Timestamp } from 'firebase/firestore';
-import { ageCategories, tgrCategoriesList, type TGRCategoryType, type Scheme, type SchemeParticipant, type SchemeRound, type SchemeMatch } from '@/lib/types';
+import { doc, setDoc, Timestamp, writeBatch, collection } from 'firebase/firestore';
+import { ageCategories, tgrCategoriesList, type TGRCategoryType, type Scheme, type SchemeParticipant, type SchemeRound, type SchemeMatch, type ScheduleTanding, type ScheduleTGR } from '@/lib/types';
 import * as XLSX from 'xlsx';
 import { BracketView } from '@/components/admin/BracketView';
+import { FormField } from '@/components/admin/ScheduleFormFields';
 
 interface Participant {
   name: string;
   contingent: string;
 }
 
+const roundOptions = [
+  { value: 'Penyisihan', label: 'Penyisihan' },
+  { value: 'Babak 16 Besar', label: 'Babak 16 Besar' },
+  { value: 'Perempat Final', label: 'Perempat Final' },
+  { value: 'Semi Final', label: 'Semi Final' },
+  { value: 'Final', label: 'Final' },
+];
+
 export default function SchemeManagementPage() {
   const [activeTab, setActiveTab] = useState('tanding');
   const [isLoading, setIsLoading] = useState(false);
+  const [isGeneratingSchedule, setIsGeneratingSchedule] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [generatedScheme, setGeneratedScheme] = useState<Scheme | null>(null);
 
   // General State
   const [gelanggang, setGelanggang] = useState('');
+  const [eventDate, setEventDate] = useState(new Date().toISOString().split('T')[0]);
+  const [eventRound, setEventRound] = useState('Penyisihan');
+
 
   // Tanding State
   const [tandingAge, setTandingAge] = useState<string>('Dewasa');
@@ -141,8 +154,8 @@ export default function SchemeManagementPage() {
   };
 
   const handleGenerateTandingScheme = async () => {
-    if (!tandingClass.trim() || !gelanggang.trim()) {
-      alert("Nama Kelas Tanding dan Gelanggang tidak boleh kosong.");
+    if (!tandingClass.trim() || !gelanggang.trim() || !eventDate || !eventRound) {
+      alert("Nama Kelas, Gelanggang, Tanggal, dan Babak tidak boleh kosong.");
       return;
     }
     if (tandingParticipants.some(p => !p.name.trim() || !p.contingent.trim())) {
@@ -156,12 +169,8 @@ export default function SchemeManagementPage() {
         const initialParticipants = [...tandingParticipants];
         const numParticipants = initialParticipants.length;
 
-        // 1. Determine bracket size (next power of 2)
         const bracketSize = Math.pow(2, Math.ceil(Math.log2(Math.max(2, numParticipants))));
-        
-        // 2. Calculate byes and preliminary matches
         const numByes = bracketSize - numParticipants;
-        const numPrelimMatches = numParticipants > bracketSize / 2 ? numParticipants - (bracketSize / 2) : 0;
         
         const participantsWithBye = initialParticipants.slice(0, numByes);
         const participantsInPrelim = initialParticipants.slice(numByes);
@@ -171,17 +180,12 @@ export default function SchemeManagementPage() {
         let globalMatchCounter = 1;
         let roundNumber = 1;
 
-        // 3. Create Preliminary Round (if necessary)
-        if (numPrelimMatches > 0) {
-            const prelimRoundName = `Penyisihan`;
+        if (participantsInPrelim.length > 0) {
+            const prelimRoundName = getRoundName(participantsInPrelim.length);
             const prelimMatches: SchemeMatch[] = [];
             
-            // Add participants with byes to the next round's list
-            currentCompetitors = participantsWithBye.map(p => ({
-                name: p.name, contingent: p.contingent
-            }));
+            currentCompetitors = participantsWithBye.map(p => ({ name: p.name, contingent: p.contingent }));
             
-            // Pair preliminary participants sequentially
             for (let i = 0; i < participantsInPrelim.length; i += 2) {
                 const p1 = participantsInPrelim[i];
                 const p2 = participantsInPrelim[i + 1] || null;
@@ -190,8 +194,8 @@ export default function SchemeManagementPage() {
                      matchInternalId: `R${roundNumber}-M${globalMatchCounter}`,
                      globalMatchNumber: globalMatchCounter,
                      roundName: prelimRoundName,
-                     participant1: p1,
-                     participant2: p2,
+                     participant1: p1 ? { name: p1.name, contingent: p1.contingent } : null,
+                     participant2: p2 ? { name: p2.name, contingent: p2.contingent } : null,
                      winnerToMatchId: null,
                      status: 'PENDING',
                 };
@@ -202,22 +206,17 @@ export default function SchemeManagementPage() {
             rounds.push({ roundNumber, name: prelimRoundName, matches: prelimMatches });
             roundNumber++;
         } else {
-            // No preliminary round, all participants start in the first main round
-            currentCompetitors = initialParticipants.map(p => ({
-                name: p.name, contingent: p.contingent
-            }));
+            currentCompetitors = initialParticipants.map(p => ({ name: p.name, contingent: p.contingent }));
         }
 
-        // 4. Generate subsequent main bracket rounds
         while(currentCompetitors.length > 1) {
             const roundName = getRoundName(currentCompetitors.length);
             const matchesForThisRound: SchemeMatch[] = [];
             const winnersForNextRound: any[] = [];
             
-            const half = currentCompetitors.length / 2;
-            for (let i = 0; i < half; i++) {
+            for (let i = 0; i < currentCompetitors.length; i += 2) {
                 const p1 = currentCompetitors[i];
-                const p2 = currentCompetitors[i + half];
+                const p2 = currentCompetitors[i + 1] || null;
 
                 const match: SchemeMatch = {
                     matchInternalId: `R${roundNumber}-M${globalMatchCounter}`,
@@ -254,6 +253,8 @@ export default function SchemeManagementPage() {
         ageCategory: tandingAge,
         tandingClass: tandingClass,
         gelanggang: gelanggang.trim(),
+        date: eventDate,
+        round: eventRound,
         participantCount: numParticipants,
         participants: finalSchemeParticipants,
         rounds: rounds,
@@ -277,8 +278,8 @@ export default function SchemeManagementPage() {
       alert("Semua Nama Peserta dan Kontingen TGR harus diisi.");
       return;
     }
-     if (!gelanggang.trim()) {
-      alert("Gelanggang tidak boleh kosong.");
+     if (!gelanggang.trim() || !eventDate || !eventRound) {
+      alert("Gelanggang, Tanggal, dan Babak tidak boleh kosong.");
       return;
     }
     setIsLoading(true);
@@ -301,6 +302,8 @@ export default function SchemeManagementPage() {
         ageCategory: tgrAge,
         tgrCategory: tgrCategory,
         gelanggang: gelanggang.trim(),
+        date: eventDate,
+        round: eventRound,
         participantCount: tgrParticipantCount,
         participants: schemeParticipants,
         rounds: [], // TGR doesn't use bracket rounds in this model
@@ -318,6 +321,74 @@ export default function SchemeManagementPage() {
       setIsLoading(false);
     }
   }
+
+  const handleGenerateSchedule = async () => {
+      if (!generatedScheme) {
+        alert("Silakan buat skema terlebih dahulu.");
+        return;
+      }
+      setIsGeneratingSchedule(true);
+      try {
+        const batch = writeBatch(db);
+        if (generatedScheme.type === 'Tanding') {
+          if (!generatedScheme.rounds || generatedScheme.rounds.length === 0) {
+            alert("Skema Tanding tidak memiliki babak untuk dijadwalkan.");
+            return;
+          }
+          // Only schedule matches from the very first round
+          const firstRoundMatches = generatedScheme.rounds[0].matches;
+          let generatedCount = 0;
+
+          firstRoundMatches.forEach(match => {
+            // Only create schedules for matches with two participants (not byes)
+            if (!match.participant1 || !match.participant2) return;
+
+            const scheduleData: Omit<ScheduleTanding, 'id'> = {
+              matchNumber: match.globalMatchNumber,
+              date: generatedScheme.date,
+              place: generatedScheme.gelanggang,
+              round: generatedScheme.round, // Use the round from the form
+              class: generatedScheme.tandingClass || '',
+              pesilatMerahName: match.participant1.name,
+              pesilatMerahContingent: match.participant1.contingent,
+              pesilatBiruName: match.participant2.name,
+              pesilatBiruContingent: match.participant2.contingent,
+            };
+            
+            const scheduleDocRef = doc(collection(db, 'schedules_tanding'));
+            batch.set(scheduleDocRef, scheduleData);
+            generatedCount++;
+          });
+          await batch.commit();
+          alert(`${generatedCount} jadwal Tanding berhasil dibuat dan ditambahkan ke halaman Jadwal Tanding!`);
+        
+        } else { // TGR
+          generatedScheme.participants.forEach((participant, index) => {
+             const scheduleData: Omit<ScheduleTGR, 'id'> = {
+                lotNumber: participant.seed || index + 1,
+                category: generatedScheme.tgrCategory || 'Tunggal',
+                date: generatedScheme.date,
+                place: generatedScheme.gelanggang,
+                round: generatedScheme.round,
+                pesilatMerahName: participant.name,
+                pesilatMerahContingent: participant.contingent,
+                pesilatBiruName: '',
+                pesilatBiruContingent: '',
+            };
+            const scheduleDocRef = doc(collection(db, 'schedules_tgr'));
+            batch.set(scheduleDocRef, scheduleData);
+          });
+          await batch.commit();
+          alert(`${generatedScheme.participants.length} jadwal TGR berhasil dibuat dan ditambahkan ke halaman Jadwal TGR!`);
+        }
+      } catch (err) {
+        console.error("Error generating schedule:", err);
+        alert(`Gagal membuat jadwal: ${err instanceof Error ? err.message : String(err)}`);
+      } finally {
+        setIsGeneratingSchedule(false);
+      }
+    };
+
 
   return (
     <>
@@ -342,24 +413,32 @@ export default function SchemeManagementPage() {
               <CardDescription>Atur detail kelas, jumlah peserta, dan masukkan data peserta untuk membuat bagan pertandingan sistem gugur secara otomatis.</CardDescription>
             </CardHeader>
             <CardContent className="space-y-6">
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-                <div>
-                  <Label htmlFor="tandingAge">Kategori Usia</Label>
-                  <Select onValueChange={setTandingAge} value={tandingAge} disabled={isLoading}>
-                    <SelectTrigger id="tandingAge"><SelectValue placeholder="Pilih Kategori Usia" /></SelectTrigger>
-                    <SelectContent>
-                      {ageCategories.map(cat => <SelectItem key={cat} value={cat}>{cat}</SelectItem>)}
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div>
-                  <Label htmlFor="tandingClass">Nama Kelas Tanding</Label>
-                  <Input id="tandingClass" value={tandingClass} onChange={(e) => setTandingClass(e.target.value)} placeholder="cth: Kelas A Putra" disabled={isLoading} />
-                </div>
-                <div>
-                  <Label htmlFor="gelanggangTanding">Gelanggang</Label>
-                  <Input id="gelanggangTanding" value={gelanggang} onChange={(e) => setGelanggang(e.target.value)} placeholder="cth: Gelanggang A" disabled={isLoading} />
-                </div>
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                <FormField id="date" label="Tanggal Pertandingan" type="date" value={eventDate} onChange={(e) => setEventDate(e.target.value)} required />
+                <FormField
+                  id="round"
+                  label="Babak Awal"
+                  as="select"
+                  value={eventRound}
+                  onSelectChange={setEventRound}
+                  options={roundOptions}
+                  placeholder="Pilih Babak"
+                  required
+                />
+                 <FormField id="gelanggangTanding" label="Gelanggang" value={gelanggang} onChange={(e) => setGelanggang(e.target.value)} placeholder="cth: Gelanggang A" disabled={isLoading} required/>
+
+                <FormField
+                    id="tandingAge"
+                    label="Kategori Usia"
+                    as="select"
+                    value={tandingAge}
+                    onSelectChange={setTandingAge}
+                    options={ageCategories.map(cat => ({ value: cat, label: cat }))}
+                    placeholder="Pilih Kategori Usia"
+                    required
+                />
+                <FormField id="tandingClass" label="Nama Kelas Tanding" value={tandingClass} onChange={(e) => setTandingClass(e.target.value)} placeholder="cth: Kelas A Putra" disabled={isLoading} required/>
+                
                 <div>
                   <Label htmlFor="tandingParticipants">Jumlah Peserta</Label>
                   <div className="flex items-center gap-2">
@@ -400,7 +479,7 @@ export default function SchemeManagementPage() {
               
               <Button onClick={handleGenerateTandingScheme} className="w-full md:w-auto" disabled={isLoading}>
                 {isLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin"/> : <GitBranch className="mr-2 h-4 w-4" />}
-                Buat Bagan Pertandingan Tanding
+                Buat Skema Bagan Tanding
               </Button>
             </CardContent>
           </Card>
@@ -413,29 +492,40 @@ export default function SchemeManagementPage() {
               <CardDescription>Masukkan detail dan daftar peserta TGR untuk membuat daftar tampil yang terstruktur.</CardDescription>
             </CardHeader>
             <CardContent className="space-y-6">
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-                 <div>
-                  <Label htmlFor="tgrAge">Kategori Usia</Label>
-                   <Select onValueChange={setTgrAge} value={tgrAge} disabled={isLoading}>
-                    <SelectTrigger id="tgrAge"><SelectValue placeholder="Pilih Kategori Usia" /></SelectTrigger>
-                    <SelectContent>
-                      {ageCategories.map(cat => <SelectItem key={cat} value={cat}>{cat}</SelectItem>)}
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div>
-                  <Label htmlFor="tgrCategory">Kategori TGR</Label>
-                  <Select onValueChange={(v) => setTgrCategory(v as TGRCategoryType)} value={tgrCategory} disabled={isLoading}>
-                    <SelectTrigger id="tgrCategory"><SelectValue placeholder="Pilih Kategori TGR" /></SelectTrigger>
-                    <SelectContent>
-                      {tgrCategoriesList.map(cat => <SelectItem key={cat} value={cat}>{cat}</SelectItem>)}
-                    </SelectContent>
-                  </Select>
-                </div>
-                 <div>
-                  <Label htmlFor="gelanggangTgr">Gelanggang</Label>
-                  <Input id="gelanggangTgr" value={gelanggang} onChange={(e) => setGelanggang(e.target.value)} placeholder="cth: Gelanggang B" disabled={isLoading} />
-                </div>
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                <FormField id="date" label="Tanggal Pertandingan" type="date" value={eventDate} onChange={(e) => setEventDate(e.target.value)} required />
+                <FormField
+                  id="round"
+                  label="Babak Awal"
+                  as="select"
+                  value={eventRound}
+                  onSelectChange={setEventRound}
+                  options={roundOptions}
+                  placeholder="Pilih Babak"
+                  required
+                />
+                 <FormField id="gelanggangTgr" label="Gelanggang" value={gelanggang} onChange={(e) => setGelanggang(e.target.value)} placeholder="cth: Gelanggang B" disabled={isLoading} required/>
+
+                 <FormField
+                    id="tgrAge"
+                    label="Kategori Usia"
+                    as="select"
+                    value={tgrAge}
+                    onSelectChange={setTgrAge}
+                    options={ageCategories.map(cat => ({ value: cat, label: cat }))}
+                    placeholder="Pilih Kategori Usia"
+                    required
+                  />
+                  <FormField
+                    id="tgrCategory"
+                    label="Kategori TGR"
+                    as="select"
+                    value={tgrCategory}
+                    onSelectChange={(v) => setTgrCategory(v as TGRCategoryType)}
+                    options={tgrCategoriesList.map(cat => ({ value: cat, label: cat }))}
+                    placeholder="Pilih Kategori TGR"
+                    required
+                  />
                 <div>
                   <Label htmlFor="tgrParticipants">Jumlah Peserta/Tim</Label>
                   <div className="flex items-center gap-2">
@@ -486,6 +576,15 @@ export default function SchemeManagementPage() {
       {generatedScheme && (
         <div className="mt-8">
             <BracketView scheme={generatedScheme} />
+            <div className="mt-4 text-center">
+                <Button onClick={handleGenerateSchedule} disabled={isGeneratingSchedule} className="bg-green-600 hover:bg-green-700 text-white">
+                    {isGeneratingSchedule ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <CalendarPlus className="mr-2 h-4 w-4" />}
+                    Generate Jadwal dari Skema Ini
+                </Button>
+                <p className="text-xs text-muted-foreground mt-2">
+                    Aksi ini akan membuat jadwal pertandingan babak pertama di halaman Jadwal Tanding/TGR.
+                </p>
+            </div>
         </div>
       )}
     </>

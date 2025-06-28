@@ -358,6 +358,8 @@ export interface Scheme {
   type: 'Tanding' | 'TGR';
   ageCategory: string;
   gelanggang: string;
+  date: string;
+  round: string;
   tandingClass?: string;
   tgrCategory?: TGRCategoryType;
   participantCount: number;
@@ -366,3 +368,5 @@ export interface Scheme {
   createdAt: FirebaseTimestamp;
 }
 // --- END SCHEME MANAGEMENT TYPES ---
+
+    
