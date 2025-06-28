@@ -151,7 +151,8 @@ export default function SchemeManagementPage() {
     if (numParticipantsInRound <= 8) return "Perempat Final";
     if (numParticipantsInRound <= 16) return "Babak 16 Besar";
     if (numParticipantsInRound <= 32) return "Babak 32 Besar";
-    return `Penyisihan (${numParticipantsInRound} Besar)`;
+    if (numParticipantsInRound <= 64) return "Babak 64 Besar";
+    return `Penyisihan (${numParticipantsInRound} Peserta)`;
   };
 
   const handleGenerateTandingScheme = async () => {
@@ -170,25 +171,34 @@ export default function SchemeManagementPage() {
         const initialParticipants = [...tandingParticipants];
         const numParticipants = initialParticipants.length;
 
-        const bracketSize = Math.pow(2, Math.ceil(Math.log2(Math.max(2, numParticipants))));
-        const numByes = bracketSize - numParticipants;
-        
-        const participantsWithByes = initialParticipants.slice(0, numByes);
-        const participantsInPrelim = initialParticipants.slice(numByes);
+        if (numParticipants < 2) {
+            alert("Membutuhkan setidaknya 2 peserta untuk membuat bagan.");
+            setIsLoading(false);
+            return;
+        }
 
         const rounds: SchemeRound[] = [];
         let globalMatchCounter = 1;
-        let roundNumber = 1;
-        let nextRoundCompetitors: ({ name: string; contingent: string } | null)[] = [];
 
-        if (participantsInPrelim.length > 0) {
-            const prelimRoundName = getRoundName(participantsInPrelim.length + participantsWithByes.length);
+        const bracketSize = Math.pow(2, Math.ceil(Math.log2(numParticipants)));
+        const numByes = bracketSize - numParticipants;
+        
+        let competitors: (Participant | { name: string; contingent: string } | null)[] = [...initialParticipants];
+        let roundNumber = 1;
+
+        if (numByes > 0) {
+            const prelimRoundName = getRoundName(bracketSize);
             const prelimMatches: SchemeMatch[] = [];
+            const nextRoundCompetitors: (Participant | { name: string; contingent: string } | null)[] = [];
+            
+            const participantsWithByes = competitors.slice(0, numByes);
+            const participantsInPrelim = competitors.slice(numByes);
+
+            nextRoundCompetitors.push(...participantsWithByes); // Byes advance directly
 
             for (let i = 0; i < participantsInPrelim.length; i += 2) {
                 const p1 = participantsInPrelim[i];
                 const p2 = participantsInPrelim[i + 1];
-
                 const match: SchemeMatch = {
                     matchInternalId: `R${roundNumber}-M${globalMatchCounter}`,
                     globalMatchNumber: globalMatchCounter,
@@ -202,25 +212,27 @@ export default function SchemeManagementPage() {
                 nextRoundCompetitors.push({ name: `(Pemenang Partai ${globalMatchCounter})`, contingent: '' });
                 globalMatchCounter++;
             }
-            
-            rounds.push({ roundNumber, name: prelimRoundName, matches: prelimMatches });
+            if (prelimMatches.length > 0) {
+                rounds.push({ roundNumber, name: prelimRoundName, matches: prelimMatches });
+            }
+            competitors = nextRoundCompetitors;
             roundNumber++;
         }
-
-        let currentCompetitors: ({ name: string; contingent: string } | null)[] = [
-            ...participantsWithByes,
-            ...nextRoundCompetitors
-        ];
-
-        while (currentCompetitors.length > 1) {
-            const roundName = getRoundName(currentCompetitors.length);
+        
+        // Loop to create main rounds until there is only one winner
+        while (competitors.length > 1) {
+            const roundName = getRoundName(competitors.length);
             const matchesForThisRound: SchemeMatch[] = [];
-            const winnersForNextRound: ({ name: string; contingent: string } | null)[] = [];
+            const nextRoundCompetitors: ({ name: string; contingent: string })[] = [];
+            
+            // Re-seed competitors for this round to ensure fair matches
+            const highSeeds = competitors.slice(0, competitors.length / 2);
+            const lowSeeds = competitors.slice(competitors.length / 2).reverse();
 
-            for (let i = 0; i < currentCompetitors.length; i += 2) {
-                const p1 = currentCompetitors[i];
-                const p2 = currentCompetitors[i + 1];
-
+            for (let i = 0; i < highSeeds.length; i++) {
+                const p1 = highSeeds[i];
+                const p2 = lowSeeds[i];
+                
                 const match: SchemeMatch = {
                     matchInternalId: `R${roundNumber}-M${globalMatchCounter}`,
                     globalMatchNumber: globalMatchCounter,
@@ -231,48 +243,51 @@ export default function SchemeManagementPage() {
                     status: 'PENDING',
                 };
                 matchesForThisRound.push(match);
-                winnersForNextRound.push({ name: `(Pemenang Partai ${globalMatchCounter})`, contingent: '' });
+                nextRoundCompetitors.push({ name: `(Pemenang Partai ${globalMatchCounter})`, contingent: '' });
                 globalMatchCounter++;
             }
-            rounds.push({ roundNumber, name: roundName, matches: matchesForThisRound });
-            currentCompetitors = winnersForNextRound;
+            
+            if (matchesForThisRound.length > 0) {
+                rounds.push({ roundNumber, name: roundName, matches: matchesForThisRound });
+            }
+            competitors = nextRoundCompetitors;
             roundNumber++;
         }
 
-      const safeAge = tandingAge.replace(/\s+/g, '_').toLowerCase();
-      const safeClass = tandingClass.replace(/\s+/g, '_').toLowerCase();
-      const schemeId = `tanding-${safeAge}-${safeClass}-${Date.now()}`;
+        const safeAge = tandingAge.replace(/\s+/g, '_').toLowerCase();
+        const safeClass = tandingClass.replace(/\s+/g, '_').toLowerCase();
+        const schemeId = `tanding-${safeAge}-${safeClass}-${Date.now()}`;
 
-      const finalSchemeParticipants: SchemeParticipant[] = initialParticipants.map((p, i) => ({
-        id: `${p.contingent}-${p.name}-${i}`.replace(/\s+/g, '-'),
-        name: p.name,
-        contingent: p.contingent,
-        seed: i + 1,
-      }));
-      
-      const newScheme: Scheme = {
-        id: schemeId,
-        type: 'Tanding',
-        ageCategory: tandingAge,
-        tandingClass: tandingClass,
-        gelanggang: gelanggang.trim(),
-        date: eventDate,
-        round: eventRound,
-        participantCount: numParticipants,
-        participants: finalSchemeParticipants,
-        rounds: rounds,
-        createdAt: Timestamp.now(),
-      };
+        const finalSchemeParticipants: SchemeParticipant[] = tandingParticipants.map((p, i) => ({
+            id: `${p.contingent}-${p.name}-${i}`.replace(/\s+/g, '-'),
+            name: p.name,
+            contingent: p.contingent,
+            seed: i + 1,
+        }));
 
-      await setDoc(doc(db, "schemes", schemeId), newScheme);
-      alert(`Skema Tanding untuk ${tandingClass} (${tandingAge}) dengan ${numParticipants} peserta berhasil dibuat!`);
-      setGeneratedScheme(newScheme);
+        const newScheme: Scheme = {
+            id: schemeId,
+            type: 'Tanding',
+            ageCategory: tandingAge,
+            tandingClass: tandingClass,
+            gelanggang: gelanggang.trim(),
+            date: eventDate,
+            round: eventRound,
+            participantCount: numParticipants,
+            participants: finalSchemeParticipants,
+            rounds: rounds,
+            createdAt: Timestamp.now(),
+        };
+
+        await setDoc(doc(db, "schemes", schemeId), newScheme);
+        alert(`Skema Tanding untuk ${tandingClass} (${tandingAge}) dengan ${numParticipants} peserta berhasil dibuat!`);
+        setGeneratedScheme(newScheme);
 
     } catch (err) {
-      console.error("Error generating Tanding scheme:", err);
-      alert(`Gagal membuat skema: ${err instanceof Error ? err.message : String(err)}`);
+        console.error("Error generating Tanding scheme:", err);
+        alert(`Gagal membuat skema: ${err instanceof Error ? err.message : String(err)}`);
     } finally {
-      setIsLoading(false);
+        setIsLoading(false);
     }
   };
 
@@ -335,38 +350,43 @@ export default function SchemeManagementPage() {
         const batch = writeBatch(db);
         if (generatedScheme.type === 'Tanding') {
           if (!generatedScheme.rounds || generatedScheme.rounds.length === 0) {
-            alert("Skema Tanding tidak memiliki pertandingan untuk dijadwalkan. Ini bisa terjadi jika semua peserta mendapat 'bye'.");
+            alert("Skema Tanding tidak memiliki pertandingan untuk dijadwalkan.");
             return;
           }
-          // Only schedule matches from the very first round of actual play
-          const firstPlayableRound = generatedScheme.rounds[0];
+          
           let generatedCount = 0;
+          generatedScheme.rounds.forEach(round => {
+            round.matches.forEach(match => {
+                // Only create schedules for matches with two actual participants
+                if (!match.participant1 || !match.participant2 || match.participant1.name.startsWith('(') || match.participant2.name.startsWith('(') ) return;
 
-          firstPlayableRound.matches.forEach(match => {
-            // Only create schedules for matches with two participants (not byes)
-            if (!match.participant1 || !match.participant2) return;
-
-            const scheduleData: Omit<ScheduleTanding, 'id'> = {
-              matchNumber: match.globalMatchNumber,
-              date: generatedScheme.date,
-              place: generatedScheme.gelanggang,
-              round: generatedScheme.round, // Use the round from the form for initial scheduling
-              class: generatedScheme.tandingClass || '',
-              pesilatMerahName: match.participant1.name,
-              pesilatMerahContingent: match.participant1.contingent,
-              pesilatBiruName: match.participant2.name,
-              pesilatBiruContingent: match.participant2.contingent,
-            };
-            
-            const scheduleDocRef = doc(collection(db, 'schedules_tanding'));
-            batch.set(scheduleDocRef, {
-              ...scheduleData,
-              date: Timestamp.fromDate(new Date(scheduleData.date + "T00:00:00")),
+                const scheduleData: Omit<ScheduleTanding, 'id'> = {
+                    matchNumber: match.globalMatchNumber,
+                    date: generatedScheme.date,
+                    place: generatedScheme.gelanggang,
+                    round: match.roundName, 
+                    class: generatedScheme.tandingClass || '',
+                    pesilatMerahName: match.participant1.name,
+                    pesilatMerahContingent: match.participant1.contingent,
+                    pesilatBiruName: match.participant2.name,
+                    pesilatBiruContingent: match.participant2.contingent,
+                };
+                
+                const scheduleDocRef = doc(collection(db, 'schedules_tanding'));
+                batch.set(scheduleDocRef, {
+                    ...scheduleData,
+                    date: Timestamp.fromDate(new Date(scheduleData.date + "T00:00:00")),
+                });
+                generatedCount++;
             });
-            generatedCount++;
           });
-          await batch.commit();
-          alert(`${generatedCount} jadwal Tanding berhasil dibuat dan ditambahkan ke halaman Jadwal Tanding!`);
+
+          if(generatedCount === 0) {
+            alert("Tidak ada pertandingan babak awal yang dapat dijadwalkan secara otomatis dari skema ini. Anda mungkin perlu membuat jadwal secara manual untuk babak selanjutnya.");
+          } else {
+            await batch.commit();
+            alert(`${generatedCount} jadwal Tanding berhasil dibuat dan ditambahkan ke halaman Jadwal Tanding!`);
+          }
         
         } else { // TGR
           generatedScheme.participants.forEach((participant, index) => {
