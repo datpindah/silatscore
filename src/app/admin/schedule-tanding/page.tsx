@@ -8,12 +8,13 @@ import { Card, CardContent, CardHeader, CardTitle, CardFooter } from '@/componen
 import { FormField } from '@/components/admin/ScheduleFormFields';
 import { ScheduleTable } from '@/components/admin/ScheduleTable';
 import { PrintScheduleButton } from '@/components/admin/PrintScheduleButton';
-import { Upload, PlusCircle, PlayCircle, Download, Trash2, Loader2 } from 'lucide-react'; // Added Download
+import { Upload, PlusCircle, PlayCircle, Download, Trash2, Loader2, Share2 } from 'lucide-react';
 import type { ScheduleTanding } from '@/lib/types';
 import { TableCell } from '@/components/ui/table';
 import { db } from '@/lib/firebase';
-import { collection, addDoc, getDocs, doc, updateDoc, deleteDoc, onSnapshot, setDoc, getDoc, Timestamp, deleteField, where, query } from 'firebase/firestore';
+import { collection, addDoc, getDocs, doc, updateDoc, deleteDoc, onSnapshot, setDoc, getDoc, Timestamp, deleteField, where, query, writeBatch } from 'firebase/firestore';
 import * as XLSX from 'xlsx';
+import { DistributeSchedulesDialog } from '@/components/admin/DistributeSchedulesDialog';
 
 const initialFormState: Omit<ScheduleTanding, 'id'> = {
   date: new Date().toISOString().split('T')[0],
@@ -46,6 +47,8 @@ export default function ScheduleTandingPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [isDeletingAll, setIsDeletingAll] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const [isDistributeDialogOpen, setIsDistributeDialogOpen] = useState(false);
+
 
   useEffect(() => {
     const unsub = onSnapshot(doc(db, ACTIVE_TANDING_MATCHES_BY_GELANGGANG_PATH), (docSnap) => {
@@ -327,6 +330,30 @@ export default function ScheduleTandingPage() {
     alert("Mengunduh template XLSX jadwal Tanding.");
   };
 
+  const handleDistributeSchedules = async (gelanggangList: string[]) => {
+    setIsLoading(true);
+    try {
+        const batch = writeBatch(db);
+        const sortedSchedules = [...schedules].sort((a, b) => a.matchNumber - b.matchNumber);
+        
+        sortedSchedules.forEach((schedule, index) => {
+            const newPlace = gelanggangList[index % gelanggangList.length];
+            const scheduleRef = doc(db, SCHEDULE_TANDING_COLLECTION, schedule.id);
+            batch.update(scheduleRef, { place: newPlace });
+        });
+
+        await batch.commit();
+        alert(`${schedules.length} jadwal berhasil didistribusikan ke ${gelanggangList.length} gelanggang.`);
+    } catch (error) {
+        console.error("Error distributing schedules:", error);
+        alert(`Gagal mendistribusikan jadwal: ${error instanceof Error ? error.message : String(error)}`);
+    } finally {
+        setIsLoading(false);
+        setIsDistributeDialogOpen(false);
+    }
+  };
+
+
   const tandingTableHeaders = ["No. Match", "Tanggal", "Gelanggang", "Pesilat Merah", "Pesilat Biru", "Babak", "Kelas"];
 
   const schedulesByGelanggang = schedules.reduce((acc, schedule) => {
@@ -347,6 +374,11 @@ export default function ScheduleTandingPage() {
 
   return (
     <>
+      <DistributeSchedulesDialog
+        isOpen={isDistributeDialogOpen}
+        onClose={() => setIsDistributeDialogOpen(false)}
+        onDistribute={handleDistributeSchedules}
+      />
       <PageTitle title="Jadwal Pertandingan Tanding" description="Kelola jadwal pertandingan kategori tanding.">
         <div className="flex flex-wrap gap-2">
            <input type="file" accept=".xlsx" ref={fileInputRef} onChange={processUploadedFile} style={{ display: 'none' }} />
@@ -355,6 +387,9 @@ export default function ScheduleTandingPage() {
           </Button>
           <Button onClick={handleFileUpload} variant="outline" disabled={isLoading || isDeletingAll}>
             <Upload className="mr-2 h-4 w-4" /> Unggah XLS
+          </Button>
+           <Button onClick={() => setIsDistributeDialogOpen(true)} variant="outline" disabled={schedules.length === 0 || isLoading || isDeletingAll}>
+            <Share2 className="mr-2 h-4 w-4" /> Distribusikan Ulang Jadwal
           </Button>
           <PrintScheduleButton scheduleType="Tanding" disabled={schedules.length === 0 || isLoading || isDeletingAll} />
           <Button variant="destructive" onClick={handleDeleteAllSchedules} disabled={schedules.length === 0 || isLoading || isDeletingAll}>
