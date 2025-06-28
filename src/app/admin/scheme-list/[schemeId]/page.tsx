@@ -117,6 +117,10 @@ export default function ViewSchemePage() {
       </PageTitle>
       
       <div ref={bracketRef} className="p-4 bg-background">
+        <div className="mb-6 text-center">
+            <h2 className="text-2xl font-bold text-primary font-headline">{scheme?.tandingClass || scheme?.tgrCategory || "Detail Bagan"}</h2>
+            <p className="text-md text-muted-foreground font-body">{`${scheme?.type || ''} - ${scheme?.ageCategory || ''} | Gel: ${scheme?.gelanggang} | Babak: ${scheme?.round}`}</p>
+        </div>
         {scheme ? <BracketView scheme={scheme} /> : <p>Tidak ada data untuk ditampilkan.</p>}
       </div>
     </>

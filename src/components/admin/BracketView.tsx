@@ -30,15 +30,15 @@ export function BracketView({ scheme }: { scheme: Scheme | null }) {
     );
   }
 
-  const roundGap = "5rem"; // Space between rounds
+  const roundGap = "5rem";
   const boxHeight = 80;
   const boxWidth = 220;
   
-  // Custom vertical gaps for specific rounds
-  const getMatchVerticalGap = (roundMatchCount: number, roundIndex: number): number => {
-    if (roundIndex === scheme.rounds.length - 2) return 200; // Larger gap for semi-finals
-    if (roundIndex === scheme.rounds.length - 3) return 120; // Slightly larger for quarter-finals
-    return 100;
+  const getMatchVerticalGap = (roundMatchCount: number): number => {
+    if (roundMatchCount <= 1) return 100;
+    if (roundMatchCount === 2) return 240; // Semi-finals
+    if (roundMatchCount === 4) return 120; // Quarter-finals
+    return 100; // Default for 8+ matches
   };
 
 
@@ -47,19 +47,25 @@ export function BracketView({ scheme }: { scheme: Scheme | null }) {
       <CardContent className="p-0">
         <div className="flex justify-start items-stretch overflow-x-auto p-6 md:p-10 min-h-[600px]" style={{ gap: roundGap }}>
           {scheme.rounds.map((round, roundIndex) => {
-            const verticalGap = getMatchVerticalGap(round.matches.length, roundIndex);
-            const roundHeight = round.matches.length * verticalGap;
+            const verticalGap = getMatchVerticalGap(round.matches.length);
             const isLastRound = roundIndex === scheme.rounds.length - 1;
 
             return (
-              <div key={round.roundNumber} className="flex flex-col flex-shrink-0" style={{ width: `${boxWidth}px`, minHeight: `${roundHeight}px`}}>
+              <div key={round.roundNumber} className="flex flex-col flex-shrink-0" style={{ width: `${boxWidth}px`}}>
                 <h3 className="text-lg font-bold text-center text-primary uppercase tracking-wider mb-8 h-8">
                   {round.name}
                 </h3>
                 <div className="relative flex-grow">
                   {round.matches.map((match, matchIndex) => {
-                     // Position the box in the middle of its allocated vertical space
-                    const topPosition = matchIndex * verticalGap + (verticalGap - boxHeight) / 2;
+                    let topPosition: number;
+                    if (isLastRound && roundIndex > 0) {
+                      const prevRound = scheme.rounds[roundIndex - 1];
+                      const prevRoundGap = getMatchVerticalGap(prevRound.matches.length);
+                      const prevRoundHeight = prevRound.matches.length * prevRoundGap;
+                      topPosition = (prevRoundHeight / 2) - (boxHeight / 2);
+                    } else {
+                      topPosition = matchIndex * verticalGap + (verticalGap - boxHeight) / 2;
+                    }
 
                     return (
                       <Fragment key={match.matchInternalId}>
@@ -89,38 +95,33 @@ export function BracketView({ scheme }: { scheme: Scheme | null }) {
                         {/* Connector Lines */}
                         {!isLastRound && (
                           <>
-                            {/* Horizontal line from match box */}
-                            <div
-                              className="bg-border absolute"
-                              style={{
-                                left: '100%',
-                                top: `${topPosition + boxHeight / 2}px`,
-                                width: `calc(${roundGap} / 2)`,
-                                height: '2px',
-                              }}
-                            />
-                             {/* Vertical connector line (only for top match of a pair) */}
+                            {/* Horizontal line from this match box */}
+                            <div className="bg-border absolute" style={{
+                              top: `${topPosition + boxHeight / 2}px`,
+                              left: '100%',
+                              width: `calc(${roundGap} / 2)`,
+                              height: '2px'
+                            }}/>
+
+                            {/* Vertical and horizontal lines connecting pairs */}
                             {matchIndex % 2 === 0 && (
-                                <div className="bg-border absolute"
-                                style={{
-                                    left: `calc(100% + ${roundGap} / 2)`,
-                                    top: `${topPosition + boxHeight / 2}px`,
-                                    width: '2px',
-                                    height: `${verticalGap}px`,
-                                }}
-                                />
+                              <>
+                                {/* Vertical line */}
+                                <div className="bg-border absolute" style={{
+                                  top: `${topPosition + boxHeight / 2}px`,
+                                  left: `calc(100% + ${roundGap} / 2)`,
+                                  width: '2px',
+                                  height: `${verticalGap}px`
+                                }}/>
+                                {/* Horizontal line to next round match */}
+                                <div className="bg-border absolute" style={{
+                                  top: `${topPosition + boxHeight / 2 + verticalGap / 2}px`,
+                                  left: `calc(100% + ${roundGap} / 2)`,
+                                  width: `calc(${roundGap} / 2)`,
+                                  height: '2px'
+                                }}/>
+                              </>
                             )}
-                             {/* Horizontal line to next round's match (only for top match of a pair) */}
-                             {matchIndex % 2 === 0 && (
-                                <div className="bg-border absolute"
-                                style={{
-                                    left: `calc(100% + ${roundGap} / 2)`,
-                                    top: `${topPosition + boxHeight / 2 + verticalGap / 2}px`,
-                                    width: `calc(${roundGap} / 2)`,
-                                    height: '2px',
-                                }}
-                                />
-                             )}
                           </>
                         )}
                       </Fragment>
