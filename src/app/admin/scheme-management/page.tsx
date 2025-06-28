@@ -194,7 +194,7 @@ export default function SchemeManagementPage() {
             const p2 = prelimParticipants[i + 1];
             const match: SchemeMatch = {
                 matchInternalId: `R${roundNumber}-M${globalMatchCounter}`,
-                globalMatchNumber,
+                globalMatchNumber: globalMatchCounter,
                 roundName: prelimRoundName,
                 participant1: p1 ? { name: p1.name, contingent: p1.contingent } : null,
                 participant2: p2 ? { name: p2.name, contingent: p2.contingent } : null,
@@ -223,7 +223,7 @@ export default function SchemeManagementPage() {
             const p2 = currentRoundParticipants[i+1];
             const match: SchemeMatch = {
                 matchInternalId: `R${roundNumber}-M${globalMatchCounter}`,
-                globalMatchNumber,
+                globalMatchNumber: globalMatchCounter,
                 roundName: roundName,
                 participant1: p1,
                 participant2: p2,
