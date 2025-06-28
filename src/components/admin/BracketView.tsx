@@ -6,11 +6,19 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { useMemo } from 'react';
 import { cn } from '@/lib/utils';
 
-// Smaller constants for a more compact view
-const BOX_WIDTH = 200;
-const BOX_HEIGHT = 60;
-const ROUND_GAP = 50;
-const VERTICAL_GAP = 20;
+const BOX_WIDTH = 180;
+const BOX_HEIGHT = 56;
+const ROUND_GAP = 60;
+const VERTICAL_GAP = 24;
+
+interface MatchWithPosition extends SchemeMatch {
+  x: number;
+  y: number;
+}
+
+interface RoundWithPositions extends Omit<SchemeRound, 'matches'> {
+  matches: MatchWithPosition[];
+}
 
 export function BracketView({ scheme }: { scheme: Scheme | null }) {
   if (!scheme) return null;
@@ -37,176 +45,143 @@ export function BracketView({ scheme }: { scheme: Scheme | null }) {
     );
   }
 
-  const { rounds } = scheme;
-  const numRounds = rounds.length;
+  const positionedRounds: RoundWithPositions[] = useMemo(() => {
+    const rounds = scheme.rounds;
+    if (rounds.length === 0) return [];
 
-  const positions = useMemo(() => {
-    const posMap = new Map<string, { x: number; y: number }>();
-    if (numRounds === 0) return posMap;
+    const positionedRounds: RoundWithPositions[] = rounds.map(r => ({ ...r, matches: [] }));
 
-    const roundDepths = rounds.map((_, i) => i * (BOX_WIDTH + ROUND_GAP));
-
-    const calculateY = (roundIndex: number, matchIndex: number): number => {
-      if (roundIndex === numRounds - 1) {
-        const finalRound = rounds[numRounds - 1];
-        const yOffset = (totalHeight / 2) - (finalRound.matches.length * (BOX_HEIGHT + VERTICAL_GAP)) / 2;
-        return matchIndex * (BOX_HEIGHT + VERTICAL_GAP) + yOffset;
-      }
-      
-      const nextRound = rounds[roundIndex + 1];
-      const childMatchIndex = Math.floor(matchIndex / 2);
-      const childMatch = nextRound.matches[childMatchIndex];
-      const childKey = childMatch.matchInternalId;
-
-      if (!posMap.has(childKey)) {
-           const childX = roundDepths[roundIndex + 1];
-           const childY = calculateY(roundIndex + 1, childMatchIndex);
-           posMap.set(childKey, { x: childX, y: childY });
-      }
-
-      const childPos = posMap.get(childKey)!;
-      const ySpread = (BOX_HEIGHT + VERTICAL_GAP) * Math.pow(2, numRounds - 2 - roundIndex);
-
-      return childPos.y + (matchIndex % 2 === 0 ? -ySpread / 2 : ySpread / 2);
-    };
-    
-    const preliminaryMatches = rounds[0].matches.length;
-    const finalRoundMatches = rounds[numRounds-1].matches.length;
-    const totalHeight = (preliminaryMatches > finalRoundMatches ? preliminaryMatches : finalRoundMatches) * (BOX_HEIGHT + VERTICAL_GAP) * 0.7;
-
-
-    rounds.forEach((round, roundIndex) => {
-        round.matches.forEach((match, matchIndex) => {
-            const key = match.matchInternalId;
-            if (!posMap.has(key)) {
-                const x = roundDepths[roundIndex];
-                const y = calculateY(roundIndex, matchIndex);
-                posMap.set(key, { x, y });
-            }
-        });
+    // Position final match
+    const finalRound = positionedRounds[rounds.length - 1];
+    finalRound.matches.push({
+      ...rounds[rounds.length - 1].matches[0],
+      x: (rounds.length - 1) * (BOX_WIDTH + ROUND_GAP),
+      y: 0,
     });
 
-    const allYPositions = Array.from(posMap.values()).map(p => p.y);
-    const minY = Math.min(...allYPositions, 0);
-    if (minY < 0) {
-      for (const [key, pos] of posMap.entries()) {
-        posMap.set(key, { ...pos, y: pos.y - minY });
-      }
-    }
-    
-    return posMap;
-  }, [rounds, numRounds]);
+    // Work backwards to position every other match
+    for (let i = rounds.length - 2; i >= 0; i--) {
+      const currentRound = rounds[i];
+      const nextRound = positionedRounds[i + 1];
 
+      currentRound.matches.forEach((match, matchIndex) => {
+        const childMatchIndex = Math.floor(matchIndex / 2);
+        const childMatch = nextRound.matches[childMatchIndex];
+
+        const ySpread = Math.pow(2, rounds.length - 1 - (i + 1)) * (BOX_HEIGHT + VERTICAL_GAP);
+        const yOffset = (matchIndex % 2 === 0) ? -ySpread : ySpread;
+        
+        positionedRounds[i].matches.push({
+          ...match,
+          x: i * (BOX_WIDTH + ROUND_GAP),
+          y: childMatch.y + yOffset / 2,
+        });
+      });
+    }
+
+    // Normalize Y coordinates to be positive
+    const allYPositions = positionedRounds.flatMap(r => r.matches.map(m => m.y));
+    const minY = Math.min(...allYPositions, 0);
+
+    return positionedRounds.map(round => ({
+      ...round,
+      matches: round.matches.map(match => ({
+        ...match,
+        y: match.y - minY,
+      })),
+    }));
+  }, [scheme.rounds]);
 
   const totalHeight = useMemo(() => {
-    if (positions.size === 0) return BOX_HEIGHT;
-    const allY = Array.from(positions.values()).map(p => p.y);
-    return Math.max(...allY) + BOX_HEIGHT;
-  }, [positions]);
-  
+    if (positionedRounds.length === 0) return 0;
+    const allY = positionedRounds.flatMap(r => r.matches.map(m => m.y));
+    return Math.max(...allY) + BOX_HEIGHT + 40;
+  }, [positionedRounds]);
+
   const totalWidth = useMemo(() => {
-    if (numRounds === 0) return BOX_WIDTH;
-    return (numRounds * (BOX_WIDTH + ROUND_GAP)) - ROUND_GAP;
-  }, [numRounds]);
+    if (positionedRounds.length === 0) return 0;
+    return (positionedRounds.length * (BOX_WIDTH + ROUND_GAP)) - ROUND_GAP;
+  }, [positionedRounds]);
 
 
   return (
     <div className="bg-card text-card-foreground border-border overflow-auto p-4 md:p-10">
-      <div className="relative" style={{ height: `${totalHeight + 40}px`, width: `${totalWidth + 40}px` }}>
-          
-          <svg className="absolute inset-0 h-full w-full">
-            {rounds.map((round, roundIndex) => {
-              if (roundIndex === 0) return null; // No lines for the first round
-
-              return round.matches.map((match) => {
-                const childPos = positions.get(match.matchInternalId);
-                if (!childPos) return null;
-
-                const prevRound = rounds[roundIndex - 1];
-                const parent1Index = round.matches.indexOf(match) * 2;
-                const parent2Index = parent1Index + 1;
+      <div className="relative" style={{ height: `${totalHeight}px`, width: `${totalWidth}px` }}>
+        <svg className="absolute inset-0 h-full w-full">
+            {positionedRounds.map((round, roundIndex) => {
+                if (roundIndex === positionedRounds.length - 1) return null; // No lines from final round
                 
-                const parent1Match = prevRound.matches[parent1Index];
-                const parent2Match = prevRound.matches[parent2Index];
+                const nextRound = positionedRounds[roundIndex + 1];
 
-                const endX = childPos.x;
-                const endY = childPos.y + BOX_HEIGHT / 2;
+                return round.matches.map(match => {
+                    const parentIndex = round.matches.indexOf(match);
+                    const childIndex = Math.floor(parentIndex / 2);
+                    const childMatch = nextRound.matches[childIndex];
 
-                const paths = [];
+                    if (!childMatch) return null;
 
-                if (parent1Match) {
-                    const parent1Pos = positions.get(parent1Match.matchInternalId);
-                    if (parent1Pos) {
-                        const startX1 = parent1Pos.x + BOX_WIDTH;
-                        const startY1 = parent1Pos.y + BOX_HEIGHT / 2;
-                        const midX = startX1 + ROUND_GAP / 2;
+                    const startX = match.x + BOX_WIDTH;
+                    const startY = match.y + BOX_HEIGHT / 2;
+                    const endX = childMatch.x;
+                    const endY = childMatch.y + BOX_HEIGHT / 2;
+                    const midX = startX + ROUND_GAP / 2;
 
-                        paths.push(<path key={`h1-${match.matchInternalId}`} d={`M ${startX1} ${startY1} H ${midX}`} className="fill-none stroke-border/70" strokeWidth="2" />);
-                        
-                        if (parent2Match) {
-                            const parent2Pos = positions.get(parent2Match.matchInternalId);
-                            if (parent2Pos) {
-                                const startY2 = parent2Pos.y + BOX_HEIGHT / 2;
-                                paths.push(<path key={`v-${match.matchInternalId}`} d={`M ${midX} ${startY1} V ${startY2}`} className="fill-none stroke-border/70" strokeWidth="2" />);
-                            }
-                        } else {
-                           // If no parent2, the line to child comes from parent1's Y
-                           paths.push(<path key={`h2-${match.matchInternalId}`} d={`M ${midX} ${startY1} H ${endX}`} className="fill-none stroke-border/70" strokeWidth="2" />);
-                        }
+                    // If it's a bye (no p2 and p1 has a name), draw a straight line
+                    if (match.participant2 === null && match.participant1?.name) {
+                         return (
+                            <path
+                                key={`conn-${match.matchInternalId}`}
+                                d={`M ${startX} ${startY} H ${endX}`}
+                                className="fill-none stroke-border/70"
+                                strokeWidth="2"
+                            />
+                        );
                     }
-                }
-                if (parent2Match) {
-                   const parent2Pos = positions.get(parent2Match.matchInternalId);
-                   if (parent2Pos) {
-                       const startX2 = parent2Pos.x + BOX_WIDTH;
-                       const startY2 = parent2Pos.y + BOX_HEIGHT / 2;
-                       const midX = startX2 + ROUND_GAP / 2;
-                       paths.push(<path key={`h3-${match.matchInternalId}`} d={`M ${startX2} ${startY2} H ${midX}`} className="fill-none stroke-border/70" strokeWidth="2" />);
-                   }
-                }
 
-                if (parent1Match && parent2Match) {
-                   const midX = childPos.x - ROUND_GAP / 2;
-                   paths.push(<path key={`h4-${match.matchInternalId}`} d={`M ${midX} ${endY} H ${endX}`} className="fill-none stroke-border/70" strokeWidth="2" />);
-                }
-                
-                return paths;
-              });
+                    // Otherwise, draw the classic bracket connector lines
+                    return (
+                        <path
+                            key={`conn-${match.matchInternalId}`}
+                            d={`M ${startX} ${startY} H ${midX} V ${endY} H ${endX}`}
+                            className="fill-none stroke-border/70"
+                            strokeWidth="2"
+                        />
+                    );
+                });
             })}
-          </svg>
-          
-          {rounds.map((round) => (
-            round.matches.map((match) => {
-              const pos = positions.get(match.matchInternalId);
-              if (!pos) return null;
+        </svg>
 
-              return (
-                <div
-                  key={match.matchInternalId}
-                  className="absolute group transition-shadow hover:shadow-lg"
-                  style={{ top: `${pos.y}px`, left: `${pos.x}px`, width: `${BOX_WIDTH}px`, height: `${BOX_HEIGHT}px` }}
-                >
-                  <div className="relative z-10 flex items-center h-full">
-                      <span className="absolute -left-6 top-1/2 -translate-y-1/2 bg-muted text-muted-foreground rounded-full size-5 flex items-center justify-center text-xs font-sans font-bold border">
-                        {match.globalMatchNumber}
-                      </span>
-                      <div className="bg-background rounded-md p-2 border border-border w-full h-full text-sm flex flex-col justify-around">
-                          <div className="truncate">
-                            <p className="font-semibold">{match.participant1?.name || '(Bye)'}</p>
-                            <p className="text-xs text-muted-foreground">{match.participant1?.contingent || ''}</p>
-                          </div>
-                          <div className="border-t border-border/80" />
-                          <div className="truncate">
-                            <p className="font-semibold">{match.participant2?.name || ''}</p>
-                            <p className="text-xs text-muted-foreground">{match.participant2?.contingent || ''}</p>
-                          </div>
-                      </div>
-                    </div>
+        {positionedRounds.map((round) => (
+          round.matches.map((match) => (
+            <div
+              key={match.matchInternalId}
+              className="absolute group transition-shadow hover:shadow-lg"
+              style={{ top: `${match.y}px`, left: `${match.x}px`, width: `${BOX_WIDTH}px`, height: `${BOX_HEIGHT}px` }}
+            >
+              <div className="relative z-10 flex items-center h-full">
+                <span className="absolute -left-6 top-1/2 -translate-y-1/2 bg-muted text-muted-foreground rounded-full size-5 flex items-center justify-center text-xs font-sans font-bold border">
+                  {match.globalMatchNumber}
+                </span>
+                <div className={cn(
+                    "bg-background rounded-md p-2 border border-border w-full h-full text-xs flex flex-col justify-around",
+                    match.participant2 === null && match.participant1?.name && "border-dashed"
+                )}>
+                  <div className="truncate">
+                    <p className="font-semibold">{match.participant1?.name || '(TBD)'}</p>
+                    <p className="text-xs text-muted-foreground">{match.participant1?.contingent || ''}</p>
+                  </div>
+                  { match.participant2 !== null && <div className="border-t border-border/80" /> }
+                  <div className="truncate">
+                    {match.participant2 !== null && <p className="font-semibold">{match.participant2?.name || '(TBD)'}</p> }
+                    {match.participant2 !== null && <p className="text-xs text-muted-foreground">{match.participant2?.contingent || ''}</p> }
+                    {match.participant2 === null && match.participant1?.name && <p className="font-semibold italic text-muted-foreground">Bye</p>}
+                  </div>
                 </div>
-              );
-            })
-          ))}
-        </div>
+              </div>
+            </div>
+          ))
+        ))}
+      </div>
     </div>
   );
 }
