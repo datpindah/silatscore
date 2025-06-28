@@ -55,7 +55,7 @@ export default function SchemeManagementPage() {
         return "Babak Awal";
     };
     
-    const bracket: Omit<SchemeMatch, 'status'>[] = [];
+    const bracket: Omit<SchemeMatch, 'status' | 'winnerId' | 'scheduleId'>[] = [];
     let matchIdCounter = 1;
     let playersInRound = nextPowerOfTwo;
     let prevRoundMatchHolders: (string | null)[] = Array.from({ length: nextPowerOfTwo }, (_, i) => `Peserta ${i + 1}`);
