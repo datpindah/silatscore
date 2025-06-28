@@ -1,7 +1,7 @@
 
 "use client";
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { PageTitle } from '@/components/shared/PageTitle';
 import { db } from '@/lib/firebase';
 import { collection, getDocs, query, orderBy, doc, deleteDoc } from 'firebase/firestore';
@@ -10,39 +10,43 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Loader2, Eye, Filter, Trash2 } from 'lucide-react';
+import { Loader2, Eye, Filter, Trash2, AlertTriangle } from 'lucide-react';
 import Link from 'next/link';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { ageCategories } from '@/lib/types';
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 
 export default function SchemeListPage() {
   const [schemes, setSchemes] = useState<Scheme[]>([]);
   const [filteredSchemes, setFilteredSchemes] = useState<Scheme[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isDeletingId, setIsDeletingId] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
   
   const [filterType, setFilterType] = useState('all');
   const [filterAge, setFilterAge] = useState('all');
   const [filterClass, setFilterClass] = useState('');
 
-  useEffect(() => {
-    const fetchSchemes = async () => {
-      setIsLoading(true);
-      try {
-        const q = query(collection(db, 'schemes'), orderBy('createdAt', 'desc'));
-        const querySnapshot = await getDocs(q);
-        const schemesData = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Scheme));
-        setSchemes(schemesData);
-        setFilteredSchemes(schemesData);
-      } catch (err) {
-        console.error("Error fetching schemes:", err);
-      } finally {
-        setIsLoading(false);
-      }
-    };
-    fetchSchemes();
+  const fetchSchemes = useCallback(async () => {
+    setIsLoading(true);
+    setError(null);
+    try {
+      const q = query(collection(db, 'schemes'), orderBy('createdAt', 'desc'));
+      const querySnapshot = await getDocs(q);
+      const schemesData = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Scheme));
+      setSchemes(schemesData);
+    } catch (err) {
+      console.error("Error fetching schemes:", err);
+      setError("Gagal memuat daftar bagan. Coba muat ulang halaman.");
+    } finally {
+      setIsLoading(false);
+    }
   }, []);
+
+  useEffect(() => {
+    fetchSchemes();
+  }, [fetchSchemes]);
 
   useEffect(() => {
     let tempSchemes = [...schemes];
@@ -64,13 +68,16 @@ export default function SchemeListPage() {
     }
 
     setIsDeletingId(schemeId);
+    setError(null);
     try {
       await deleteDoc(doc(db, 'schemes', schemeId));
-      setSchemes(prevSchemes => prevSchemes.filter(s => s.id !== schemeId));
+      await fetchSchemes(); // Re-fetch the list from server to guarantee UI consistency
       alert('Bagan berhasil dihapus.');
     } catch (err) {
       console.error("Error deleting scheme:", err);
-      alert('Gagal menghapus bagan.');
+      const errorMessage = err instanceof Error ? err.message : "Terjadi kesalahan yang tidak diketahui.";
+      setError(`Gagal menghapus bagan: ${errorMessage}`);
+      alert(`Gagal menghapus bagan.`);
     } finally {
       setIsDeletingId(null);
     }
@@ -80,6 +87,14 @@ export default function SchemeListPage() {
     <>
       <PageTitle title="Daftar Bagan Pertandingan" description="Lihat semua skema dan bagan pertandingan yang telah dibuat." />
       
+      {error && (
+        <Alert variant="destructive" className="mb-6">
+          <AlertTriangle className="h-4 w-4" />
+          <AlertTitle>Error</AlertTitle>
+          <AlertDescription>{error}</AlertDescription>
+        </Alert>
+      )}
+
       <Card className="mb-6">
         <CardHeader>
           <CardTitle className="flex items-center gap-2"><Filter className="h-5 w-5 text-primary" /> Filter Bagan</CardTitle>
@@ -111,7 +126,7 @@ export default function SchemeListPage() {
       
       <Card>
         <CardContent className="p-0">
-          {isLoading ? (
+          {isLoading && schemes.length === 0 ? (
             <div className="flex justify-center items-center h-64">
               <Loader2 className="h-8 w-8 animate-spin text-primary" />
             </div>
@@ -137,7 +152,7 @@ export default function SchemeListPage() {
                       <TableCell>{scheme.tandingClass || scheme.tgrCategory}</TableCell>
                       <TableCell>{scheme.ageCategory}</TableCell>
                       <TableCell>{scheme.participantCount}</TableCell>
-                      <TableCell>{scheme.createdAt.toDate().toLocaleDateString('id-ID')}</TableCell>
+                      <TableCell>{scheme.createdAt?.toDate ? scheme.createdAt.toDate().toLocaleDateString('id-ID') : 'Invalid Date'}</TableCell>
                       <TableCell>
                         <div className="flex gap-2">
                           <Button asChild variant="outline" size="sm">
