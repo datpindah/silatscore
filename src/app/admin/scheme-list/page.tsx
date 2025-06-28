@@ -184,13 +184,14 @@ export default function SchemeListPage() {
                   <TableHead>Kategori/Kelas</TableHead>
                   <TableHead>Usia</TableHead>
                   <TableHead>Peserta</TableHead>
+                  <TableHead>Gelanggang</TableHead>
                   <TableHead>Tanggal Dibuat</TableHead>
                   <TableHead>Aksi</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {filteredSchemes.length === 0 ? (
-                  <TableRow><TableCell colSpan={6} className="text-center h-24">Tidak ada bagan ditemukan.</TableCell></TableRow>
+                  <TableRow><TableCell colSpan={7} className="text-center h-24">Tidak ada bagan ditemukan.</TableCell></TableRow>
                 ) : (
                   filteredSchemes.map(scheme => (
                     <TableRow key={scheme.id}>
@@ -198,6 +199,7 @@ export default function SchemeListPage() {
                       <TableCell>{scheme.tandingClass || scheme.tgrCategory}</TableCell>
                       <TableCell>{scheme.ageCategory}</TableCell>
                       <TableCell>{scheme.participantCount}</TableCell>
+                      <TableCell>{scheme.gelanggangs?.join(', ') || 'N/A'}</TableCell>
                       <TableCell>{scheme.createdAt?.toDate ? scheme.createdAt.toDate().toLocaleDateString('id-ID') : 'Invalid Date'}</TableCell>
                       <TableCell>
                         <div className="flex gap-2">

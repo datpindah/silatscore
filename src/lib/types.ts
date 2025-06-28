@@ -358,7 +358,7 @@ export interface Scheme {
   id: string; // e.g., 'tanding-dewasa-kelas-a-putra'
   type: 'Tanding' | 'TGR';
   ageCategory: string;
-  gelanggang: string;
+  gelanggangs: string[];
   date: string;
   round: string;
   tandingClass?: string;
@@ -369,4 +369,5 @@ export interface Scheme {
   createdAt: FirebaseTimestamp;
 }
 // --- END SCHEME MANAGEMENT TYPES ---
+
 

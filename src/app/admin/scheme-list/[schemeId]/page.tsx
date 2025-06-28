@@ -98,12 +98,14 @@ export default function ViewSchemePage() {
        </div>
     );
   }
+  
+  const pageDescription = `${scheme?.type || ''} - ${scheme?.ageCategory || ''} | Gel: ${scheme?.gelanggangs?.join(', ') || 'N/A'} | Babak: ${scheme?.round}`;
 
   return (
     <>
       <PageTitle 
         title={scheme?.tandingClass || scheme?.tgrCategory || "Detail Bagan"}
-        description={`${scheme?.type || ''} - ${scheme?.ageCategory || ''} | Gel: ${scheme?.gelanggang} | Babak: ${scheme?.round}`}
+        description={pageDescription}
       >
         <div className="flex gap-2">
             <Button onClick={handleDownload} disabled={isDownloading} variant="default" className="bg-accent hover:bg-accent/90 text-accent-foreground">
@@ -119,7 +121,7 @@ export default function ViewSchemePage() {
       <div ref={bracketRef} className="p-4 bg-background">
         <div className="mb-6 text-center">
             <h2 className="text-2xl font-bold text-primary font-headline">{scheme?.tandingClass || scheme?.tgrCategory || "Detail Bagan"}</h2>
-            <p className="text-md text-muted-foreground font-body">{`${scheme?.type || ''} - ${scheme?.ageCategory || ''} | Gel: ${scheme?.gelanggang} | Babak: ${scheme?.round}`}</p>
+            <p className="text-md text-muted-foreground font-body">{pageDescription}</p>
         </div>
         {scheme ? <BracketView scheme={scheme} /> : <p>Tidak ada data untuk ditampilkan.</p>}
       </div>

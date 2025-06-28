@@ -46,7 +46,7 @@ export default function SchemeManagementPage() {
 
 
   // General State
-  const [gelanggang, setGelanggang] = useState('');
+  const [gelanggangs, setGelanggangs] = useState('Gelanggang 1, Gelanggang 2');
   const [eventDate, setEventDate] = useState(new Date().toISOString().split('T')[0]);
   const [eventRound, setEventRound] = useState('Penyisihan');
 
@@ -146,8 +146,13 @@ export default function SchemeManagementPage() {
   };
   
   const handleGenerateTandingScheme = () => {
-    if (!tandingClass.trim() || !gelanggang.trim() || !eventDate || !eventRound) {
-      alert("Nama Kelas, Gelanggang, Tanggal, dan Babak tidak boleh kosong.");
+    const gelanggangList = gelanggangs.split(',').map(g => g.trim()).filter(Boolean);
+    if (gelanggangList.length === 0) {
+      alert("Nama Gelanggang tidak boleh kosong.");
+      return;
+    }
+    if (!tandingClass.trim() || !eventDate || !eventRound) {
+      alert("Nama Kelas, Tanggal, dan Babak tidak boleh kosong.");
       return;
     }
     if (tandingParticipants.some(p => !p.name.trim() || !p.contingent.trim())) {
@@ -157,17 +162,13 @@ export default function SchemeManagementPage() {
     setIsLoading(true);
 
     try {
-      const participants = [...tandingParticipants];
+      const participants = [...tandingParticipants].map((p, index) => ({...p, seed: index + 1}));
       const numParticipants = participants.length;
-
       if (numParticipants < 2) {
         alert("Minimal 2 peserta dibutuhkan untuk membuat bagan.");
-        setIsLoading(false);
-        return;
+        setIsLoading(false); return;
       }
-
       const schemeId = `tanding-${tandingAge.replace(/\s+/g, '_').toLowerCase()}-${tandingClass.replace(/\s+/g, '_').toLowerCase()}-${Date.now()}`;
-      
       const bracketSize = Math.pow(2, Math.ceil(Math.log2(numParticipants)));
       const numByes = bracketSize - numParticipants;
       
@@ -195,57 +196,61 @@ export default function SchemeManagementPage() {
           globalMatchCounter++;
         }
         allRounds.push({ roundNumber: 0, name: 'Babak Penyisihan', matches: prelimMatches });
-
+        
         const prelimWinnersPlaceholders = prelimMatches.map(match => ({ name: `Pemenang Partai ${match.globalMatchNumber}`, contingent: '' }));
         
-        // This logic directly pairs the bye participants with the winners of the prelim matches sequentially.
-        const mainBracketSlots: ({ name: string; contingent: string } | null)[] = [];
+        const fullBracketCompetitors: ({ name: string; contingent: string } | null)[] = new Array(bracketSize).fill(null);
         
-        // Example for 12 participants: 4 byes, 8 prelim competitors -> 4 prelim matches
-        // We will pair bye #1 with winner of prelim match #1, bye #2 with winner of prelim match #2, etc.
-        const numMainBracketMatches = bracketSize / 2;
-        let byeIndex = 0;
-        let prelimWinnerIndex = 0;
-        let mainBracketCompetitors = [...byeParticipants, ...prelimWinnersPlaceholders];
+        // Balanced bracket seeding: 1, 16, 8, 9, 5, 12, 4, 13, 3, 14, 6, 11, 7, 10, 2, 15
+        const seedOrder = [1, bracketSize, Math.floor(bracketSize/2), Math.floor(bracketSize/2)+1];
+        if(bracketSize > 4) {
+             const quarter = Math.floor(bracketSize / 4);
+             const half = Math.floor(bracketSize / 2);
+             seedOrder.push(quarter, bracketSize - quarter + 1, half + quarter, half - quarter + 1);
+        }
+        if(bracketSize > 8){
+             const eighth = Math.floor(bracketSize/8);
+             seedOrder.push(eighth, bracketSize - eighth + 1, half - eighth, half + eighth + 1);
+             seedOrder.push(quarter+eighth, bracketSize - quarter - eighth + 1, half+quarter-eighth, half-quarter+eighth+1);
+        }
+        const standardSeeding = [1, 16, 9, 8, 5, 12, 13, 4, 3, 14, 11, 6, 7, 10, 15, 2];
+        const placementOrder = standardSeeding.slice(0, bracketSize);
 
-        // This creates a standard balanced bracket structure
-        const seeds = Array.from({ length: bracketSize }, (_, i) => i + 1);
-        const placement: ({ name: string; contingent: string } | null)[] = new Array(bracketSize).fill(null);
+        const allCompetitors = [...byeParticipants, ...prelimCompetitors];
+        allCompetitors.sort((a,b) => a.seed - b.seed);
+
+        placementOrder.forEach((seedPos, i) => {
+            if(allCompetitors[i]){
+                fullBracketCompetitors[seedPos - 1] = allCompetitors[i];
+            }
+        });
+
+        // Now, replace prelim competitors with their matches
+        const finalBracketForRound2: ({ name: string; contingent: string } | null)[] = [];
+        for(let i = 0; i < bracketSize; i += 2) {
+            const p1 = fullBracketCompetitors[i];
+            const p2 = fullBracketCompetitors[i+1];
+            
+            const isP1Bye = byeParticipants.some(bp => bp.seed === (p1 as any)?.seed);
+            const isP2Bye = byeParticipants.some(bp => bp.seed === (p2 as any)?.seed);
+            
+            if(isP1Bye) finalBracketForRound2.push(p1);
+            else if (isP2Bye) finalBracketForRound2.push(p2);
+            else { // It's a prelim match
+                const prelimMatch = prelimMatches.find(pm => pm.participant1?.name === p1?.name || pm.participant2?.name === p1?.name);
+                if(prelimMatch) {
+                    finalBracketForRound2.push({name: `Pemenang Partai ${prelimMatch.globalMatchNumber}`, contingent: ''});
+                }
+            }
+        }
+        competitorsForNextRound = finalBracketForRound2;
         
-        const filledSeeds: Record<number, {name:string, contingent:string}> = {};
-
-        // Place bye participants
-        for(let i=0; i<byeParticipants.length; i++) {
-          filledSeeds[i+1] = byeParticipants[i];
-        }
-        // Place prelim competitors
-        for(let i=0; i<prelimCompetitors.length; i++) {
-          filledSeeds[byeParticipants.length + i + 1] = prelimCompetitors[i];
-        }
-
-        const buildPairs = (s: number[]): number[][] => {
-            if (s.length <= 2) return [s];
-            const mid = s.length / 2;
-            const left = s.slice(0, mid);
-            const right = s.slice(mid).reverse();
-            return [...buildPairs(left), ...buildPairs(right)];
-        }
-        const pairs = buildPairs(seeds);
-
-        for (const pair of pairs) {
-          const p1 = filledSeeds[pair[0]];
-          const p2 = filledSeeds[pair[1]];
-          if (p1) mainBracketSlots.push(p1);
-          if (p2) mainBracketSlots.push(p2);
-        }
-
-        competitorsForNextRound = mainBracketSlots;
       } else {
         competitorsForNextRound = participants;
       }
-
+      
       // --- Generate main bracket rounds ---
-      let currentRoundNumber = 1;
+      let currentRoundNumber = prelimRoundIndex > -1 ? 1 : 0;
       while (competitorsForNextRound.length > 1) {
         const currentRoundMatches: SchemeMatch[] = [];
         const winnersForNextRound: ({ name: string; contingent: string } | null)[] = [];
@@ -254,102 +259,32 @@ export default function SchemeManagementPage() {
           const p1 = competitorsForNextRound[i];
           const p2 = competitorsForNextRound[i + 1] || null;
           
-          // If this is the first main round and a participant is a placeholder from a prelim match,
-          // then this match should use the real participants from the prelim match instead.
-          let finalP1 = p1;
-          let finalP2 = p2;
-          
-          let isByeMatch = false;
-          if (p1 && byeParticipants.some(bp => bp.name === p1.name && bp.contingent === p1.contingent)) isByeMatch = true;
-          if (p2 && byeParticipants.some(bp => bp.name === p2.name && bp.contingent === p2.contingent)) isByeMatch = true;
-          
-          // This is a bye match, we should skip it from the round generation for now and handle it separately.
-          if(allRounds.length === 1 && isByeMatch){
-              // skip
-          } else {
-              const match: SchemeMatch = {
-                matchInternalId: `${schemeId}-R${currentRoundNumber}-M${globalMatchCounter}`,
-                globalMatchNumber: globalMatchCounter,
-                roundName: '', // Will be named later
-                participant1: finalP1,
-                participant2: finalP2,
-                winnerToMatchId: null,
-                status: 'PENDING',
-              };
-              currentRoundMatches.push(match);
-              winnersForNextRound.push({ name: `Pemenang Partai ${globalMatchCounter}`, contingent: '' });
-              globalMatchCounter++;
-          }
+          const match: SchemeMatch = {
+            matchInternalId: `${schemeId}-R${currentRoundNumber}-M${globalMatchCounter}`,
+            globalMatchNumber: globalMatchCounter,
+            roundName: '', // Will be named later
+            participant1: p1,
+            participant2: p2,
+            winnerToMatchId: null,
+            status: 'PENDING',
+          };
+          currentRoundMatches.push(match);
+          winnersForNextRound.push({ name: `Pemenang Partai ${globalMatchCounter}`, contingent: '' });
+          globalMatchCounter++;
         }
-        
-        // This logic is flawed. Let's rebuild it completely.
-        const mainRoundsCompetitors = [...competitorsForNextRound];
-        competitorsForNextRound = []; // Reset this.
-
-        // Rebuild from prelim matches up
-        const prelimRound = allRounds.find(r => r.name === 'Babak Penyisihan');
-        if (prelimRound) {
-            const prelimWinners = prelimRound.matches.map(m => ({ name: `Pemenang Partai ${m.globalMatchNumber}`, contingent: '' }));
-            const nextRoundParticipants = [...byeParticipants, ...prelimWinners];
-            
-            // Re-shuffle for balanced bracket
-             const shuffledNextRound = [];
-             if(nextRoundParticipants.length === 8){ // for 12 participants case
-                shuffledNextRound.push(nextRoundParticipants[0]); // bye 1
-                shuffledNextRound.push(nextRoundParticipants[4]); // winner 5v12
-                shuffledNextRound.push(nextRoundParticipants[3]); // bye 4
-                shuffledNextRound.push(nextRoundParticipants[5]); // winner 6v11
-                shuffledNextRound.push(nextRoundParticipants[2]); // bye 3
-                shuffledNextRound.push(nextRoundParticipants[6]); // winner 7v10
-                shuffledNextRound.push(nextRoundParticipants[1]); // bye 2
-                shuffledNextRound.push(nextRoundParticipants[7]); // winner 8v9
-                competitorsForNextRound = shuffledNextRound;
-             } else {
-                competitorsForNextRound = nextRoundParticipants; // Fallback
-             }
-        } else {
-            competitorsForNextRound = mainRoundsCompetitors;
-        }
-
-
-        // Now generate rounds from the properly seeded competitors
-        allRounds = allRounds.filter(r => r.name === 'Babak Penyisihan'); // Keep only prelim round if it exists
-
-        while (competitorsForNextRound.length > 1) {
-            const currentRoundMatches: SchemeMatch[] = [];
-            const winnersForNextRound: ({ name: string; contingent: string } | null)[] = [];
-
-            for (let i = 0; i < competitorsForNextRound.length; i += 2) {
-            const p1 = competitorsForNextRound[i];
-            const p2 = competitorsForNextRound[i + 1] || null;
-            const match: SchemeMatch = {
-                matchInternalId: `${schemeId}-R${currentRoundNumber}-M${globalMatchCounter}`,
-                globalMatchNumber: globalMatchCounter,
-                roundName: '', // Will be named later
-                participant1: p1,
-                participant2: p2,
-                winnerToMatchId: null,
-                status: 'PENDING',
-            };
-            currentRoundMatches.push(match);
-            winnersForNextRound.push({ name: `Pemenang Partai ${globalMatchCounter}`, contingent: '' });
-            globalMatchCounter++;
-            }
-
-            allRounds.push({ roundNumber: currentRoundNumber, name: '', matches: currentRoundMatches });
-            competitorsForNextRound = winnersForNextRound;
-            currentRoundNumber++;
-        }
+        allRounds.push({ roundNumber: currentRoundNumber, name: '', matches: currentRoundMatches });
+        competitorsForNextRound = winnersForNextRound;
+        currentRoundNumber++;
       }
 
+
       // --- Name the rounds correctly ---
-      const mainRounds = allRounds.filter(r => r.name === '');
+      const mainRounds = allRounds.filter(r => r.name !== 'Babak Penyisihan');
       mainRounds.forEach((round, index) => {
         const roundFromTheEnd = mainRounds.length - index;
         if (roundFromTheEnd === 1) round.name = "Final";
         else if (roundFromTheEnd === 2) round.name = "Semi Final";
         else if (roundFromTheEnd === 3) round.name = "Perempat Final";
-        else if (roundFromTheEnd === 4) round.name = "Babak 16 Besar";
         else round.name = `Babak ${round.matches.length * 2}`;
         round.matches.forEach(m => { m.roundName = round.name; });
       });
@@ -366,7 +301,7 @@ export default function SchemeManagementPage() {
         type: 'Tanding',
         ageCategory: tandingAge,
         tandingClass: tandingClass.trim(),
-        gelanggang: gelanggang.trim(),
+        gelanggangs: gelanggangList,
         date: eventDate,
         round: eventRound,
         participantCount: numParticipants,
@@ -394,7 +329,8 @@ export default function SchemeManagementPage() {
       alert("Semua Nama Peserta dan Kontingen TGR harus diisi.");
       return;
     }
-     if (!gelanggang.trim() || !eventDate || !eventRound) {
+     const gelanggangList = gelanggangs.split(',').map(g => g.trim()).filter(Boolean);
+     if (gelanggangList.length === 0 || !eventDate || !eventRound) {
       alert("Gelanggang, Tanggal, dan Babak tidak boleh kosong.");
       return;
     }
@@ -415,7 +351,7 @@ export default function SchemeManagementPage() {
       type: 'TGR',
       ageCategory: tgrAge,
       tgrCategory: tgrCategory,
-      gelanggang: gelanggang.trim(),
+      gelanggangs: gelanggangList,
       date: eventDate,
       round: eventRound,
       participantCount: tgrParticipants.length,
@@ -470,6 +406,10 @@ export default function SchemeManagementPage() {
       alert("Fitur ini saat ini hanya tersedia untuk skema Tanding.");
       return;
     }
+    if (!generatedScheme.gelanggangs || generatedScheme.gelanggangs.length === 0) {
+      alert("Tidak ada gelanggang yang dikonfigurasi dalam skema ini.");
+      return;
+    }
 
     setIsGeneratingSchedules(true);
     try {
@@ -480,11 +420,13 @@ export default function SchemeManagementPage() {
         for (const match of round.matches) {
           if (match.participant1 && match.participant2) {
             const scheduleDocRef = doc(db, 'schedules_tanding', match.matchInternalId);
+            const gelanggangForMatch = generatedScheme.gelanggangs[(match.globalMatchNumber - 1) % generatedScheme.gelanggangs.length];
+
             
             const scheduleData: Omit<ScheduleTanding, 'id'> = {
               matchNumber: match.globalMatchNumber,
               date: generatedScheme.date, 
-              place: generatedScheme.gelanggang,
+              place: gelanggangForMatch,
               pesilatMerahName: match.participant1.name,
               pesilatMerahContingent: match.participant1.contingent,
               pesilatBiruName: match.participant2.name,
@@ -507,7 +449,7 @@ export default function SchemeManagementPage() {
 
       await batch.commit();
       setSchedulesGenerated(true);
-      alert(`${scheduleCount} jadwal pertandingan berhasil dibuat dan ditambahkan ke halaman Jadwal Tanding.`);
+      alert(`${scheduleCount} jadwal pertandingan berhasil dibuat dan didistribusikan ke halaman Jadwal Tanding.`);
       router.push('/admin/schedule-tanding');
     } catch (err) {
       console.error("Error generating schedules:", err);
@@ -553,7 +495,14 @@ export default function SchemeManagementPage() {
                   placeholder="Pilih Babak"
                   required
                 />
-                 <FormField id="gelanggangTanding" label="Gelanggang" value={gelanggang} onChange={(e) => setGelanggang(e.target.value)} placeholder="cth: Gelanggang A" disabled={isLoading} required/>
+                 <div>
+                    <Label htmlFor="gelanggangs" className="block text-sm font-medium font-headline mb-1">
+                      Nama Gelanggang
+                      <span className="text-destructive">*</span>
+                    </Label>
+                    <Input id="gelanggangs" name="gelanggangs" value={gelanggangs} onChange={(e) => setGelanggangs(e.target.value)} placeholder="cth: Gelanggang A, Gelanggang B" disabled={isLoading} required/>
+                    <p className="text-xs text-muted-foreground mt-1">Pisahkan dengan koma untuk beberapa gelanggang.</p>
+                 </div>
 
                 <FormField
                     id="tandingAge"
@@ -632,7 +581,14 @@ export default function SchemeManagementPage() {
                   placeholder="Pilih Babak"
                   required
                 />
-                 <FormField id="gelanggangTgr" label="Gelanggang" value={gelanggang} onChange={(e) => setGelanggang(e.target.value)} placeholder="cth: Gelanggang B" disabled={isLoading} required/>
+                 <div>
+                    <Label htmlFor="gelanggangs" className="block text-sm font-medium font-headline mb-1">
+                      Nama Gelanggang
+                      <span className="text-destructive">*</span>
+                    </Label>
+                    <Input id="gelanggangs" name="gelanggangs" value={gelanggangs} onChange={(e) => setGelanggangs(e.target.value)} placeholder="cth: Gelanggang A, Gelanggang B" disabled={isLoading} required/>
+                    <p className="text-xs text-muted-foreground mt-1">Pisahkan dengan koma untuk beberapa gelanggang.</p>
+                 </div>
 
                  <FormField
                     id="tgrAge"
