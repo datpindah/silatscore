@@ -58,7 +58,7 @@ export default function SchemeManagementPage() {
     setCount: React.Dispatch<React.SetStateAction<number>>,
     setParticipants: React.Dispatch<React.SetStateAction<Participant[]>>
   ) => {
-    const clampedCount = Math.max(2, newCount);
+    const clampedCount = Math.max(2, isNaN(newCount) ? 2 : newCount);
     setCount(clampedCount);
     setParticipants(currentParticipants => {
       const newParticipants = [...currentParticipants];
@@ -142,15 +142,15 @@ export default function SchemeManagementPage() {
     reader.readAsArrayBuffer(file);
   };
   
-  const getRoundName = (numParticipants: number): string => {
-    const numMatches = Math.ceil(numParticipants / 2);
-    if (numMatches === 1) return "Final";
-    if (numMatches === 2) return "Semi Final";
-    if (numMatches === 4) return "Perempat Final";
-    if (numMatches <= 8) return "Babak 16 Besar";
-    if (numMatches <= 16) return "Babak 32 Besar";
-    return `Penyisihan (${numMatches*2})`;
+  const getRoundName = (numParticipantsInRound: number): string => {
+    if (numParticipantsInRound === 2) return "Final";
+    if (numParticipantsInRound === 4) return "Semi Final";
+    if (numParticipantsInRound === 8) return "Perempat Final";
+    if (numParticipantsInRound === 16) return "Babak 16 Besar";
+    if (numParticipantsInRound === 32) return "Babak 32 Besar";
+    return `Penyisihan (${numParticipantsInRound} Besar)`;
   };
+
 
   const handleGenerateTandingScheme = async () => {
     if (!tandingClass.trim() || !gelanggang.trim()) {
@@ -165,68 +165,105 @@ export default function SchemeManagementPage() {
     setGeneratedScheme(null);
 
     try {
-      const shuffledParticipants: SchemeParticipant[] = shuffleArray([...tandingParticipants]).map((p, i) => ({
+      // 1. Initial Setup
+      const shuffledInitialParticipants = shuffleArray([...tandingParticipants]);
+      const numParticipants = shuffledInitialParticipants.length;
+
+      // 2. Bracket Calculations
+      const bracketSize = Math.pow(2, Math.ceil(Math.log2(numParticipants)));
+      const numPrelimMatches = numParticipants - (bracketSize / 2);
+      const participantsInPrelimCount = numPrelimMatches * 2;
+      const participantsWithByeCount = numParticipants - participantsInPrelimCount;
+      
+      const prelimParticipants = shuffledInitialParticipants.slice(participantsWithByeCount);
+      const byeParticipants = shuffledInitialParticipants.slice(0, participantsWithByeCount);
+
+      const rounds: SchemeRound[] = [];
+      let roundNumber = 1;
+      let globalMatchCounter = 1;
+      
+      let participantsForNextRound: any[] = byeParticipants.map(p => ({ name: p.name, contingent: p.contingent, isPlaceholder: false }));
+
+      // 3. Create Preliminary Round (if any)
+      if (numPrelimMatches > 0) {
+        const prelimRoundName = `Penyisihan`;
+        const prelimMatches: SchemeMatch[] = [];
+
+        for (let i = 0; i < prelimParticipants.length; i += 2) {
+            const p1 = prelimParticipants[i];
+            const p2 = prelimParticipants[i + 1];
+            const match: SchemeMatch = {
+                matchInternalId: `R${roundNumber}-M${globalMatchCounter}`,
+                globalMatchNumber,
+                roundName: prelimRoundName,
+                participant1: p1 ? { name: p1.name, contingent: p1.contingent } : null,
+                participant2: p2 ? { name: p2.name, contingent: p2.contingent } : null,
+                winnerToMatchId: null,
+                status: 'PENDING',
+            };
+            prelimMatches.push(match);
+            participantsForNextRound.push({ name: `(Pemenang Partai ${globalMatchCounter})`, contingent: '', isPlaceholder: true });
+            globalMatchCounter++;
+        }
+        rounds.push({ roundNumber, name: prelimRoundName, matches: prelimMatches });
+        roundNumber++;
+      }
+
+      // 4. Generate Main Bracket Rounds
+      let currentRoundParticipants = participantsForNextRound;
+      while(currentRoundParticipants.length > 1) {
+        const roundName = getRoundName(currentRoundParticipants.length);
+        const matchesForThisRound: SchemeMatch[] = [];
+        const winnersForNextRound: any[] = [];
+        
+        currentRoundParticipants = shuffleArray(currentRoundParticipants);
+
+        for (let i = 0; i < currentRoundParticipants.length; i += 2) {
+            const p1 = currentRoundParticipants[i];
+            const p2 = currentRoundParticipants[i+1];
+            const match: SchemeMatch = {
+                matchInternalId: `R${roundNumber}-M${globalMatchCounter}`,
+                globalMatchNumber,
+                roundName: roundName,
+                participant1: p1,
+                participant2: p2,
+                winnerToMatchId: null,
+                status: 'PENDING',
+            };
+            matchesForThisRound.push(match);
+            winnersForNextRound.push({ name: `(Pemenang Partai ${globalMatchCounter})`, contingent: '', isPlaceholder: true });
+            globalMatchCounter++;
+        }
+        rounds.push({ roundNumber, name: roundName, matches: matchesForThisRound });
+        currentRoundParticipants = winnersForNextRound;
+        roundNumber++;
+      }
+
+      const safeAge = tandingAge.replace(/\s+/g, '_').toLowerCase();
+      const safeClass = tandingClass.replace(/\s+/g, '_').toLowerCase();
+      const schemeId = `tanding-${safeAge}-${safeClass}-${Date.now()}`;
+
+      const finalSchemeParticipants: SchemeParticipant[] = shuffledInitialParticipants.map((p, i) => ({
         id: `${p.contingent}-${p.name}-${i}`.replace(/\s+/g, '-'),
         name: p.name,
         contingent: p.contingent,
         seed: i + 1,
       }));
-
-      const rounds: SchemeRound[] = [];
-      let currentParticipants: (SchemeParticipant | { name: string, contingent: string, isPlaceholder: boolean})[] = shuffledParticipants.map(p => ({ ...p, isPlaceholder: false }));
-      let roundNumber = 1;
-      let globalMatchCounter = 1;
-
-      while (currentParticipants.length > 1) {
-        const roundMatches: SchemeMatch[] = [];
-        const nextRoundParticipants: any[] = [];
-        const roundName = getRoundName(currentParticipants.length);
-        
-        if (currentParticipants.length % 2 !== 0) {
-          const byeParticipant = currentParticipants.pop();
-          nextRoundParticipants.push(byeParticipant);
-        }
-        
-        for (let i = 0; i < currentParticipants.length; i += 2) {
-          const p1 = currentParticipants[i];
-          const p2 = currentParticipants[i + 1];
-          const match: SchemeMatch = {
-            matchInternalId: `R${roundNumber}-M${globalMatchCounter}`,
-            globalMatchNumber: globalMatchCounter,
-            roundName: roundName,
-            participant1: p1,
-            participant2: p2,
-            winnerToMatchId: null,
-            status: 'PENDING',
-          };
-          roundMatches.push(match);
-          nextRoundParticipants.push({ name: `Pemenang Partai ${globalMatchCounter}`, contingent: '', isPlaceholder: true });
-          globalMatchCounter++;
-        }
-        
-        rounds.push({ roundNumber, name: roundName, matches: roundMatches });
-        currentParticipants = nextRoundParticipants;
-        roundNumber++;
-      }
       
-      const safeAge = tandingAge.replace(/\s+/g, '_').toLowerCase();
-      const safeClass = tandingClass.replace(/\s+/g, '_').toLowerCase();
-      const schemeId = `tanding-${safeAge}-${safeClass}-${Date.now()}`;
-
       const newScheme: Scheme = {
         id: schemeId,
         type: 'Tanding',
         ageCategory: tandingAge,
         tandingClass: tandingClass,
         gelanggang: gelanggang.trim(),
-        participantCount: tandingParticipants.length,
-        participants: shuffledParticipants,
+        participantCount: numParticipants,
+        participants: finalSchemeParticipants,
         rounds: rounds,
         createdAt: Timestamp.now(),
       };
 
       await setDoc(doc(db, "schemes", schemeId), newScheme);
-      alert(`Skema Tanding untuk ${tandingClass} (${tandingAge}) dengan ${tandingParticipants.length} peserta berhasil dibuat!`);
+      alert(`Skema Tanding untuk ${tandingClass} (${tandingAge}) dengan ${numParticipants} peserta berhasil dibuat!`);
       setGeneratedScheme(newScheme);
 
     } catch (err) {
@@ -331,7 +368,7 @@ export default function SchemeManagementPage() {
                     <Button variant="outline" size="icon" onClick={() => handleParticipantCountChange(tandingParticipantCount - 1, setTandingParticipantCount, setTandingParticipants)} disabled={isLoading}>
                       <Minus className="h-4 w-4" />
                     </Button>
-                    <Input id="tandingParticipants" type="number" className="text-center" value={tandingParticipantCount} onChange={(e) => handleParticipantCountChange(parseInt(e.target.value) || 0, setTandingParticipantCount, setTandingParticipants)} disabled={isLoading} />
+                    <Input id="tandingParticipants" type="number" className="text-center" value={tandingParticipantCount} onChange={(e) => handleParticipantCountChange(parseInt(e.target.value), setTandingParticipantCount, setTandingParticipants)} disabled={isLoading} />
                     <Button variant="outline" size="icon" onClick={() => handleParticipantCountChange(tandingParticipantCount + 1, setTandingParticipantCount, setTandingParticipants)} disabled={isLoading}>
                       <Plus className="h-4 w-4" />
                     </Button>
@@ -407,7 +444,7 @@ export default function SchemeManagementPage() {
                     <Button variant="outline" size="icon" onClick={() => handleParticipantCountChange(tgrParticipantCount - 1, setTgrParticipantCount, setTgrParticipants)} disabled={isLoading}>
                       <Minus className="h-4 w-4" />
                     </Button>
-                    <Input id="tgrParticipants" type="number" className="text-center" value={tgrParticipantCount} onChange={(e) => handleParticipantCountChange(parseInt(e.target.value) || 0, setTgrParticipantCount, setTgrParticipants)} disabled={isLoading} />
+                    <Input id="tgrParticipants" type="number" className="text-center" value={tgrParticipantCount} onChange={(e) => handleParticipantCountChange(parseInt(e.target.value), setTgrParticipantCount, setTgrParticipants)} disabled={isLoading} />
                     <Button variant="outline" size="icon" onClick={() => handleParticipantCountChange(tgrParticipantCount + 1, setTgrParticipantCount, setTgrParticipants)} disabled={isLoading}>
                       <Plus className="h-4 w-4" />
                     </Button>
