@@ -61,6 +61,7 @@ export default function ViewSchemePage() {
         backgroundColor: '#F5F5DC', // Light beige background
         cacheBust: true,
         pixelRatio: 2, // Higher resolution for better quality
+        skipFonts: true, // Fix for cross-origin font loading errors
     })
       .then((dataUrl) => {
         const link = document.createElement('a');
