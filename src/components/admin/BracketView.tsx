@@ -5,22 +5,10 @@ import type { Scheme, SchemeMatch, SchemeRound } from '@/lib/types';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Fragment } from 'react';
 
-// A helper function to find the destination match for a preliminary round winner
-const findPrelimDestination = (sourceMatch: SchemeMatch, nextRound: SchemeRound | undefined) => {
-  if (!nextRound) return null;
-  const placeholder = `Pemenang Partai ${sourceMatch.globalMatchNumber}`;
-  for (let i = 0; i < nextRound.matches.length; i++) {
-    const targetMatch = nextRound.matches[i];
-    if (targetMatch.participant1?.name === placeholder) {
-      return { match: targetMatch, matchIndex: i, slot: 'top' as const };
-    }
-    if (targetMatch.participant2?.name === placeholder) {
-      return { match: targetMatch, matchIndex: i, slot: 'bottom' as const };
-    }
-  }
-  return null;
-};
-
+const BOX_WIDTH = 220;
+const BOX_HEIGHT = 80;
+const ROUND_GAP = 90; // Horizontal gap between rounds
+const VERTICAL_GAP = 50; // Vertical gap between matches in the same round
 
 export function BracketView({ scheme }: { scheme: Scheme | null }) {
   if (!scheme) return null;
@@ -47,127 +35,192 @@ export function BracketView({ scheme }: { scheme: Scheme | null }) {
     );
   }
 
-  const roundGap = "5rem";
-  const boxHeight = 80;
-  const boxWidth = 220;
-  
-  const getMatchVerticalGap = (roundMatchCount: number, isSemifinal: boolean): number => {
-    if (isSemifinal) return 240; // Specific gap for semifinals
-    if (roundMatchCount <= 1) return 100;
-    if (roundMatchCount === 2) return 240; // Also semifinals
-    if (roundMatchCount === 4) return 120;
-    return 100;
-  };
-  
   const prelimRoundIndex = scheme.rounds.findIndex(r => r.name === 'Babak Penyisihan');
+  const hasPrelim = prelimRoundIndex !== -1;
+  const mainDrawRounds = hasPrelim ? scheme.rounds.slice(prelimRoundIndex + 1) : scheme.rounds;
+
+  const positions = new Map<string, { x: number; y: number }>();
+  let totalHeight = 0;
+
+  // Calculate positions for the main draw rounds
+  const calculatePositions = (rounds: SchemeRound[]) => {
+    if (rounds.length === 0) return;
+    
+    let y_coords: number[] = [];
+    const lastRound = rounds[rounds.length - 1];
+    
+    // Position the final match first
+    const finalMatchY = 0;
+    positions.set(lastRound.matches[0].matchInternalId, { x: (rounds.length - 1) * (BOX_WIDTH + ROUND_GAP), y: finalMatchY });
+    y_coords = [finalMatchY];
+    
+    // Work backwards from the final
+    for (let i = rounds.length - 2; i >= 0; i--) {
+      const round = rounds[i];
+      const new_y_coords: number[] = [];
+      round.matches.forEach((match, matchIndex) => {
+        const parentY = y_coords[Math.floor(matchIndex / 2)];
+        const y = parentY + (matchIndex % 2 === 0 ? -1 : 1) * (Math.pow(2, rounds.length - 2 - i) * (BOX_HEIGHT + VERTICAL_GAP)) / 2;
+        positions.set(match.matchInternalId, { x: i * (BOX_WIDTH + ROUND_GAP), y });
+        new_y_coords.push(y);
+      });
+      y_coords = new_y_coords;
+    }
+
+    // Determine total height for canvas
+    const minY = Math.min(...Array.from(positions.values()).map(p => p.y));
+    const maxY = Math.max(...Array.from(positions.values()).map(p => p.y));
+    totalHeight = maxY - minY + BOX_HEIGHT;
+
+    // Normalize positions to be positive
+    for (const [key, pos] of positions.entries()) {
+      positions.set(key, { ...pos, y: pos.y - minY });
+    }
+  };
+
+  calculatePositions(mainDrawRounds);
+
+  // Position preliminary round matches
+  if (hasPrelim) {
+    const prelimRound = scheme.rounds[prelimRoundIndex];
+    let prelimYOffset = positions.get(mainDrawRounds[0].matches[0].matchInternalId)?.y ?? 0;
+
+    prelimRound.matches.forEach((match) => {
+      // Find where this prelim match winner goes
+      const placeholder = `Pemenang Partai ${match.globalMatchNumber}`;
+      let destPos: { x: number; y: number } | undefined;
+      let destSlot: 'top' | 'bottom' = 'top';
+
+      for (const mainMatch of mainDrawRounds[0].matches) {
+        if (mainMatch.participant1?.name === placeholder) {
+          destPos = positions.get(mainMatch.matchInternalId);
+          destSlot = 'top';
+          break;
+        }
+        if (mainMatch.participant2?.name === placeholder) {
+          destPos = positions.get(mainMatch.matchInternalId);
+          destSlot = 'bottom';
+          break;
+        }
+      }
+      
+      if (destPos) {
+        const destY = destPos.y + (destSlot === 'top' ? BOX_HEIGHT * 0.25 : BOX_HEIGHT * 0.75);
+        positions.set(match.matchInternalId, { x: - (BOX_WIDTH + ROUND_GAP), y: destY - (BOX_HEIGHT / 2)});
+      }
+    });
+  }
+
 
   return (
     <Card className="mt-8 bg-card text-card-foreground border-border overflow-hidden">
       <CardContent className="p-0">
-        <div className="flex justify-start items-stretch overflow-x-auto p-6 md:p-10 min-h-[600px]" style={{ gap: roundGap }}>
-          {scheme.rounds.map((round, roundIndex) => {
-            const isLastRound = roundIndex === scheme.rounds.length - 1;
-            // A round is semi-final if it has 2 matches and is not the last round (which would be the final)
-            const isSemifinal = round.matches.length === 2 && !isLastRound;
-            const verticalGap = getMatchVerticalGap(round.matches.length, isSemifinal);
-            const isPrelim = roundIndex === prelimRoundIndex;
+        <div className="relative p-10" style={{ height: `${totalHeight + 100}px` }}>
+          {scheme.rounds.map((round) => (
+            round.matches.map((match) => {
+              const pos = positions.get(match.matchInternalId);
+              if (!pos) return null;
 
-            return (
-              <div key={round.roundNumber} className="flex flex-col flex-shrink-0" style={{ width: `${boxWidth}px`}}>
-                <h3 className="text-lg font-bold text-center text-primary uppercase tracking-wider mb-8 h-8">
-                  {round.name}
-                </h3>
-                <div className="relative flex-grow">
-                  {round.matches.map((match, matchIndex) => {
-                    let topPosition: number;
-                    // Center the final match based on the semi-final layout
-                    if (isLastRound && roundIndex > 0) {
-                      const prevRound = scheme.rounds[roundIndex - 1];
-                      const prevRoundIsSemifinal = prevRound.matches.length === 2 && roundIndex -1 !== scheme.rounds.length -1;
-                      const prevRoundGap = getMatchVerticalGap(prevRound.matches.length, prevRoundIsSemifinal);
-                      
-                      // Calculate the correct centered position for the final match
-                      const prevRoundFirstBoxTop = (prevRoundGap - boxHeight) / 2;
-                      const totalHeightOfPrevRound = (prevRound.matches.length - 1) * prevRoundGap + boxHeight;
-                      const centerOfPrevRound = prevRoundFirstBoxTop + totalHeightOfPrevRound / 2;
-                      topPosition = centerOfPrevRound - boxHeight / 2;
-
-                    } else {
-                      topPosition = matchIndex * verticalGap + (verticalGap - boxHeight) / 2;
-                    }
-
-                    return (
-                      <Fragment key={match.matchInternalId}>
-                        {/* Match Box */}
-                        <div className="absolute" style={{ top: `${topPosition}px`, left: 0, width: '100%', height: `${boxHeight}px` }}>
-                          <div className="relative z-10 flex items-center h-full">
-                            <span className="absolute -left-7 top-1/2 -translate-y-1/2 bg-muted text-muted-foreground rounded-full size-6 flex items-center justify-center text-xs font-sans font-bold border">
-                              {match.globalMatchNumber}
-                            </span>
-                            <div className="bg-background rounded-lg p-2 shadow-sm border border-border w-full h-full text-sm flex flex-col justify-around">
-                                <div className="truncate">
-                                  <p className="font-semibold">{match.participant1?.name || '(Bye)'}</p>
-                                  <p className="text-xs text-muted-foreground">{match.participant1?.contingent || ''}</p>
-                                </div>
-                                <div className="border-t border-border/80" />
-                                <div className="truncate">
-                                  <p className="font-semibold">{match.participant2?.name || (roundIndex === 0 ? '(Bye)' : 'Pemenang ...')}</p>
-                                  <p className="text-xs text-muted-foreground">{match.participant2?.contingent || ''}</p>
-                                </div>
-                            </div>
+              return (
+                <div
+                  key={match.matchInternalId}
+                  className="absolute"
+                  style={{ top: `${pos.y}px`, left: `${pos.x}px`, width: `${BOX_WIDTH}px`, height: `${BOX_HEIGHT}px` }}
+                >
+                  <div className="relative z-10 flex items-center h-full">
+                      <span className="absolute -left-7 top-1/2 -translate-y-1/2 bg-muted text-muted-foreground rounded-full size-6 flex items-center justify-center text-xs font-sans font-bold border">
+                        {match.globalMatchNumber}
+                      </span>
+                      <div className="bg-background rounded-lg p-2 shadow-sm border border-border w-full h-full text-sm flex flex-col justify-around">
+                          <div className="truncate">
+                            <p className="font-semibold">{match.participant1?.name || '(Bye)'}</p>
+                            <p className="text-xs text-muted-foreground">{match.participant1?.contingent || ''}</p>
                           </div>
-                        </div>
-
-                        {/* Connector Lines */}
-                        {!isLastRound && (
-                          <>
-                            {isPrelim ? (
-                              (() => {
-                                const dest = findPrelimDestination(match, scheme.rounds[roundIndex + 1]);
-                                if (!dest) return null;
-                                
-                                const nextRoundIsSemifinal = scheme.rounds[roundIndex + 1]?.matches.length === 2 && roundIndex + 1 !== scheme.rounds.length - 1;
-                                const nextVerticalGap = getMatchVerticalGap(scheme.rounds[roundIndex + 1]?.matches.length || 0, nextRoundIsSemifinal);
-                                const destTopPosition = dest.matchIndex * nextVerticalGap + (nextVerticalGap - boxHeight) / 2;
-                                
-                                const sourceY = topPosition + boxHeight / 2;
-                                // Connect to top or bottom quarter of the destination box
-                                const destY = destTopPosition + (dest.slot === 'top' ? boxHeight * 0.25 : boxHeight * 0.75);
-
-                                return (
-                                  <Fragment>
-                                    {/* H-line from source */}
-                                    <div className="bg-border absolute" style={{ top: `${sourceY - 1}px`, left: '100%', width: `calc(${roundGap} / 2)`, height: '2px' }} />
-                                    {/* V-line */}
-                                    <div className="bg-border absolute" style={{ top: `${Math.min(sourceY, destY) - 1}px`, left: `calc(100% + ${roundGap} / 2 - 1px)`, width: '2px', height: `${Math.abs(sourceY - destY) + 2}px` }} />
-                                    {/* H-line to destination */}
-                                    <div className="bg-border absolute" style={{ top: `${destY - 1}px`, left: `calc(100% + ${roundGap} / 2)`, width: `calc(${roundGap} / 2)`, height: '2px' }} />
-                                  </Fragment>
-                                );
-                              })()
-                            ) : (
-                              matchIndex % 2 === 0 && (
-                                <Fragment>
-                                  {/* H-line from top box */}
-                                  <div className="bg-border absolute" style={{ top: `${topPosition + boxHeight / 2 -1}px`, left: '100%', width: `calc(${roundGap} / 2)`, height: '2px' }}/>
-                                  {/* H-line from bottom box */}
-                                  <div className="bg-border absolute" style={{ top: `${topPosition + verticalGap + boxHeight / 2 -1}px`, left: '100%', width: `calc(${roundGap} / 2)`, height: '2px' }} />
-                                  {/* V-line connecting the two */}
-                                  <div className="bg-border absolute" style={{ top: `${topPosition + boxHeight / 2}px`, left: `calc(100% + ${roundGap} / 2 - 1px)`, width: '2px', height: `${verticalGap}px` }} />
-                                  {/* H-line to next round */}
-                                  <div className="bg-border absolute" style={{ top: `${topPosition + verticalGap / 2 + boxHeight / 2 - 1}px`, left: `calc(100% + ${roundGap} / 2)`, width: `calc(${roundGap} / 2)`, height: '2px' }}/>
-                                </Fragment>
-                              )
-                            )}
-                          </>
-                        )}
-                      </Fragment>
-                    );
-                  })}
+                          <div className="border-t border-border/80" />
+                          <div className="truncate">
+                            <p className="font-semibold">{match.participant2?.name || 'Pemenang ...'}</p>
+                            <p className="text-xs text-muted-foreground">{match.participant2?.contingent || ''}</p>
+                          </div>
+                      </div>
+                    </div>
                 </div>
-              </div>
-            );
-          })}
+              );
+            })
+          ))}
+          
+          {/* Render Connectors */}
+          {mainDrawRounds.slice(1).map((round, roundIndex) => (
+            round.matches.map((match) => {
+              const childPos = positions.get(match.matchInternalId);
+              if (!childPos) return null;
+
+              const parentMatch1 = mainDrawRounds[roundIndex].matches[2 * round.matches.indexOf(match)];
+              const parentMatch2 = mainDrawRounds[roundIndex].matches[2 * round.matches.indexOf(match) + 1];
+              
+              const parent1Pos = positions.get(parentMatch1.matchInternalId);
+              const parent2Pos = positions.get(parentMatch2.matchInternalId);
+
+              if (!parent1Pos || !parent2Pos) return null;
+
+              const lineY1 = parent1Pos.y + BOX_HEIGHT / 2;
+              const lineY2 = parent2Pos.y + BOX_HEIGHT / 2;
+              const lineX = parent1Pos.x + BOX_WIDTH;
+              const midPointX = lineX + ROUND_GAP / 2;
+              const midPointY = (lineY1 + lineY2) / 2;
+
+              return (
+                <Fragment key={`conn-${match.matchInternalId}`}>
+                  {/* H-line from parent 1 */}
+                  <div className="bg-border absolute" style={{ top: `${lineY1 - 1}px`, left: `${lineX}px`, width: `${ROUND_GAP / 2}px`, height: '2px' }}/>
+                  {/* H-line from parent 2 */}
+                  <div className="bg-border absolute" style={{ top: `${lineY2 - 1}px`, left: `${lineX}px`, width: `${ROUND_GAP / 2}px`, height: '2px' }}/>
+                  {/* V-line connecting parents */}
+                  <div className="bg-border absolute" style={{ top: `${lineY1}px`, left: `${midPointX - 1}px`, width: '2px', height: `${lineY2 - lineY1}px` }}/>
+                  {/* H-line to child */}
+                  <div className="bg-border absolute" style={{ top: `${midPointY - 1}px`, left: `${midPointX}px`, width: `${ROUND_GAP / 2}px`, height: '2px' }}/>
+                </Fragment>
+              );
+            })
+          ))}
+
+           {/* Preliminary Connectors */}
+           {hasPrelim && scheme.rounds[prelimRoundIndex].matches.map(prelimMatch => {
+                const prelimPos = positions.get(prelimMatch.matchInternalId);
+                if (!prelimPos) return null;
+
+                const placeholder = `Pemenang Partai ${prelimMatch.globalMatchNumber}`;
+                let destPos: { x: number; y: number } | undefined;
+                let destSlot: 'top' | 'bottom' = 'top';
+
+                for (const mainMatch of mainDrawRounds[0].matches) {
+                    if (mainMatch.participant1?.name === placeholder) {
+                        destPos = positions.get(mainMatch.matchInternalId);
+                        destSlot = 'top';
+                        break;
+                    }
+                    if (mainMatch.participant2?.name === placeholder) {
+                        destPos = positions.get(mainMatch.matchInternalId);
+                        destSlot = 'bottom';
+                        break;
+                    }
+                }
+                if (!destPos) return null;
+
+                const sourceY = prelimPos.y + BOX_HEIGHT / 2;
+                const destY = destPos.y + (destSlot === 'top' ? BOX_HEIGHT * 0.25 : BOX_HEIGHT * 0.75);
+                
+                const sourceX = prelimPos.x + BOX_WIDTH;
+                const midX = sourceX + ROUND_GAP / 2;
+
+                return (
+                    <Fragment key={`conn-${prelimMatch.matchInternalId}`}>
+                        <div className="bg-border absolute" style={{ top: `${sourceY - 1}px`, left: `${sourceX}px`, width: `${ROUND_GAP / 2}px`, height: '2px' }} />
+                        <div className="bg-border absolute" style={{ top: `${Math.min(sourceY, destY)}px`, left: `${midX - 1}px`, width: '2px', height: `${Math.abs(sourceY - destY)+2}px` }} />
+                        <div className="bg-border absolute" style={{ top: `${destY - 1}px`, left: `${midX}px`, width: `${ROUND_GAP / 2}px`, height: '2px' }} />
+                    </Fragment>
+                )
+           })}
+
         </div>
       </CardContent>
     </Card>
