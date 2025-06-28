@@ -140,7 +140,7 @@ export default function SchemeManagementPage() {
     reader.readAsArrayBuffer(file);
   };
   
-  const handleGenerateTandingScheme = () => {
+const handleGenerateTandingScheme = () => {
     if (!tandingClass.trim() || !gelanggang.trim() || !eventDate || !eventRound) {
       alert("Nama Kelas, Gelanggang, Tanggal, dan Babak tidak boleh kosong.");
       return;
@@ -159,67 +159,96 @@ export default function SchemeManagementPage() {
         setIsLoading(false);
         return;
       }
-      
+
       const schemeId = `tanding-${tandingAge.replace(/\s+/g, '_').toLowerCase()}-${tandingClass.replace(/\s+/g, '_').toLowerCase()}-${Date.now()}`;
       
-      // Correctly calculate bracket size and byes
       const bracketSize = Math.pow(2, Math.ceil(Math.log2(numParticipants)));
       const numByes = bracketSize - numParticipants;
 
-      // Split participants into those with byes and those in the first round
       const byes = participants.slice(0, numByes);
-      const firstRounders = participants.slice(numByes);
+      const preliminaryCompetitors = participants.slice(numByes);
 
       let rounds: SchemeRound[] = [];
       let globalMatchCounter = 1;
-      let nextRoundCompetitors: ({ name: string; contingent: string } | null)[] = [];
+      let competitorsForNextRound: ({ name: string; contingent: string } | null)[] = [];
 
       // --- Round 1: Preliminary/Play-in Round (if any) ---
-      if (firstRounders.length > 0) {
-        const firstRoundMatches: SchemeMatch[] = [];
-        for (let i = 0; i < firstRounders.length; i += 2) {
-          const match = {
+      if (preliminaryCompetitors.length > 0) {
+        const preliminaryMatches: SchemeMatch[] = [];
+        const preliminaryWinners: ({ name: string; contingent: string } | null)[] = [];
+        
+        for (let i = 0; i < preliminaryCompetitors.length; i += 2) {
+          const match: SchemeMatch = {
             matchInternalId: `${schemeId}-R1-M${globalMatchCounter}`,
             globalMatchNumber: globalMatchCounter,
             roundName: 'Babak Penyisihan',
-            participant1: firstRounders[i],
-            participant2: firstRounders[i + 1] || null, // Handle odd numbers if needed, though shouldn't happen with this logic
+            participant1: preliminaryCompetitors[i],
+            participant2: preliminaryCompetitors[i + 1] || null,
             winnerToMatchId: null,
             status: 'PENDING' as const,
           };
-          firstRoundMatches.push(match);
-          // Create a placeholder for the winner of this match
-          nextRoundCompetitors.push({ name: `Pemenang Partai ${globalMatchCounter}`, contingent: '' });
+          preliminaryMatches.push(match);
+          preliminaryWinners.push({ name: `Pemenang Partai ${globalMatchCounter}`, contingent: '' });
           globalMatchCounter++;
         }
         rounds.push({
           roundNumber: 1,
           name: 'Babak Penyisihan',
-          matches: firstRoundMatches,
+          matches: preliminaryMatches,
         });
+        
+        // Setup for next round: Interleave byes and winners for waterfall seeding
+        const byesClone = [...byes];
+        const winnersClone = [...preliminaryWinners];
+        const mainBracketCompetitors: ({ name: string; contingent: string } | null)[] = [];
+        
+        // Pair byes with winners first
+        while (byesClone.length > 0 && winnersClone.length > 0) {
+            mainBracketCompetitors.push(byesClone.shift()!);
+            mainBracketCompetitors.push(winnersClone.shift()!);
+        }
+        
+        // Add any remaining byes (will be paired with each other or get a bye)
+        mainBracketCompetitors.push(...byesClone);
+        
+        // Add any remaining winners (should not happen if logic is correct, but for safety)
+        mainBracketCompetitors.push(...winnersClone);
+        
+        competitorsForNextRound = mainBracketCompetitors;
+
+      } else {
+        // No preliminary round, all participants start in the main bracket
+        competitorsForNextRound = [...participants];
       }
 
       // --- Main Bracket Rounds ---
-      // Combine byes with the placeholders for winners from the first round
-      let currentCompetitors: ({ name: string; contingent: string } | null)[] = [...byes, ...nextRoundCompetitors];
       let roundNumber = rounds.length + 1;
 
-      while (currentCompetitors.length > 1) {
+      while (competitorsForNextRound.length > 1) {
         const currentRoundMatches: SchemeMatch[] = [];
         const winnersForNextRound: ({ name: string; contingent: string } | null)[] = [];
 
-        for (let i = 0; i < currentCompetitors.length; i += 2) {
-          const match = {
+        for (let i = 0; i < competitorsForNextRound.length; i += 2) {
+          const p1 = competitorsForNextRound[i];
+          // Handle odd number of competitors in a round, giving the last one a bye
+          const p2 = i + 1 < competitorsForNextRound.length ? competitorsForNextRound[i + 1] : null;
+
+          const match: SchemeMatch = {
             matchInternalId: `${schemeId}-R${roundNumber}-M${globalMatchCounter}`,
             globalMatchNumber: globalMatchCounter,
-            roundName: '', // Placeholder, to be named later
-            participant1: currentCompetitors[i],
-            participant2: currentCompetitors[i + 1],
+            roundName: '', // Placeholder
+            participant1: p1,
+            participant2: p2,
             winnerToMatchId: null,
             status: 'PENDING' as const,
           };
           currentRoundMatches.push(match);
-          winnersForNextRound.push({ name: `Pemenang Partai ${globalMatchCounter}`, contingent: '' });
+
+          if (p2 === null) { // This participant has a bye in this round
+            winnersForNextRound.push(p1);
+          } else {
+            winnersForNextRound.push({ name: `Pemenang Partai ${globalMatchCounter}`, contingent: '' });
+          }
           globalMatchCounter++;
         }
 
@@ -229,7 +258,7 @@ export default function SchemeManagementPage() {
           matches: currentRoundMatches,
         });
         
-        currentCompetitors = winnersForNextRound;
+        competitorsForNextRound = winnersForNextRound;
         roundNumber++;
       }
 
@@ -240,12 +269,10 @@ export default function SchemeManagementPage() {
         else if (participantsInRound === 4) round.name = "Semi Final";
         else if (participantsInRound === 8) round.name = "Perempat Final";
         else if (participantsInRound === 16) round.name = "Babak 16 Besar";
-        // The first round was already named 'Babak Penyisihan' if it exists
         else if (round.name === '') round.name = `Babak ${participantsInRound}`;
         
         round.matches.forEach(m => { m.roundName = round.name; });
       });
-
 
       const finalSchemeParticipants: SchemeParticipant[] = participants.map((p, i) => ({
         id: `${p.contingent}-${p.name}-${i}`.replace(/\s+/g, '-'),
@@ -329,9 +356,9 @@ export default function SchemeManagementPage() {
         const dataToSave: Omit<Scheme, 'tandingClass' | 'tgrCategory'> & { tandingClass?: string, tgrCategory?: TGRCategoryType } = { ...generatedScheme };
         
         if (dataToSave.type === 'TGR') {
-            if ('tandingClass' in dataToSave) delete dataToSave.tandingClass;
+            if ('tandingClass' in dataToSave) delete (dataToSave as any).tandingClass;
         } else {
-            if ('tgrCategory' in dataToSave) delete dataToSave.tgrCategory;
+            if ('tgrCategory' in dataToSave) delete (dataToSave as any).tgrCategory;
         }
 
         await setDoc(doc(db, "schemes", generatedScheme.id), dataToSave);
@@ -547,4 +574,3 @@ export default function SchemeManagementPage() {
     </>
   );
 }
-
