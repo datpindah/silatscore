@@ -167,86 +167,59 @@ export default function SchemeManagementPage() {
     setGeneratedScheme(null);
 
     try {
-        // Standard seeding orders for powers of 2. This ensures top seeds don't meet in early rounds.
-        // The user's input order determines the seeds (1st input is seed #1, etc.).
-        const seedOrders: { [key: number]: number[] } = {
-            2: [1, 2],
-            4: [1, 4, 3, 2],
-            8: [1, 8, 5, 4, 3, 6, 7, 2],
-            16: [1, 16, 9, 8, 5, 12, 13, 4, 3, 14, 11, 6, 7, 10, 15, 2],
-            32: [1, 32, 17, 16, 9, 24, 25, 8, 5, 28, 21, 12, 13, 20, 29, 4, 3, 30, 19, 14, 11, 22, 27, 6, 7, 26, 23, 10, 15, 18, 31, 2],
-            64: [1, 64, 33, 32, 17, 48, 49, 16, 9, 56, 41, 24, 25, 40, 57, 8, 5, 60, 37, 28, 21, 44, 53, 12, 13, 52, 45, 20, 29, 36, 61, 4, 3, 62, 35, 30, 19, 46, 51, 14, 11, 54, 43, 22, 27, 38, 59, 6, 7, 58, 39, 26, 23, 42, 55, 10, 15, 50, 47, 18, 31, 34, 63, 2],
-        };
-
         const initialParticipants = [...tandingParticipants];
         const numParticipants = initialParticipants.length;
 
-        // Determine the bracket size (next power of 2)
         const bracketSize = Math.pow(2, Math.ceil(Math.log2(Math.max(2, numParticipants))));
+        const numByes = bracketSize - numParticipants;
         
-        const seedOrder = seedOrders[bracketSize];
-        if (!seedOrder) {
-            alert(`Ukuran bracket (${bracketSize}) tidak didukung untuk pembuatan otomatis.`);
-            setIsLoading(false);
-            return;
-        }
-
-        // Create slots, placing BYEs for seeds that don't have a participant
-        const slots: (Participant | 'BYE')[] = new Array(bracketSize).fill('BYE');
-        seedOrder.forEach((seed, index) => {
-            if (seed <= numParticipants) {
-                slots[index] = initialParticipants[seed - 1];
-            }
-        });
+        const participantsWithByes = initialParticipants.slice(0, numByes);
+        const participantsInPrelim = initialParticipants.slice(numByes);
 
         const rounds: SchemeRound[] = [];
-        let currentCompetitors: (Participant | { name: string; contingent: string })[] = [];
         let globalMatchCounter = 1;
         let roundNumber = 1;
+        let nextRoundCompetitors: ({ name: string; contingent: string } | null)[] = [];
 
-        // --- Round 1 Generation (handles byes) ---
-        const round1Matches: SchemeMatch[] = [];
-        const round1Name = getRoundName(bracketSize);
-        
-        for (let i = 0; i < bracketSize; i += 2) {
-            const p1 = slots[i];
-            const p2 = slots[i + 1];
+        if (participantsInPrelim.length > 0) {
+            const prelimRoundName = getRoundName(participantsInPrelim.length + participantsWithByes.length);
+            const prelimMatches: SchemeMatch[] = [];
 
-            if (p1 === 'BYE') { // p2 advances automatically
-                currentCompetitors.push(p2 as Participant);
-            } else if (p2 === 'BYE') { // p1 advances automatically
-                currentCompetitors.push(p1 as Participant);
-            } else { // It's a real match
+            for (let i = 0; i < participantsInPrelim.length; i += 2) {
+                const p1 = participantsInPrelim[i];
+                const p2 = participantsInPrelim[i + 1];
+
                 const match: SchemeMatch = {
                     matchInternalId: `R${roundNumber}-M${globalMatchCounter}`,
                     globalMatchNumber: globalMatchCounter,
-                    roundName: round1Name,
-                    participant1: p1 as Participant,
-                    participant2: p2 as Participant,
+                    roundName: prelimRoundName,
+                    participant1: p1,
+                    participant2: p2,
                     winnerToMatchId: null,
                     status: 'PENDING',
                 };
-                round1Matches.push(match);
-                currentCompetitors.push({ name: `(Pemenang Partai ${globalMatchCounter})`, contingent: '' });
+                prelimMatches.push(match);
+                nextRoundCompetitors.push({ name: `(Pemenang Partai ${globalMatchCounter})`, contingent: '' });
                 globalMatchCounter++;
             }
-        }
-        
-        // Only add the first round to the rounds array if it had actual matches
-        if (round1Matches.length > 0) {
-            rounds.push({ roundNumber, name: round1Name, matches: round1Matches });
+            
+            rounds.push({ roundNumber, name: prelimRoundName, matches: prelimMatches });
             roundNumber++;
         }
 
-        // --- Subsequent Rounds Generation ---
+        let currentCompetitors: ({ name: string; contingent: string } | null)[] = [
+            ...participantsWithByes,
+            ...nextRoundCompetitors
+        ];
+
         while (currentCompetitors.length > 1) {
             const roundName = getRoundName(currentCompetitors.length);
             const matchesForThisRound: SchemeMatch[] = [];
-            const winnersForNextRound: { name: string; contingent: string }[] = [];
+            const winnersForNextRound: ({ name: string; contingent: string } | null)[] = [];
 
             for (let i = 0; i < currentCompetitors.length; i += 2) {
                 const p1 = currentCompetitors[i];
-                const p2 = currentCompetitors[i + 1] || null;
+                const p2 = currentCompetitors[i + 1];
 
                 const match: SchemeMatch = {
                     matchInternalId: `R${roundNumber}-M${globalMatchCounter}`,

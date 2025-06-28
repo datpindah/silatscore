@@ -166,9 +166,24 @@ export default function ScheduleTandingPage() {
   };
 
   const handleDelete = async (scheduleToDelete: ScheduleTanding) => {
-    if (confirm(`Apakah Anda yakin ingin menghapus jadwal No. ${scheduleToDelete.matchNumber} (${scheduleToDelete.pesilatMerahName} vs ${scheduleToDelete.pesilatBiruName}) di ${scheduleToDelete.place}?`)) {
+    if (confirm(`Apakah Anda yakin ingin menghapus jadwal No. ${scheduleToDelete.matchNumber} (${scheduleToDelete.pesilatMerahName} vs ${scheduleToDelete.pesilatBiruName})? Tindakan ini akan menghapus semua data terkait (skor, log, dll) jika ada.`)) {
       try {
-        await deleteDoc(doc(db, SCHEDULE_TANDING_COLLECTION, scheduleToDelete.id));
+        const matchDocRef = doc(db, MATCHES_TANDING_COLLECTION, scheduleToDelete.id);
+        const scheduleDocRef = doc(db, SCHEDULE_TANDING_COLLECTION, scheduleToDelete.id);
+
+        const subcollectionsToDelete = ['official_actions', 'verifications', 'juri_scores'];
+
+        for (const sub of subcollectionsToDelete) {
+          const subcollectionRef = collection(db, matchDocRef.path, sub);
+          const snapshot = await getDocs(subcollectionRef);
+          if (!snapshot.empty) {
+            const deletePromises = snapshot.docs.map(d => deleteDoc(d.ref));
+            await Promise.all(deletePromises);
+          }
+        }
+        
+        await deleteDoc(matchDocRef);
+        await deleteDoc(scheduleDocRef);
         
         if (activeSchedulesByGelanggang[scheduleToDelete.place] === scheduleToDelete.id) {
           const venueMapRef = doc(db, ACTIVE_TANDING_MATCHES_BY_GELANGGANG_PATH);
@@ -176,6 +191,9 @@ export default function ScheduleTandingPage() {
             [scheduleToDelete.place]: deleteField()
           });
         }
+        
+        alert(`Jadwal dan semua data terkait untuk Partai No. ${scheduleToDelete.matchNumber} berhasil dihapus.`);
+
       } catch (error) {
         console.error("Error deleting schedule: ", error);
         alert(`Gagal menghapus jadwal: ${error instanceof Error ? error.message : String(error)}`);

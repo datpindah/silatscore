@@ -172,15 +172,34 @@ export default function ScheduleTGRPage() {
   };
 
   const handleDelete = async (scheduleToDelete: ScheduleTGR) => {
-     if (confirm(`Apakah Anda yakin ingin menghapus jadwal TGR No. ${scheduleToDelete.lotNumber} (${scheduleToDelete.pesilatMerahName}) di ${scheduleToDelete.place}?`)) {
+     if (confirm(`Apakah Anda yakin ingin menghapus jadwal TGR No. ${scheduleToDelete.lotNumber} (${scheduleToDelete.pesilatMerahName})? Tindakan ini akan menghapus semua data terkait (skor, log, dll) jika ada.`)) {
       try {
-        await deleteDoc(doc(db, SCHEDULE_TGR_COLLECTION, scheduleToDelete.id));
+        const matchDocRef = doc(db, MATCHES_TGR_COLLECTION, scheduleToDelete.id);
+        const scheduleDocRef = doc(db, SCHEDULE_TGR_COLLECTION, scheduleToDelete.id);
+
+        const subcollectionsToDelete = ['dewan_penalties_tgr', 'juri_scores_tgr'];
+
+        for (const sub of subcollectionsToDelete) {
+          const subcollectionRef = collection(db, matchDocRef.path, sub);
+          const snapshot = await getDocs(subcollectionRef);
+          if (!snapshot.empty) {
+            const deletePromises = snapshot.docs.map(d => deleteDoc(d.ref));
+            await Promise.all(deletePromises);
+          }
+        }
+
+        await deleteDoc(matchDocRef);
+        await deleteDoc(scheduleDocRef);
+        
         if (activeTgrSchedulesByGelanggang[scheduleToDelete.place] === scheduleToDelete.id) {
             const venueMapRef = doc(db, ACTIVE_TGR_MATCHES_BY_GELANGGANG_PATH);
             await updateDoc(venueMapRef, {
-                [scheduleToDelete.place]: deleteField() // Or set to null
+                [scheduleToDelete.place]: deleteField()
             });
         }
+
+        alert(`Jadwal TGR dan semua data terkait untuk Partai No. ${scheduleToDelete.lotNumber} berhasil dihapus.`);
+
       } catch (error) {
         console.error("Error deleting TGR schedule: ", error);
         alert(`Gagal menghapus jadwal TGR: ${error instanceof Error ? error.message : String(error)}`);
