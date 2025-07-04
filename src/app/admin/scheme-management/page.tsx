@@ -139,7 +139,12 @@ export default function SchemeManagementPage() {
   
     setTimeout(() => {
         try {
-            const finalParticipants = tandingParticipants.filter(p => p.name.trim() && p.contingent.trim());
+            const finalParticipants = tandingParticipants.filter(p => p.name.trim() && p.contingent.trim()).map((p, index) => ({
+                id: `p-${index + 1}-${p.name.replace(/\s+/g, '-')}`,
+                name: p.name,
+                contingent: p.contingent,
+                seed: index + 1
+            }));
             const numParticipants = finalParticipants.length;
 
             if (numParticipants < 2) {
@@ -149,95 +154,86 @@ export default function SchemeManagementPage() {
             }
 
             const bracketSize = Math.pow(2, Math.ceil(Math.log2(numParticipants)));
-            const numRounds = Math.log2(bracketSize);
-            const gelanggangList = gelanggangs.split(',').map(g => g.trim()).filter(Boolean);
-
-            const participantsWithSeeds: SchemeParticipant[] = finalParticipants.map((p, index) => ({
-                id: `p-${index + 1}-${p.name.replace(/\s+/g, '-')}`,
-                name: p.name,
-                contingent: p.contingent,
-                seed: index + 1
-            }));
+            const allRounds: SchemeRound[] = [];
             
-            // Create a full list of players for the bracket, including BYEs as null
-            const players: (SchemeParticipant | null)[] = [...participantsWithSeeds];
-            while (players.length < bracketSize) {
-                players.push(null);
+            let currentRoundParticipants: (SchemeParticipant | null)[] = [...finalParticipants];
+            // Pad with nulls (BYEs) to fill the bracket to the next power of 2
+            while (currentRoundParticipants.length < bracketSize) {
+                currentRoundParticipants.push(null);
             }
             
-            const allRounds: SchemeRound[] = [];
-            let previousRoundMatches: SchemeMatch[] = [];
-
-            // Generate Round 1
-            const firstRoundMatches: SchemeMatch[] = [];
-            for (let i = 0; i < bracketSize / 2; i++) {
-                const p1 = players[i * 2];
-                const p2 = players[i * 2 + 1];
-                firstRoundMatches.push({
-                    id: `r1-m${i + 1}`,
+            let roundNum = 1;
+            let lastRoundMatches: SchemeMatch[] = [];
+            
+            // --- Create Round 1 ---
+            const round1Matches: SchemeMatch[] = [];
+            for (let i = 0; i < currentRoundParticipants.length; i += 2) {
+                const p1 = currentRoundParticipants[i];
+                const p2 = currentRoundParticipants[i+1];
+                const isBye = p2 === null;
+                round1Matches.push({
+                    id: `r1-m${i/2 + 1}`,
                     round: 1,
-                    matchNumber: i + 1,
+                    matchNumber: i/2 + 1,
                     participant1: p1,
                     participant2: p2,
-                    winnerId: p2 === null ? p1?.id ?? null : null, // If p2 is BYE, p1 wins
+                    winnerId: isBye && p1 ? p1.id : null,
                     nextMatchId: null,
                 });
             }
-            allRounds.push({ roundNumber: 1, name: `Babak ${bracketSize}`, matches: firstRoundMatches });
-            previousRoundMatches = firstRoundMatches;
+            allRounds.push({ roundNumber: 1, name: `Babak ${bracketSize}`, matches: round1Matches });
+            lastRoundMatches = round1Matches;
 
-            // Generate subsequent rounds
-            for (let r = 2; r <= numRounds; r++) {
-                const currentRoundMatches: SchemeMatch[] = [];
-                for (let i = 0; i < previousRoundMatches.length / 2; i++) {
-                    const parentMatch1 = previousRoundMatches[i * 2];
-                    const parentMatch2 = previousRoundMatches[i * 2 + 1];
-
-                    let participant1_new: SchemeParticipant | null = null;
-                    if (parentMatch1.winnerId) {
-                        participant1_new = parentMatch1.participant1?.id === parentMatch1.winnerId ? parentMatch1.participant1 : parentMatch1.participant2;
-                    }
-
-                    let participant2_new: SchemeParticipant | null = null;
-                    if (parentMatch2.winnerId) {
-                        participant2_new = parentMatch2.participant1?.id === parentMatch2.winnerId ? parentMatch2.participant1 : parentMatch2.participant2;
-                    }
-
+            // --- Create Subsequent Rounds ---
+            let currentRoundSize = bracketSize / 2;
+            while (currentRoundSize >= 1) {
+                roundNum++;
+                const nextRoundMatches: SchemeMatch[] = [];
+                for (let i = 0; i < lastRoundMatches.length; i += 2) {
+                    const parent1 = lastRoundMatches[i];
+                    const parent2 = lastRoundMatches[i+1];
+                    
+                    const getWinner = (match: SchemeMatch): SchemeParticipant | null => {
+                        if (!match.winnerId) return null;
+                        return match.participant1?.id === match.winnerId ? match.participant1 : match.participant2;
+                    };
+                    
                     const newMatch: SchemeMatch = {
-                        id: `r${r}-m${i + 1}`,
-                        round: r,
-                        matchNumber: i + 1,
-                        participant1: participant1_new,
-                        participant2: participant2_new,
+                        id: `r${roundNum}-m${i/2 + 1}`,
+                        round: roundNum,
+                        matchNumber: i/2 + 1,
+                        participant1: getWinner(parent1),
+                        participant2: getWinner(parent2),
                         winnerId: null,
                         nextMatchId: null,
                     };
-                    parentMatch1.nextMatchId = newMatch.id;
-                    parentMatch2.nextMatchId = newMatch.id;
-                    currentRoundMatches.push(newMatch);
+                    
+                    // Link previous round matches to this new match
+                    parent1.nextMatchId = newMatch.id;
+                    parent2.nextMatchId = newMatch.id;
+                    nextRoundMatches.push(newMatch);
                 }
-                allRounds.push({ roundNumber: r, name: 'Round', matches: currentRoundMatches });
-                previousRoundMatches = currentRoundMatches;
+                
+                let roundName: string;
+                if (nextRoundMatches.length === 1) roundName = "Final";
+                else if (nextRoundMatches.length === 2) roundName = "Semi Final";
+                else if (nextRoundMatches.length === 4) roundName = "Perempat Final";
+                else roundName = `Babak ${nextRoundMatches.length * 2}`;
+                
+                allRounds.push({ roundNumber: roundNum, name: roundName, matches: nextRoundMatches });
+                lastRoundMatches = nextRoundMatches;
+                currentRoundSize /= 2;
             }
-            
-            // Set friendly round names
-            allRounds.forEach(round => {
-                const numMatches = round.matches.length;
-                if (numMatches === 1) round.name = "Final";
-                else if (numMatches === 2) round.name = "Semi Final";
-                else if (numMatches === 4) round.name = "Perempat Final";
-                else round.name = `Babak ${numMatches * 2}`;
-            });
 
             const newScheme: Scheme = {
                 id: `tanding-${tandingAge.replace(/\s+/g, '_').toLowerCase()}-${tandingClass.replace(/\s+/g, '_').toLowerCase()}-${Date.now()}`,
                 type: 'Tanding',
                 ageCategory: tandingAge,
                 tandingClass: tandingClass.trim(),
-                gelanggangs: gelanggangList,
+                gelanggangs: gelanggangs.split(',').map(g => g.trim()).filter(Boolean),
                 date: eventDate,
                 participantCount: numParticipants,
-                participants: participantsWithSeeds,
+                participants: finalParticipants,
                 rounds: allRounds,
                 createdAt: Timestamp.now(),
             };
@@ -597,5 +593,3 @@ export default function SchemeManagementPage() {
     </>
   );
 }
-
-    
