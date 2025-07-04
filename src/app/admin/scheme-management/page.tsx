@@ -140,15 +140,18 @@ export default function SchemeManagementPage() {
         return;
     }
     const finalParticipants = tandingParticipants.filter(p => p.name.trim() && p.contingent.trim());
-    if (finalParticipants.length < 2) {
-        alert("Dibutuhkan minimal 2 peserta yang valid.");
-        return;
+    if (finalParticipants.length < 3) {
+      alert("Dibutuhkan minimal 3 peserta untuk membuat bagan yang valid.");
+      return;
+    }
+    if (finalParticipants.length > 32) {
+      alert("Generator saat ini mendukung maksimal 32 peserta.");
+      return;
     }
 
     setIsLoading(true);
     setGeneratedScheme(null);
     
-    // Simulate processing delay for complex brackets
     setTimeout(() => {
         try {
             const participants: SchemeParticipant[] = finalParticipants.map((p, index) => ({
@@ -160,127 +163,110 @@ export default function SchemeManagementPage() {
 
             const numParticipants = participants.length;
             const bracketSize = Math.pow(2, Math.ceil(Math.log2(numParticipants)));
-            const numByes = bracketSize - numParticipants;
-            const numPlayInMatches = numParticipants - bracketSize / 2;
+            
+            const seedOrderMaps: { [key: number]: number[] } = {
+                4: [1, 4, 2, 3],
+                8: [1, 8, 4, 5, 2, 7, 3, 6],
+                16: [1, 16, 8, 9, 5, 12, 4, 13, 3, 14, 6, 11, 7, 10, 2, 15],
+                32: [1, 32, 16, 17, 9, 24, 8, 25, 5, 28, 12, 21, 4, 29, 13, 20, 3, 30, 14, 19, 6, 27, 11, 22, 7, 26, 10, 23, 2, 31, 15, 18],
+            };
+            
+            const seedOrder = seedOrderMaps[bracketSize];
+             if (!seedOrder) {
+                throw new Error(`Ukuran bagan ${bracketSize} tidak didukung.`);
+            }
 
+            const seededParticipants: (SchemeParticipant | null)[] = Array(bracketSize).fill(null);
+            participants.forEach((p, i) => {
+                seededParticipants[i] = p;
+            });
+            
+            const tournamentOrder: (SchemeParticipant | null)[] = seedOrder.map(seed => seededParticipants[seed - 1]);
+            
             const allRounds: SchemeRound[] = [];
+            let currentRoundMatches: SchemeMatch[] = [];
             let globalMatchCounter = 1;
 
-            const playInMatches: SchemeMatch[] = [];
+            // Create round 1 matches
+            for (let i = 0; i < bracketSize; i += 2) {
+                const p1 = tournamentOrder[i];
+                const p2 = tournamentOrder[i + 1];
+                
+                const match: SchemeMatch = {
+                    id: `r1-m${globalMatchCounter}`,
+                    matchInternalId: `tanding-${tandingClass.replace(/\s+/g, '_')}-R1-M${globalMatchCounter}`,
+                    round: 1,
+                    matchNumber: globalMatchCounter++,
+                    participant1: p1,
+                    participant2: p2,
+                    winnerId: null,
+                    nextMatchId: null,
+                    globalMatchNumber: globalMatchCounter - 1,
+                    status: 'PENDING'
+                };
+                
+                if (p1 === null && p2 !== null) match.winnerId = p2.id;
+                else if (p2 === null && p1 !== null) match.winnerId = p1.id;
+                
+                currentRoundMatches.push(match);
+            }
             
-            // Generate play-in matches if necessary
-            if (numPlayInMatches > 0) {
-                const playInParticipants = participants.slice(numByes * 2);
-                for (let i = 0; i < numPlayInMatches; i++) {
-                    const match: SchemeMatch = {
-                        id: `r0-m${i + 1}`,
-                        round: 0, // Play-in round
-                        matchNumber: globalMatchCounter++,
-                        participant1: playInParticipants[i],
-                        participant2: playInParticipants[playInParticipants.length - 1 - i],
-                        winnerId: null,
-                        nextMatchId: null,
-                        matchInternalId: `r0-m${i + 1}`,
-                        globalMatchNumber: 0,
-                        status: 'PENDING'
-                    };
-                    playInMatches.push(match);
-                }
-            }
+            const numRounds = Math.log2(bracketSize);
+            allRounds.push({ roundNumber: 1, name: `Babak ${bracketSize}`, matches: currentRoundMatches });
 
-            // Generate main bracket matches
-            const mainDrawSize = bracketSize / 2;
-            let currentRoundMatches: (SchemeParticipant | null)[] = [];
-            
-            // Add BYE participants and winners of play-in rounds
-            const byes = participants.slice(0, numByes);
-            byes.forEach(p => currentRoundMatches.push(p));
-            for(let i=0; i< numPlayInMatches; i++){
-                currentRoundMatches.push(null); // Placeholder for play-in winners
-            }
-
-            let roundNum = 1;
-            while(currentRoundMatches.length < bracketSize) {
-                 currentRoundMatches.push(null);
-            }
-
-            // Create Round 1 from byes and play-in placeholders
-            const firstProperRound: SchemeMatch[] = [];
-            const standardSeeding: Record<number, number[]> = {
-              2: [1,2],
-              4: [1,4,3,2],
-              8: [1,8,5,4,3,6,7,2],
-              16: [1,16,9,8,5,12,13,4,3,14,11,6,7,10,15,2],
-              32: [1,32,17,16,9,24,25,8,5,28,21,12,13,20,29,4,3,30,19,14,11,22,27,6,7,26,23,10,15,18,31,2],
-              64: [1,64,33,32,17,48,49,16,9,56,41,24,25,40,57,8,5,60,37,28,21,44,53,12,13,52,45,20,29,36,61,4,3,62,35,30,19,46,51,14,11,54,43,22,27,38,59,6,7,58,39,26,23,42,55,10,15,50,47,18,31,34,63,2],
-            };
-            const seedOrder = standardSeeding[bracketSize as keyof typeof standardSeeding] || [];
-            
-            const seededParticipants: (SchemeParticipant|null)[] = [];
-            
-            const initialCompetitors = [...participants];
-            while(initialCompetitors.length < bracketSize){
-                initialCompetitors.push(null); // Add BYEs
-            }
-
-            const finalSeededParticipants: (SchemeParticipant|null)[] = seedOrder.map(seed => initialCompetitors[seed -1] || null);
-
-            const round1Participants = finalSeededParticipants.slice(0, bracketSize);
-            
-            for(let i = 0; i < bracketSize; i += 2) {
-                const p1 = round1Participants[i];
-                const p2 = round1Participants[i+1];
-                 const matchId = `r1-m${globalMatchCounter}`;
-                if (p1) {
-                    const match: SchemeMatch = {
-                       id: matchId,
-                       matchInternalId: matchId,
-                       round: 1,
-                       matchNumber: globalMatchCounter++,
-                       participant1: p1,
-                       participant2: p2,
-                       winnerId: p2 === null ? p1?.id ?? null : null, // Auto-win for byes
-                       nextMatchId: null,
-                       globalMatchNumber: 0,
-                       status: 'PENDING'
-                    };
-                    firstProperRound.push(match);
-                }
-            }
-            if(playInMatches.length > 0) {
-               allRounds.push({roundNumber: 0, name: "Babak Penyisihan", matches: playInMatches});
-            }
-            allRounds.push({ roundNumber: 1, name: `Babak ${bracketSize}`, matches: firstProperRound});
-
-
-            let previousRoundMatches = allRounds[allRounds.length - 1].matches;
-            roundNum = 2;
-            while(previousRoundMatches.length > 1) {
+            // Create subsequent rounds
+            for (let roundNum = 2; roundNum <= numRounds; roundNum++) {
+                const previousRoundMatches = allRounds[roundNum - 2].matches;
                 const nextRoundMatches: SchemeMatch[] = [];
-                for(let i=0; i < previousRoundMatches.length; i+=2){
-                     const matchId = `r${roundNum}-m${globalMatchCounter}`;
+                
+                for (let i = 0; i < previousRoundMatches.length; i += 2) {
+                    const matchId = `r${roundNum}-m${globalMatchCounter}`;
                     const match: SchemeMatch = {
                         id: matchId,
-                        matchInternalId: matchId,
+                        matchInternalId: `tanding-${tandingClass.replace(/\s+/g, '_')}-R${roundNum}-M${globalMatchCounter}`,
                         round: roundNum,
                         matchNumber: globalMatchCounter++,
                         participant1: null,
                         participant2: null,
                         winnerId: null,
                         nextMatchId: null,
-                        globalMatchNumber: 0,
+                        globalMatchNumber: globalMatchCounter - 1,
                         status: 'PENDING'
                     };
+                    
                     previousRoundMatches[i].nextMatchId = match.id;
-                    if(previousRoundMatches[i+1]) {
-                      previousRoundMatches[i+1].nextMatchId = match.id;
+                    if (previousRoundMatches[i+1]) {
+                        previousRoundMatches[i+1].nextMatchId = match.id;
                     }
+                    
                     nextRoundMatches.push(match);
                 }
-                const roundName = nextRoundMatches.length === 1 ? "Final" : nextRoundMatches.length === 2 ? "Semi Final" : nextRoundMatches.length === 4 ? "Perempat Final" : `Babak ${nextRoundMatches.length * 2}`;
-                allRounds.push({roundNumber: roundNum, name: roundName, matches: nextRoundMatches});
-                previousRoundMatches = nextRoundMatches;
-                roundNum++;
+                
+                const roundName = nextRoundMatches.length === 1 ? "Final" : 
+                                  nextRoundMatches.length === 2 ? "Semi Final" : 
+                                  nextRoundMatches.length === 4 ? "Perempat Final" : 
+                                  `Babak ${nextRoundMatches.length * 2}`;
+                                  
+                allRounds.push({ roundNumber: roundNum, name: roundName, matches: nextRoundMatches });
+            }
+            
+            // Pre-populate next rounds with winners from BYE matches
+            for (let i = 0; i < allRounds.length - 1; i++) {
+                for (const match of allRounds[i].matches) {
+                    if (match.winnerId && match.nextMatchId) {
+                        const winnerParticipant = match.participant1?.id === match.winnerId ? match.participant1 : match.participant2;
+                        const nextMatch = allRounds[i+1].matches.find(m => m.id === match.nextMatchId);
+                        
+                        if (nextMatch) {
+                            const parentMatchIndex = allRounds[i].matches.findIndex(m => m.id === match.id);
+                            if (parentMatchIndex % 2 === 0) {
+                                nextMatch.participant1 = winnerParticipant;
+                            } else {
+                                nextMatch.participant2 = winnerParticipant;
+                            }
+                        }
+                    }
+                }
             }
             
             const newScheme: Scheme = {
@@ -306,7 +292,7 @@ export default function SchemeManagementPage() {
         } finally {
             setIsLoading(false);
         }
-    }, 500); // 500ms delay to show loading state
+    }, 500);
   };
 
 
@@ -422,7 +408,7 @@ export default function SchemeManagementPage() {
               pesilatBiruContingent: match.participant2.contingent,
               round: round.name,
               class: generatedScheme.tandingClass || '',
-              matchInternalId: match.id,
+              matchInternalId: match.matchInternalId,
             };
             
             const scheduleDataForFirestore = {
@@ -496,7 +482,7 @@ export default function SchemeManagementPage() {
                 <FormField id="tandingClass" label="Nama Kelas Tanding" value={tandingClass} onChange={(e) => setTandingClass(e.target.value)} placeholder="cth: Kelas A Putra" disabled={isLoading} required/>
                 
                 <div>
-                  <Label htmlFor="tandingParticipants">Jumlah Peserta (2-64)</Label>
+                  <Label htmlFor="tandingParticipants">Jumlah Peserta (3-32)</Label>
                   <div className="flex items-center gap-2">
                     <Button variant="outline" size="icon" onClick={() => handleParticipantCountChange(tandingParticipants.length - 1, setTandingParticipants)} disabled={isLoading}>
                       <Minus className="h-4 w-4" />
