@@ -1,27 +1,102 @@
 "use client";
 
-import { useState, type FormEvent } from 'react';
+import { useState, type FormEvent, type ChangeEvent, useRef, useEffect } from 'react';
 import { PageTitle } from '@/components/shared/PageTitle';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Label } from '@/components/ui/label';
-import { Textarea } from '@/components/ui/textarea';
+import { Input } from '@/components/ui/input';
 import { Alert, AlertTitle, AlertDescription } from '@/components/ui/alert';
-import { Loader2, AlertTriangle, Wand2, Copy } from 'lucide-react';
+import { Loader2, AlertTriangle, Wand2, Copy, Upload, Minus, Plus } from 'lucide-react';
 import { generateBracket, type BracketGeneratorInput, type BracketGeneratorOutput } from '@/ai/flows/bracket-generator-flow';
+import * as XLSX from 'xlsx';
 
 export default function BracketGeneratorPage() {
-  const [participants, setParticipants] = useState('');
+  const [participantCount, setParticipantCount] = useState(8);
+  const [participantNames, setParticipantNames] = useState<string[]>([]);
   const [bracketData, setBracketData] = useState<BracketGeneratorOutput | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    setParticipantNames(currentNames => {
+        const newNames = Array(participantCount).fill('');
+        for (let i = 0; i < Math.min(participantCount, currentNames.length); i++) {
+            newNames[i] = currentNames[i];
+        }
+        return newNames;
+    });
+  }, [participantCount]);
+
+  const handleParticipantNameChange = (index: number, value: string) => {
+    const newNames = [...participantNames];
+    newNames[index] = value;
+    setParticipantNames(newNames);
+  };
+
+  const adjustParticipantCount = (amount: number) => {
+    setParticipantCount(prev => {
+        const newCount = prev + amount;
+        if (newCount >= 3 && newCount <= 32) {
+            return newCount;
+        }
+        return prev;
+    });
+  };
+
+  const handleFileUploadClick = () => {
+    fileInputRef.current?.click();
+  };
+
+  const processUploadedFile = (event: ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = (e) => {
+        try {
+            const data = e.target?.result;
+            if (!data) throw new Error("Gagal membaca file.");
+
+            const workbook = XLSX.read(data, { type: 'array' });
+            const sheetName = workbook.SheetNames[0];
+            const worksheet = workbook.Sheets[sheetName];
+            
+            const jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1, defval: "" }) as string[][];
+
+            const uploadedNames = jsonData.map(row => String(row[0]).trim()).filter(Boolean);
+            
+            if (uploadedNames.length < 3) {
+                setError("File harus berisi setidaknya 3 nama peserta.");
+                return;
+            }
+            if (uploadedNames.length > 32) {
+                 setError("Jumlah peserta tidak boleh lebih dari 32.");
+                return;
+            }
+
+            setParticipantCount(uploadedNames.length);
+            setParticipantNames(uploadedNames);
+            setError(null);
+
+        } catch (err) {
+            console.error("Error processing file:", err);
+            setError(err instanceof Error ? err.message : "Gagal memproses file XLSX.");
+        } finally {
+            if (fileInputRef.current) fileInputRef.current.value = '';
+        }
+    };
+    reader.readAsArrayBuffer(file);
+  };
 
   const handleSubmit = async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
-    const participantList = participants.split('\n').map(p => p.trim()).filter(Boolean);
-    const participantCount = participantList.length;
+    const participantList = participantNames
+      .map((name, index) => name.trim() || `Peserta ${index + 1}`)
+      .filter(Boolean);
 
-    if (participantCount < 3 || participantCount > 32) {
+    if (participantList.length < 3 || participantList.length > 32) {
       setError('Jumlah peserta harus antara 3 dan 32.');
       return;
     }
@@ -32,7 +107,7 @@ export default function BracketGeneratorPage() {
 
     try {
       const input: BracketGeneratorInput = {
-        participantCount,
+        participantCount: participantList.length,
         participantList,
       };
       const result = await generateBracket(input);
@@ -59,23 +134,62 @@ export default function BracketGeneratorPage() {
       <Card>
         <CardHeader>
           <CardTitle>Input Peserta</CardTitle>
-          <CardDescription>Masukkan nama peserta, satu per baris. Urutan menentukan seeding (peserta teratas akan mendapat prioritas bye).</CardDescription>
+          <CardDescription>Atur jumlah peserta, lalu masukkan nama atau unggah file XLSX. Urutan menentukan seeding.</CardDescription>
         </CardHeader>
         <form onSubmit={handleSubmit}>
-          <CardContent className="space-y-4">
-            <div>
-              <Label htmlFor="participants-input" className="font-semibold">Daftar Nama Peserta</Label>
-              <Textarea
-                id="participants-input"
-                value={participants}
-                onChange={(e) => setParticipants(e.target.value)}
-                placeholder="Peserta 1\nPeserta 2\nPeserta 3\n..."
-                rows={12}
-                className="mt-2 font-mono"
-                disabled={isLoading}
-              />
-              <p className="text-sm text-muted-foreground mt-2">Jumlah Peserta: {participants.split('\n').map(p => p.trim()).filter(Boolean).length}</p>
+          <CardContent className="space-y-6">
+            <div className="flex flex-col sm:flex-row sm:items-center gap-4">
+                <div className='flex-1 space-y-2'>
+                    <Label htmlFor="participant-count">Jumlah Peserta</Label>
+                    <div className="flex items-center gap-2">
+                        <Button type="button" variant="outline" size="icon" onClick={() => adjustParticipantCount(-1)} disabled={participantCount <= 3}>
+                            <Minus className="h-4 w-4" />
+                        </Button>
+                        <Input
+                            id="participant-count"
+                            type="number"
+                            className="w-16 text-center"
+                            value={participantCount}
+                            onChange={(e) => {
+                                const count = parseInt(e.target.value);
+                                if (!isNaN(count) && count >= 3 && count <= 32) {
+                                    setParticipantCount(count);
+                                }
+                            }}
+                            min="3" max="32"
+                        />
+                        <Button type="button" variant="outline" size="icon" onClick={() => adjustParticipantCount(1)} disabled={participantCount >= 32}>
+                            <Plus className="h-4 w-4" />
+                        </Button>
+                    </div>
+                </div>
+                <div className='sm:pt-8'>
+                    <input type="file" accept=".xlsx, .xls" ref={fileInputRef} onChange={processUploadedFile} className="hidden" />
+                    <Button type="button" variant="outline" onClick={handleFileUploadClick} disabled={isLoading}>
+                        <Upload className="mr-2 h-4 w-4"/>
+                        Unggah Daftar Peserta (.xlsx)
+                    </Button>
+                </div>
             </div>
+
+            <div className="space-y-3">
+              <Label className="font-semibold">Daftar Nama Peserta</Label>
+              <div className='grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-2'>
+                {participantNames.map((name, index) => (
+                    <div key={index} className="flex items-center gap-3">
+                        <Label htmlFor={`participant-${index}`} className="text-sm text-muted-foreground min-w-[2rem] text-right">{index + 1}.</Label>
+                        <Input
+                            id={`participant-${index}`}
+                            value={name}
+                            onChange={(e) => handleParticipantNameChange(index, e.target.value)}
+                            placeholder={`Nama Peserta ${index + 1}`}
+                            disabled={isLoading}
+                        />
+                    </div>
+                ))}
+              </div>
+            </div>
+            
             <Button type="submit" disabled={isLoading} className="w-full sm:w-auto">
               {isLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Wand2 className="mr-2 h-4 w-4" />}
               Buat Bagan
