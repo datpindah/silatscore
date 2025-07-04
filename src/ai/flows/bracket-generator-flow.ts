@@ -11,13 +11,13 @@
 import {ai} from '@/ai/genkit';
 import {z} from 'genkit';
 
-export const BracketGeneratorInputSchema = z.object({
+const BracketGeneratorInputSchema = z.object({
   participantCount: z.number().int().min(3).max(32).describe('The total number of participants.'),
   participantList: z.array(z.string()).describe('An ordered list of participant names.'),
 });
 export type BracketGeneratorInput = z.infer<typeof BracketGeneratorInputSchema>;
 
-export const BracketGeneratorOutputSchema = z.object({
+const BracketGeneratorOutputSchema = z.object({
   totalPeserta: z.number().int().describe('Total number of participants.'),
   babak: z.string().describe('The main bracket round (e.g., "8 besar", "16 besar").'),
   slotIdeal: z.number().int().describe('The ideal number of slots for the bracket size (a power of 2).'),
