@@ -52,7 +52,7 @@ export default function SchemeManagementPage() {
     newCount: number,
     setParticipants: React.Dispatch<React.SetStateAction<Participant[]>>
   ) => {
-    const clampedCount = Math.max(2, Math.min(64, isNaN(newCount) ? 2 : newCount));
+    const clampedCount = Math.max(2, Math.min(32, isNaN(newCount) ? 2 : newCount));
     setParticipants(currentParticipants => {
       const newParticipants = [...currentParticipants];
       while (newParticipants.length < clampedCount) {
@@ -133,7 +133,7 @@ export default function SchemeManagementPage() {
     reader.readAsArrayBuffer(file);
   };
   
-  const handleGenerateTandingScheme = () => {
+ const handleGenerateTandingScheme = () => {
     const gelanggangList = gelanggangs.split(',').map(g => g.trim()).filter(Boolean);
     if (gelanggangList.length === 0) {
         alert("Nama Gelanggang tidak boleh kosong.");
@@ -156,17 +156,19 @@ export default function SchemeManagementPage() {
     
     setTimeout(() => {
         try {
+            // 1. Determine bracket size and byes
             const bracketSize = Math.pow(2, Math.ceil(Math.log2(numParticipants)));
             const numRounds = Math.log2(bracketSize);
+            const numByes = bracketSize - numParticipants;
 
-            const participants: SchemeParticipant[] = finalParticipants.map((p, index) => ({
+            const participantsWithSeeds: SchemeParticipant[] = finalParticipants.map((p, index) => ({
               id: `p-${index + 1}-${p.name.replace(/\s+/g, '-')}`,
               name: p.name,
               contingent: p.contingent,
               seed: index + 1
             }));
-            
-            const seeds = Array.from({ length: bracketSize }, (_, i) => i + 1);
+
+            // 2. Standard Seeding Maps
             const seedOrderMaps: { [key: number]: number[] } = {
                 4: [1, 4, 2, 3],
                 8: [1, 8, 4, 5, 2, 7, 3, 6],
@@ -175,23 +177,29 @@ export default function SchemeManagementPage() {
             };
             const seedOrder = seedOrderMaps[bracketSize];
             if (!seedOrder) throw new Error(`Ukuran bagan ${bracketSize} tidak didukung.`);
+
+            // 3. Create participant map with BYEs assigned to top seeds
+            const participantsBySeed = new Map<number, SchemeParticipant | null>();
+            participantsWithSeeds.forEach(p => participantsBySeed.set(p.seed, p));
             
-            const seededParticipants: (SchemeParticipant | null)[] = Array(bracketSize).fill(null);
-            participants.forEach((p, i) => { seededParticipants[i] = p; });
+            const seededTournamentSlots: (SchemeParticipant | null)[] = seedOrder.map(seed => {
+                // If seed is greater than numParticipants, it's a bye slot, but the opponent is a top seed.
+                // The correct way is to give BYEs to top seeds.
+                return participantsBySeed.get(seed) || null;
+            });
+            
+            const byesToDistribute = bracketSize - numParticipants;
+            const byeReceivingSeeds = seedOrder.slice(0, byesToDistribute);
 
-            const tournamentOrder = seedOrder.map(seed => seededParticipants[seed - 1] || null);
-
+            // 4. Build the entire bracket structure first
             const allRounds: SchemeRound[] = [];
             let globalMatchCounter = 1;
-
-            // Generate all rounds with empty matches first
-            let lastRoundMatchesCount = bracketSize / 2;
+            let matchesInRound = bracketSize / 2;
             for (let r = 1; r <= numRounds; r++) {
                 const roundMatches: SchemeMatch[] = [];
-                for (let i = 0; i < lastRoundMatchesCount; i++) {
-                    const matchId = `r${r}-m${globalMatchCounter}`;
+                for (let i = 0; i < matchesInRound; i++) {
                     roundMatches.push({
-                        id: matchId,
+                        id: `r${r}-m${globalMatchCounter}`,
                         matchInternalId: `match-${globalMatchCounter}`,
                         round: r,
                         matchNumber: globalMatchCounter++,
@@ -202,37 +210,44 @@ export default function SchemeManagementPage() {
                         status: 'PENDING'
                     });
                 }
-                const roundName = lastRoundMatchesCount === 1 ? "Final" : 
-                                  lastRoundMatchesCount === 2 ? "Semi Final" : 
-                                  lastRoundMatchesCount === 4 ? "Perempat Final" : 
-                                  `Babak ${lastRoundMatchesCount * 2}`;
+                 let roundName = `Babak ${matchesInRound * 2}`;
+                if (matchesInRound === 1) roundName = "Final";
+                else if (matchesInRound === 2) roundName = "Semi Final";
+                else if (matchesInRound === 4) roundName = "Perempat Final";
+
                 allRounds.push({ roundNumber: r, name: roundName, matches: roundMatches });
-                lastRoundMatchesCount /= 2;
+                matchesInRound /= 2;
             }
 
-            // Link rounds together
+            // 5. Link rounds together
             for (let r = 0; r < numRounds - 1; r++) {
-                const currentRound = allRounds[r];
-                const nextRound = allRounds[r+1];
-                for (let i = 0; i < currentRound.matches.length; i+=2) {
-                    const nextMatchIdx = Math.floor(i / 2);
-                    currentRound.matches[i].nextMatchId = nextRound.matches[nextMatchIdx].id;
-                    currentRound.matches[i+1].nextMatchId = nextRound.matches[nextMatchIdx].id;
+                for (let i = 0; i < allRounds[r].matches.length; i++) {
+                    allRounds[r].matches[i].nextMatchId = allRounds[r+1].matches[Math.floor(i / 2)].id;
                 }
             }
 
-            // Populate first round
+            // 6. Populate first round and handle BYEs correctly
+            let participantIndex = 0;
             const firstRound = allRounds[0];
-            for (let i = 0; i < bracketSize / 2; i++) {
-                const p1 = tournamentOrder[i*2];
-                const p2 = tournamentOrder[i*2 + 1];
-                firstRound.matches[i].participant1 = p1;
-                firstRound.matches[i].participant2 = p2;
-                if (p1 && !p2) firstRound.matches[i].winnerId = p1.id;
-                if (!p1 && p2) firstRound.matches[i].winnerId = p2.id;
+
+            for (let i = 0; i < bracketSize; i += 2) {
+                const matchIndex = i / 2;
+                const match = firstRound.matches[matchIndex];
+                
+                const p1Seed = seedOrder[i];
+                const p2Seed = seedOrder[i + 1];
+
+                const p1 = participantsBySeed.get(p1Seed) || null;
+                const p2 = participantsBySeed.get(p2Seed) || null;
+                
+                match.participant1 = p1;
+                match.participant2 = p2;
+
+                if (p1 && !p2) match.winnerId = p1.id;
+                if (!p1 && p2) match.winnerId = p2.id;
             }
 
-            // Single pass for BYE winner advancement
+            // 7. Single pass to advance all winners (including BYEs)
             for (let r = 0; r < numRounds - 1; r++) {
                 const currentRound = allRounds[r];
                 const nextRound = allRounds[r+1];
@@ -262,7 +277,7 @@ export default function SchemeManagementPage() {
                 gelanggangs: gelanggangList,
                 date: eventDate,
                 participantCount: numParticipants,
-                participants: participants,
+                participants: participantsWithSeeds,
                 rounds: allRounds,
                 createdAt: Timestamp.now(),
             };
