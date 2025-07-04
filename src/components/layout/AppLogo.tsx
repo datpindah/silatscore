@@ -1,3 +1,4 @@
+
 import type { SVGProps } from 'react';
 import Link from 'next/link';
 
@@ -35,3 +36,5 @@ export function AppLogo() {
     </Link>
   );
 }
+
+    
