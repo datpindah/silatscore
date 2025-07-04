@@ -52,7 +52,7 @@ export default function SchemeManagementPage() {
     newCount: number,
     setParticipants: React.Dispatch<React.SetStateAction<Participant[]>>
   ) => {
-    const clampedCount = Math.max(2, Math.min(32, isNaN(newCount) ? 2 : newCount));
+    const clampedCount = Math.max(2, Math.min(64, isNaN(newCount) ? 2 : newCount)); // Increased max to 64
     setParticipants(currentParticipants => {
       const newParticipants = [...currentParticipants];
       while (newParticipants.length < clampedCount) {
@@ -136,7 +136,7 @@ export default function SchemeManagementPage() {
   const handleGenerateTandingScheme = () => {
     setIsLoading(true);
     setGeneratedScheme(null);
-  
+
     try {
         const finalParticipants: SchemeParticipant[] = tandingParticipants
             .filter(p => p.name.trim() && p.contingent.trim())
@@ -152,92 +152,64 @@ export default function SchemeManagementPage() {
             setIsLoading(false);
             return;
         }
-
+        
         const numParticipants = finalParticipants.length;
-        const bracketSize = Math.pow(2, Math.ceil(Math.log2(numParticipants)));
-        const numRounds = Math.log2(bracketSize);
-        const numByes = bracketSize - numParticipants;
+        const mainBracketSize = Math.pow(2, Math.ceil(Math.log2(numParticipants)));
+        
+        // Number of participants who have to play in a preliminary round
+        const numInPrelimRound = (numParticipants - (mainBracketSize / 2)) * 2;
+        const numByes = numParticipants - numInPrelimRound;
 
         const byeParticipants = finalParticipants.slice(0, numByes);
-        const prelimCompetitors = finalParticipants.slice(numByes);
+        const prelimParticipants = finalParticipants.slice(numByes);
 
         const allRounds: SchemeRound[] = [];
-        let previousRoundMatches: SchemeMatch[] = [];
         let globalMatchNumber = 1;
+        let prelimMatches: SchemeMatch[] = [];
 
-        // --- Round 1: Preliminary Matches ---
-        if (prelimCompetitors.length > 0) {
-            const prelimMatches: SchemeMatch[] = [];
-            for (let i = 0; i < prelimCompetitors.length; i += 2) {
+        // --- ROUND 1: Preliminary Matches (if any) ---
+        if (prelimParticipants.length > 0) {
+            for (let i = 0; i < prelimParticipants.length; i += 2) {
                 const match: SchemeMatch = {
-                    id: `r1-m${i / 2}`,
+                    id: `prelim-m${i / 2}`,
                     round: 1,
-                    matchNumber: i / 2,
-                    participant1: prelimCompetitors[i],
-                    participant2: prelimCompetitors[i + 1] || null,
-                    winnerId: null, // CRITICAL: No auto-winner
-                    nextMatchId: null,
-                    matchInternalId: `match-r1-m${i / 2}-${Date.now()}`,
-                    globalMatchNumber: globalMatchNumber++,
+                    matchNumber: globalMatchNumber++,
+                    participant1: prelimParticipants[i],
+                    participant2: prelimParticipants[i + 1] || null, // Handle odd numbers if needed, though prelims are usually even
+                    winnerId: null,
+                    nextMatchId: null, // Will be set later
+                    matchInternalId: `match-prelim-m${i / 2}-${Date.now()}`,
+                    globalMatchNumber: globalMatchNumber - 1,
                     status: 'PENDING'
                 };
                 prelimMatches.push(match);
             }
             allRounds.push({ roundNumber: 1, name: "Babak Penyisihan", matches: prelimMatches });
-            previousRoundMatches = prelimMatches;
         }
 
-        // --- Build Subsequent Rounds ---
-        let competitorsForNextRound: (SchemeParticipant | { isPlaceholder: true, name: string, contingent: string, id: string, seed: number })[] = [];
-        
-        if (allRounds.length > 0) { // If there was a preliminary round
-            const prelimWinnerPlaceholders = previousRoundMatches.map((m, i) => ({
-                isPlaceholder: true as const,
-                name: `Pemenang Penyisihan ${i + 1}`,
-                contingent: 'TBD',
-                id: `ph-r1-m${i}`,
-                seed: -1
-            }));
-            
-            // Per user logic: pair byes with prelim winners
-            let pairedCompetitors: (SchemeParticipant | { isPlaceholder: boolean, name: string, contingent: string, id: string, seed: number })[] = [];
-            const byesCopy = [...byeParticipants];
-            
-            while(byesCopy.length > 0) {
-              pairedCompetitors.push(byesCopy.shift()!);
-              if(prelimWinnerPlaceholders.length > 0) {
-                pairedCompetitors.push(prelimWinnerPlaceholders.shift()!);
-              } else {
-                 // This case should ideally not happen in a balanced prelim round
-                 pairedCompetitors.push({ isPlaceholder: true, name: 'BYE', contingent: '', id: 'bye-placeholder', seed: -1 });
-              }
-            }
-            // Add any remaining prelim winners (if # of prelims > # of byes)
-            pairedCompetitors.push(...prelimWinnerPlaceholders);
-            competitorsForNextRound = pairedCompetitors;
-
-        } else { // No byes, all participants start here
-            competitorsForNextRound = [...finalParticipants];
+        // --- Build Main Bracket ---
+        let competitorsForNextRound: (SchemeParticipant | null)[] = [...byeParticipants];
+        // Add placeholders for winners of prelim matches
+        for (let i = 0; i < prelimMatches.length; i++) {
+            competitorsForNextRound.push(null);
         }
 
-        let roundCounter = allRounds.length + 1;
+        let currentRoundNumber = (prelimParticipants.length > 0) ? 2 : 1;
+        let previousRoundMatches = prelimMatches;
 
         while (competitorsForNextRound.length > 1) {
             const currentRoundMatches: SchemeMatch[] = [];
             for (let i = 0; i < competitorsForNextRound.length; i += 2) {
-                const p1 = competitorsForNextRound[i];
-                const p2 = competitorsForNextRound[i + 1];
-
                 const match: SchemeMatch = {
-                    id: `r${roundCounter}-m${i / 2}`,
-                    round: roundCounter,
-                    matchNumber: i / 2,
-                    participant1: p1.isPlaceholder ? null : p1,
-                    participant2: p2 ? (p2.isPlaceholder ? null : p2) : null,
-                    winnerId: null, // CRITICAL
+                    id: `r${currentRoundNumber}-m${i / 2}`,
+                    round: currentRoundNumber,
+                    matchNumber: globalMatchNumber++,
+                    participant1: competitorsForNextRound[i],
+                    participant2: competitorsForNextRound[i + 1],
+                    winnerId: null,
                     nextMatchId: null,
-                    matchInternalId: `match-r${roundCounter}-m${i/2}-${Date.now()}`,
-                    globalMatchNumber: globalMatchNumber++,
+                    matchInternalId: `match-r${currentRoundNumber}-m${i / 2}-${Date.now()}`,
+                    globalMatchNumber: globalMatchNumber - 1,
                     status: 'PENDING'
                 };
                 currentRoundMatches.push(match);
@@ -248,27 +220,28 @@ export default function SchemeManagementPage() {
             if (matchesCount === 1) roundName = "Final";
             else if (matchesCount === 2) roundName = "Semi Final";
             else if (matchesCount === 4) roundName = "Perempat Final";
-            else roundName = `Babak ${matchesCount * 2}`;
+            else if (matchesCount === 8) roundName = "Babak 16 Besar";
+            else roundName = `Babak ${matchesCount * 2} Besar`;
+            
+            allRounds.push({ roundNumber: currentRoundNumber, name: roundName, matches: currentRoundMatches });
 
-            allRounds.push({ roundNumber: roundCounter, name: roundName, matches: currentRoundMatches });
+            // Link previous round to this one
+            if (previousRoundMatches.length > 0) {
+                // Special linking for prelims vs byes based on user logic
+                if (allRounds.length > 1 && allRounds[allRounds.length-2].name === 'Babak Penyisihan') {
+                    for (let i = 0; i < previousRoundMatches.length; i++) {
+                        previousRoundMatches[i].nextMatchId = currentRoundMatches[i].id;
+                    }
+                } else { // Standard linking for subsequent rounds
+                    for (let i = 0; i < previousRoundMatches.length; i++) {
+                        previousRoundMatches[i].nextMatchId = currentRoundMatches[Math.floor(i / 2)].id;
+                    }
+                }
+            }
+            
             previousRoundMatches = currentRoundMatches;
-            competitorsForNextRound = previousRoundMatches.map(m => ({ 
-                isPlaceholder: true, 
-                name: `Pemenang ${roundName}`, 
-                contingent: 'TBD',
-                id: `ph-${m.id}`,
-                seed: -1
-            }));
-            roundCounter++;
-        }
-
-        // Link matches (nextMatchId)
-        for (let i = 0; i < allRounds.length - 1; i++) {
-            const currentRnd = allRounds[i];
-            const nextRnd = allRounds[i + 1];
-            currentRnd.matches.forEach((match, index) => {
-                match.nextMatchId = nextRnd.matches[Math.floor(index / 2)].id;
-            });
+            competitorsForNextRound = Array(currentRoundMatches.length).fill(null);
+            currentRoundNumber++;
         }
         
         const newScheme: Scheme = {
@@ -391,11 +364,9 @@ export default function SchemeManagementPage() {
       
       const allMatches = generatedScheme.rounds.flatMap(r => r.matches);
       
-      // Sort matches by global number to ensure chronological distribution
-      allMatches.sort((a,b) => a.globalMatchNumber - b.globalMatchNumber);
+      allMatches.sort((a,b) => a.matchNumber - b.matchNumber);
 
       for (const match of allMatches) {
-        // Only generate schedules for matches with two real participants
         if (match.participant1 && match.participant2) {
           const assignedGelanggang = gelanggangList[gelanggangIndex % gelanggangList.length];
           gelanggangIndex++;
@@ -404,7 +375,7 @@ export default function SchemeManagementPage() {
           const scheduleDocRef = doc(db, 'schedules_tanding', matchInternalId);
           
           const scheduleData: Omit<ScheduleTanding, 'id'> = {
-            matchNumber: match.globalMatchNumber,
+            matchNumber: match.matchNumber,
             date: generatedScheme.date, 
             place: assignedGelanggang,
             pesilatMerahName: match.participant1.name,
@@ -485,7 +456,7 @@ export default function SchemeManagementPage() {
                 <FormField id="tandingClass" label="Nama Kelas Tanding" value={tandingClass} onChange={(e) => setTandingClass(e.target.value)} placeholder="cth: Kelas A Putra" disabled={isLoading} required/>
                 
                 <div>
-                  <Label htmlFor="tandingParticipants">Jumlah Peserta (2-32)</Label>
+                  <Label htmlFor="tandingParticipants">Jumlah Peserta (2-64)</Label>
                   <div className="flex items-center gap-2">
                     <Button variant="outline" size="icon" onClick={() => handleParticipantCountChange(tandingParticipants.length - 1, setTandingParticipants)} disabled={isLoading}>
                       <Minus className="h-4 w-4" />
@@ -618,7 +589,7 @@ export default function SchemeManagementPage() {
       {generatedScheme && (
         <div className="mt-8 bg-background p-4 rounded-lg border">
             <h2 className="text-2xl font-bold text-center mb-4">Pratinjau Bagan</h2>
-            <BracketView scheme={generatedScheme} />
+            <BracketView scheme={generatedScheme} onSetWinner={() => {}} />
             <div className="mt-6 flex flex-col sm:flex-row items-center justify-center gap-4">
               <Button onClick={handleSaveScheme} size="lg" className="bg-green-600 hover:bg-green-700 text-white" disabled={isLoading || isSchemeSaved}>
                 {isLoading && !isSchemeSaved ? <Loader2 className="mr-2 h-5 w-5 animate-spin" /> : <Save className="mr-2 h-5 w-5" />}
@@ -640,5 +611,3 @@ export default function SchemeManagementPage() {
     </>
   );
 }
-
-    
