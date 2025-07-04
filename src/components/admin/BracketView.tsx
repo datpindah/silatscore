@@ -16,7 +16,7 @@ interface RoundData {
 }
 
 // This function processes the data into a more usable format for rendering.
-// It shouldn't be changed as the user is happy with the logic.
+// It shouldn't be changed.
 function processBracketData(data: BracketGeneratorOutput | null): RoundData[] {
     if (!data) return [];
     
@@ -79,68 +79,76 @@ export function BracketView({ data }: { data: BracketGeneratorOutput | null }) {
     if (rounds.length === 0) {
         return null;
     }
-    
-    // Increased spacing factor for a more spread-out look like the image
-    const verticalSpacingFactor = 3.5;
+
+    const baseGapRem = 2; // The gap between match boxes in the first round
 
     return (
         <div className="bg-gray-800 text-white p-4 md:p-8 rounded-lg mt-6 overflow-x-auto font-sans">
-            <div className="flex items-start space-x-12 min-w-max">
-                {rounds.map((round, roundIndex) => (
-                    <div key={roundIndex} className="flex flex-col flex-shrink-0 w-56">
-                        <h3 className="font-bold text-lg mb-8 text-center text-yellow-400">{round.name}</h3>
-                        <div className="flex flex-col flex-grow" style={{ justifyContent: 'space-around' }}>
-                            {round.matches.map((match, matchIndex) => (
-                                <div
-                                    key={match.id}
-                                    className="relative"
-                                    style={{
-                                        // Dynamically create space between matches which increases for later rounds
-                                        marginTop: matchIndex > 0 ? `${Math.pow(2, roundIndex) * verticalSpacingFactor}rem` : 0
-                                    }}
-                                >
-                                    {/* Match Box with Number Badge */}
-                                    <div className="relative">
-                                        <div className="absolute top-1/2 -left-10 transform -translate-y-1/2 bg-gray-600 text-white text-xs rounded-full h-6 w-6 flex items-center justify-center border-2 border-gray-500 z-20">
-                                            {getMatchNumber(match.id)}
-                                        </div>
-                                        <div className="bg-gray-700 rounded-md shadow-lg w-full border border-gray-600 text-sm flex flex-col z-10">
-                                            <div className="px-3 py-2 border-b border-gray-600">
-                                                <p className="text-gray-300 truncate">{match.participants[0] || 'TBD'}</p>
+            <div className="flex justify-start items-start min-w-max space-x-12">
+                {rounds.map((round, roundIndex) => {
+                    // The gap between matches doubles each round to create the tree effect
+                    const gapRem = baseGapRem * Math.pow(2, roundIndex + 1);
+                    
+                    // Add padding to later rounds to vertically align them with the center of the previous round's pairs
+                    // 2.25rem is approx half the matchbox height. We add half of the previous round's gap.
+                    const paddingTopRem = roundIndex > 0
+                        ? (baseGapRem * Math.pow(2, roundIndex) / 2) + 2.25 
+                        : 0;
+
+                    return (
+                        <div key={round.name} className="relative flex flex-col w-56 flex-shrink-0 pt-10">
+                            <h3 className="font-bold text-lg mb-4 text-center text-yellow-400 absolute top-0 w-full">{round.name}</h3>
+                            <div 
+                                className="relative flex flex-col"
+                                style={{
+                                    gap: `${gapRem}rem`,
+                                    paddingTop: `${paddingTopRem}rem`
+                                }}
+                            >
+                                {round.matches.map((match, matchIndex) => (
+                                    <div key={match.id} className="relative">
+                                        <div className="relative">
+                                            <div className="absolute top-1/2 -left-10 transform -translate-y-1/2 bg-gray-600 text-white text-xs rounded-full h-6 w-6 flex items-center justify-center border-2 border-gray-500 z-20">
+                                                {getMatchNumber(match.id)}
                                             </div>
-                                            <div className="px-3 py-2">
-                                                <p className="text-gray-300 truncate">{match.participants[1] || 'BYE'}</p>
-                                            </div>
-                                        </div>
-                                    </div>
-                                    
-                                    {/* Connector lines to the next round */}
-                                    {roundIndex < rounds.length - 1 && (
-                                        <>
-                                            {/* Horizontal line coming out of the match box */}
-                                            <div className="absolute top-1/2 -right-6 w-6 h-px bg-gray-500 z-0"></div>
-                                            
-                                            {/* Vertical line connecting pairs & horizontal line to next match */}
-                                            {matchIndex % 2 === 0 && (
-                                                <div
-                                                    className="absolute w-px bg-gray-500 z-0"
-                                                    style={{
-                                                        height: `calc(100% + ${Math.pow(2, roundIndex) * verticalSpacingFactor}rem + 2px)`,
-                                                        top: '50%',
-                                                        right: '-1.5rem', // Aligns with the outgoing horizontal line
-                                                    }}
-                                                >
-                                                    {/* Horizontal line going to the next round's match */}
-                                                    <div className="absolute top-1/2 left-0 w-6 h-px bg-gray-500"></div>
+                                            <div className="bg-gray-700 rounded-md shadow-lg w-full border border-gray-600 text-sm flex flex-col z-10">
+                                                <div className="px-3 py-2 border-b border-gray-600">
+                                                    <p className="text-gray-300 truncate">{match.participants[0] || 'TBD'}</p>
                                                 </div>
-                                            )}
-                                        </>
-                                    )}
-                                </div>
-                            ))}
+                                                <div className="px-3 py-2">
+                                                    <p className="text-gray-300 truncate">{match.participants[1] || 'BYE'}</p>
+                                                </div>
+                                            </div>
+                                        </div>
+                                        
+                                        {/* Connector lines to the next round */}
+                                        {roundIndex < rounds.length - 1 && (
+                                            <>
+                                                {/* Horizontal line coming out of the match box */}
+                                                <div className="absolute top-1/2 -right-6 w-6 h-px bg-gray-500 z-0"></div>
+                                                
+                                                {/* Vertical line connecting pairs & horizontal line to next match */}
+                                                {matchIndex % 2 === 0 && (
+                                                    <div
+                                                        className="absolute w-px bg-gray-500 z-0"
+                                                        style={{
+                                                            height: `calc(100% + ${gapRem}rem)`, // Height of one box + the gap
+                                                            top: '50%',
+                                                            right: '-1.5rem',
+                                                        }}
+                                                    >
+                                                        {/* Horizontal line going to the next round's match */}
+                                                        <div className="absolute top-1/2 left-0 w-6 h-px bg-gray-500"></div>
+                                                    </div>
+                                                )}
+                                            </>
+                                        )}
+                                    </div>
+                                ))}
+                            </div>
                         </div>
-                    </div>
-                ))}
+                    );
+                })}
             </div>
         </div>
     );
