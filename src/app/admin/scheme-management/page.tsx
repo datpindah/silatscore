@@ -155,9 +155,8 @@ const handleGenerateTandingScheme = () => {
         }
 
         const bracketSize = Math.pow(2, Math.ceil(Math.log2(numParticipants)));
-        const numByes = bracketSize - numParticipants;
-
-        // Standard seeding arrays for different bracket sizes
+        
+        // Standard seeding orders for different bracket sizes
         const seedingOrders: { [key: number]: number[] } = {
             2: [1, 2],
             4: [1, 4, 3, 2],
@@ -202,17 +201,22 @@ const handleGenerateTandingScheme = () => {
                 status: 'PENDING'
             };
 
-            // Handle BYEs
-            if (!p1) match.winnerId = p2!.id;
-            if (!p2) match.winnerId = p1!.id;
+            // Safely handle BYEs
+            if (p1 && !p2) {
+                match.winnerId = p1.id;
+            } else if (!p1 && p2) {
+                match.winnerId = p2.id;
+            }
             
             currentMatches.push(match);
         }
         
-        let roundName = `Babak ${bracketSize}`;
-        if (bracketSize === 2) roundName = "Final";
-        else if (bracketSize === 4) roundName = "Semi Final";
-        else if (bracketSize === 8) roundName = "Perempat Final";
+        const firstRoundMatchesCount = currentMatches.length;
+        let roundName = `Babak Penyisihan`;
+        if (firstRoundMatchesCount === 1) roundName = "Final";
+        else if (firstRoundMatchesCount === 2) roundName = "Semi Final";
+        else if (firstRoundMatchesCount === 4) roundName = "Perempat Final";
+        else roundName = `Babak ${firstRoundMatchesCount * 2}`;
 
         rounds.push({
             roundNumber: 1,
@@ -229,8 +233,15 @@ const handleGenerateTandingScheme = () => {
                 const parentMatch1 = currentMatches[i];
                 const parentMatch2 = currentMatches[i+1];
 
-                const winner1 = parentMatch1.winnerId ? (participantsBySeed.get(parseInt(parentMatch1.winnerId.split('-')[1])) || null) : null;
-                const winner2 = parentMatch2.winnerId ? (participantsBySeed.get(parseInt(parentMatch2.winnerId.split('-')[1])) || null) : null;
+                const getWinnerParticipant = (match: SchemeMatch): SchemeParticipant | null => {
+                    if (!match.winnerId) return null;
+                    if (match.participant1?.id === match.winnerId) return match.participant1;
+                    if (match.participant2?.id === match.winnerId) return match.participant2;
+                    return null;
+                };
+
+                const winner1 = getWinnerParticipant(parentMatch1);
+                const winner2 = getWinnerParticipant(parentMatch2);
 
                 const match: SchemeMatch = {
                     id: `r${roundNum}-m${globalMatchCounter}`,
@@ -244,6 +255,13 @@ const handleGenerateTandingScheme = () => {
                     globalMatchNumber: globalMatchCounter,
                     status: 'PENDING'
                 };
+                
+                // Handle byes in subsequent rounds
+                if (winner1 && !winner2) {
+                    match.winnerId = winner1.id;
+                } else if (!winner1 && winner2) {
+                    match.winnerId = winner2.id;
+                }
 
                 parentMatch1.nextMatchId = match.id;
                 parentMatch2.nextMatchId = match.id;
@@ -251,10 +269,11 @@ const handleGenerateTandingScheme = () => {
                 nextRoundMatches.push(match);
             }
             
-            if (nextRoundMatches.length === 1) roundName = "Final";
-            else if (nextRoundMatches.length === 2) roundName = "Semi Final";
-            else if (nextRoundMatches.length === 4) roundName = "Perempat Final";
-            else roundName = `Babak ${nextRoundMatches.length * 2}`;
+            const matchesInThisRound = nextRoundMatches.length;
+            if (matchesInThisRound === 1) roundName = "Final";
+            else if (matchesInThisRound === 2) roundName = "Semi Final";
+            else if (matchesInThisRound === 4) roundName = "Perempat Final";
+            else roundName = `Babak ${matchesInThisRound * 2}`;
 
             rounds.push({
                 roundNumber: roundNum,
