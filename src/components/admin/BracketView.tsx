@@ -20,11 +20,38 @@ function MatchBox({ match, onSetWinner, isFinal = false }: MatchBoxProps) {
     onSetWinner(match.id, match.winnerId === participant.id ? null : participant.id);
   };
   
+  const finalWinner = match.winnerId && (match.participant1?.id === match.winnerId ? match.participant1 : match.participant2);
+
+  if (isFinal && finalWinner) {
+    return (
+       <div className="flex flex-col items-center justify-center h-full w-full">
+         <Crown className="w-8 h-8 text-yellow-500 mb-1" />
+         <p className="text-lg font-bold truncate">{finalWinner.name}</p>
+         <p className="text-sm text-muted-foreground truncate">{finalWinner.contingent}</p>
+       </div>
+    );
+  }
+
+  // If a participant has a BYE, they are the automatic winner.
+  // Render them in a single, highlighted box for a cleaner look.
+  const isByeMatch = (match.participant1 && !match.participant2) || (!match.participant1 && match.participant2);
+  if (isByeMatch) {
+    const winner = match.participant1 || match.participant2;
+    if (winner) {
+      return (
+        <div className="bg-accent text-accent-foreground border border-border rounded-md shadow-sm w-full h-full flex flex-col justify-center text-sm p-2">
+          <p className="text-xs font-semibold truncate leading-tight">{winner.name}</p>
+          <p className="text-xs opacity-90 truncate leading-tight">{winner.contingent}</p>
+        </div>
+      );
+    }
+  }
+
   const renderParticipant = (participant: SchemeParticipant | null) => {
     if (!participant) {
       return (
         <div className="italic text-muted-foreground px-2 py-1 h-8 flex items-center">
-          BYE
+          TBD
         </div>
       );
     }
@@ -48,17 +75,6 @@ function MatchBox({ match, onSetWinner, isFinal = false }: MatchBoxProps) {
     );
   };
   
-  const finalWinner = match.winnerId && (match.participant1?.id === match.winnerId ? match.participant1 : match.participant2);
-
-  if (isFinal && finalWinner) {
-    return (
-       <div className="flex flex-col items-center justify-center h-full w-full">
-         <Crown className="w-8 h-8 text-yellow-500 mb-1" />
-         <p className="text-lg font-bold truncate">{finalWinner.name}</p>
-         <p className="text-sm text-muted-foreground truncate">{finalWinner.contingent}</p>
-       </div>
-    );
-  }
 
   return (
     <div className="bg-card text-card-foreground border border-border rounded-md shadow-sm w-full h-full flex flex-col justify-around text-sm">
