@@ -57,11 +57,11 @@ You MUST follow these specific rules for the number of participants. The input l
 3.  Participants who get a "bye" are always taken from the top of the input list ('participantList').
 4.  The remaining participants play in the qualification round, paired sequentially from the top of their sub-list.
 5.  In the main bracket, the "bye" participants are seeded at the top. They will play against the winners of the qualification round or against other "bye" participants if there are more byes than qualification winners.
-6.  The `pesertaLolosLangsung` array is identical to the `pesertaBye` array.
+6.  The 'pesertaLolosLangsung' array is identical to the 'pesertaBye' array.
 
 **Specific Scenarios (MUST be followed exactly):**
 
-*   **9 Peserta (Target: 8 Besar):** 7 byes, 2 kualifikasi (1 match). The top 7 participants are `pesertaBye`. The remaining 2 are `pesertaKualifikasi`. In the 8-person bracket, 6 of the bye participants play each other, and 1 bye participant plays the winner of the qualification match.
+*   **9 Peserta (Target: 8 Besar):** 7 byes, 2 kualifikasi (1 match). The top 7 participants are 'pesertaBye'. The remaining 2 are 'pesertaKualifikasi'. In the 8-person bracket, 6 of the bye participants play each other, and 1 bye participant plays the winner of the qualification match.
 *   **10 Peserta (Target: 8 Besar):** 6 byes, 4 kualifikasi (2 matches). Top 2 byes await winners. Other 4 byes play each other.
 *   **11 Peserta (Target: 8 Besar):** 5 byes, 6 kualifikasi (3 matches). Top 3 byes await winners. Other 2 byes play each other.
 *   **12 Peserta (Target: 8 Besar):** 4 byes, 8 kualifikasi (4 matches). The 4 byes await the 4 winners.
@@ -88,8 +88,8 @@ You MUST follow these specific rules for the number of participants. The input l
 You MUST return the output ONLY in the specified JSON format. Do not add any extra explanations or text.
 
 Here is the input data:
-- `participantCount`: {{participantCount}}
-- `participantList`: {{#each participantList}}"{{this}}"{{#unless @last}}, {{/unless}}{{/each}}
+- 'participantCount': {{participantCount}}
+- 'participantList': {{#each participantList}}"{{this}}"{{#unless @last}}, {{/unless}}{{/each}}
 `,
 });
 
