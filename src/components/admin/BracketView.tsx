@@ -80,20 +80,30 @@ export function BracketView({ data }: { data: BracketGeneratorOutput | null }) {
         return null;
     }
 
-    const baseGapRem = 2; // The gap between match boxes in the first round
+    const MATCHBOX_HEIGHT_REM = 4.5; // Corresponds to h-18
+    const INITIAL_GAP_REM = 2;
+    const CONNECTOR_WIDTH_REM = 1.5; // w-6
+
+    // Calculate spacing for all rounds first
+    const roundSpacings = rounds.reduce((acc, _, roundIndex) => {
+        if (roundIndex === 0) {
+            acc.push({ gap: INITIAL_GAP_REM, paddingTop: 0 });
+        } else {
+            const prevSpacing = acc[roundIndex - 1];
+            const prevGap = prevSpacing.gap;
+            const paddingTop = (MATCHBOX_HEIGHT_REM + prevGap) / 2;
+            const gap = prevGap + MATCHBOX_HEIGHT_REM;
+            acc.push({ gap, paddingTop });
+        }
+        return acc;
+    }, [] as { gap: number; paddingTop: number }[]);
+
 
     return (
         <div className="bg-gray-800 text-white p-4 md:p-8 rounded-lg mt-6 overflow-x-auto font-sans">
             <div className="flex justify-start items-start min-w-max space-x-12">
                 {rounds.map((round, roundIndex) => {
-                    // The gap between matches doubles each round to create the tree effect
-                    const gapRem = baseGapRem * Math.pow(2, roundIndex + 1);
-                    
-                    // Add padding to later rounds to vertically align them with the center of the previous round's pairs
-                    // 2.25rem is approx half the matchbox height. We add half of the previous round's gap.
-                    const paddingTopRem = roundIndex > 0
-                        ? (baseGapRem * Math.pow(2, roundIndex) / 2) + 2.25 
-                        : 0;
+                    const { gap, paddingTop } = roundSpacings[roundIndex];
 
                     return (
                         <div key={round.name} className="relative flex flex-col w-56 flex-shrink-0 pt-10">
@@ -101,17 +111,19 @@ export function BracketView({ data }: { data: BracketGeneratorOutput | null }) {
                             <div 
                                 className="relative flex flex-col"
                                 style={{
-                                    gap: `${gapRem}rem`,
-                                    paddingTop: `${paddingTopRem}rem`
+                                    gap: `${gap}rem`,
+                                    paddingTop: `${paddingTop}rem`
                                 }}
                             >
                                 {round.matches.map((match, matchIndex) => (
-                                    <div key={match.id} className="relative">
+                                    <div key={match.id} className="relative h-18">
                                         <div className="relative">
+                                            {/* Match Number Badge */}
                                             <div className="absolute top-1/2 -left-10 transform -translate-y-1/2 bg-gray-600 text-white text-xs rounded-full h-6 w-6 flex items-center justify-center border-2 border-gray-500 z-20">
                                                 {getMatchNumber(match.id)}
                                             </div>
-                                            <div className="bg-gray-700 rounded-md shadow-lg w-full border border-gray-600 text-sm flex flex-col z-10">
+                                            {/* Match Box */}
+                                            <div className="bg-gray-700 rounded-md shadow-lg w-full h-full border border-gray-600 text-sm flex flex-col justify-center z-10">
                                                 <div className="px-3 py-2 border-b border-gray-600">
                                                     <p className="text-gray-300 truncate">{match.participants[0] || 'TBD'}</p>
                                                 </div>
@@ -125,20 +137,31 @@ export function BracketView({ data }: { data: BracketGeneratorOutput | null }) {
                                         {roundIndex < rounds.length - 1 && (
                                             <>
                                                 {/* Horizontal line coming out of the match box */}
-                                                <div className="absolute top-1/2 -right-6 w-6 h-px bg-gray-500 z-0"></div>
+                                                <div 
+                                                    className="absolute top-1/2 h-px bg-gray-500 z-0"
+                                                    style={{
+                                                        width: `${CONNECTOR_WIDTH_REM}rem`,
+                                                        right: `-${CONNECTOR_WIDTH_REM}rem`
+                                                    }}
+                                                />
                                                 
                                                 {/* Vertical line connecting pairs & horizontal line to next match */}
                                                 {matchIndex % 2 === 0 && (
                                                     <div
                                                         className="absolute w-px bg-gray-500 z-0"
                                                         style={{
-                                                            height: `calc(100% + ${gapRem}rem)`, // Height of one box + the gap
+                                                            height: `calc(100% + ${gap}rem)`, // Height of one box + the gap
                                                             top: '50%',
-                                                            right: '-1.5rem',
+                                                            right: `-${CONNECTOR_WIDTH_REM}rem`,
                                                         }}
                                                     >
                                                         {/* Horizontal line going to the next round's match */}
-                                                        <div className="absolute top-1/2 left-0 w-6 h-px bg-gray-500"></div>
+                                                        <div 
+                                                            className="absolute top-1/2 left-0 h-px bg-gray-500"
+                                                            style={{
+                                                                width: `${CONNECTOR_WIDTH_REM}rem`
+                                                            }}
+                                                        />
                                                     </div>
                                                 )}
                                             </>
