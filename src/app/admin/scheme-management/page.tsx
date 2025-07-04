@@ -133,144 +133,144 @@ export default function SchemeManagementPage() {
     reader.readAsArrayBuffer(file);
   };
   
-  const handleGenerateTandingScheme = () => {
+const handleGenerateTandingScheme = () => {
     setIsLoading(true);
     setGeneratedScheme(null);
 
     try {
-        const finalParticipants: SchemeParticipant[] = tandingParticipants
-            .filter(p => p.name.trim() && p.contingent.trim())
-            .map((p, index) => ({
-                id: `p-${index + 1}-${p.name.replace(/\s+/g, '-')}`,
-                name: p.name,
-                contingent: p.contingent,
-                seed: index + 1,
-            }));
+      const finalParticipants: SchemeParticipant[] = tandingParticipants
+        .filter(p => p.name.trim() && p.contingent.trim())
+        .map((p, index) => ({
+          id: `p-${index + 1}-${p.name.replace(/\s+/g, '-')}`,
+          name: p.name,
+          contingent: p.contingent,
+          seed: index + 1,
+        }));
 
-        if (finalParticipants.length < 2) {
-            alert("Dibutuhkan minimal 2 peserta untuk membuat bagan.");
-            setIsLoading(false);
-            return;
-        }
+      if (finalParticipants.length < 2) {
+        alert("Dibutuhkan minimal 2 peserta untuk membuat bagan.");
+        setIsLoading(false);
+        return;
+      }
+      
+      const numParticipants = finalParticipants.length;
+      const bracketSize = Math.pow(2, Math.ceil(Math.log2(numParticipants)));
+      const numByes = bracketSize - numParticipants;
+      const numPrelimMatches = numParticipants - numByes;
 
-        const numParticipants = finalParticipants.length;
-        const bracketSize = Math.pow(2, Math.ceil(Math.log2(numParticipants)));
-        const numPrelimMatches = numParticipants - (bracketSize / 2);
-        
-        const byeParticipants = finalParticipants.slice(0, (bracketSize / 2) - numPrelimMatches);
-        const prelimParticipants = finalParticipants.slice((bracketSize / 2) - numPrelimMatches);
+      const byeParticipants = finalParticipants.slice(0, numByes);
+      const prelimParticipants = finalParticipants.slice(numByes);
 
-        const allRounds: SchemeRound[] = [];
-        let globalMatchId = 1;
-        let placeholdersForNextRound: (SchemeMatch | SchemeParticipant)[] = [];
+      const allRounds: SchemeRound[] = [];
+      let globalMatchIdCounter = 1;
 
-        // 1. Create Preliminary Round if needed
-        if (numPrelimMatches > 0) {
-            const prelimRound: SchemeRound = {
-                roundNumber: 1,
-                name: "Babak Penyisihan",
-                matches: []
-            };
-
-            for (let i = 0; i < numPrelimMatches; i++) {
-                const p1 = prelimParticipants[i * 2];
-                const p2 = prelimParticipants[i * 2 + 1];
-
-                const match: SchemeMatch = {
-                    id: `r1-m${globalMatchId}`,
-                    round: 1,
-                    matchNumber: globalMatchId,
-                    participant1: p1,
-                    participant2: p2,
-                    winnerId: null, // No auto-winner
-                    nextMatchId: null,
-                    matchInternalId: `match-r1-m${globalMatchId}-${Date.now()}`,
-                    globalMatchNumber: globalMatchId,
-                    status: 'PENDING'
-                };
-                prelimRound.matches.push(match);
-                placeholdersForNextRound.push(match);
-                globalMatchId++;
-            }
-            allRounds.push(prelimRound);
-        }
-
-        // 2. Prepare entrants for the main bracket
-        let mainBracketEntrants: (SchemeParticipant | SchemeMatch)[] = [...byeParticipants, ...placeholdersForNextRound];
-        
-        let roundCounter = (numPrelimMatches > 0) ? 2 : 1;
-
-        // 3. Generate main bracket rounds
-        while (mainBracketEntrants.length > 1) {
-            const roundName =
-                mainBracketEntrants.length === 2 ? "Final" :
-                mainBracketEntrants.length === 4 ? "Semi Final" :
-                mainBracketEntrants.length === 8 ? "Perempat Final" :
-                mainBracketEntrants.length === 16 ? "Babak 16 Besar" :
-                `Babak ${mainBracketEntrants.length}`;
-            
-            const round: SchemeRound = {
-                roundNumber: roundCounter,
-                name: roundName,
-                matches: []
-            };
-
-            const nextRoundPlaceholders: SchemeMatch[] = [];
-
-            for (let i = 0; i < mainBracketEntrants.length; i += 2) {
-                const item1 = mainBracketEntrants[i];
-                const item2 = mainBracketEntrants[i + 1];
-
-                const match: SchemeMatch = {
-                    id: `r${roundCounter}-m${globalMatchId}`,
-                    round: roundCounter,
-                    matchNumber: globalMatchId,
-                    participant1: (item1 && 'name' in item1) ? item1 : null,
-                    participant2: (item2 && 'name' in item2) ? item2 : null,
-                    winnerId: null, // No auto-winner
-                    nextMatchId: null,
-                    matchInternalId: `match-r${roundCounter}-m${globalMatchId}-${Date.now()}`,
-                    globalMatchNumber: globalMatchId,
-                    status: 'PENDING'
-                };
-
-                // Link previous matches to this new match
-                if (item1 && 'matchNumber' in item1) (item1 as SchemeMatch).nextMatchId = match.id;
-                if (item2 && 'matchNumber' in item2) (item2 as SchemeMatch).nextMatchId = match.id;
-
-                round.matches.push(match);
-                nextRoundPlaceholders.push(match);
-                globalMatchId++;
-            }
-
-            allRounds.push(round);
-            mainBracketEntrants = nextRoundPlaceholders;
-            roundCounter++;
-        }
-
-        const newScheme: Scheme = {
-            id: `tanding-${tandingAge.replace(/\s+/g, '_').toLowerCase()}-${tandingClass.replace(/\s+/g, '_').toLowerCase()}-${Date.now()}`,
-            type: 'Tanding',
-            ageCategory: tandingAge,
-            tandingClass: tandingClass.trim(),
-            gelanggangs: gelanggangs.split(',').map(g => g.trim()).filter(Boolean),
-            date: eventDate,
-            participantCount: numParticipants,
-            participants: finalParticipants,
-            rounds: allRounds,
-            createdAt: Timestamp.now(),
+      let nextRoundEntrants: (SchemeParticipant | SchemeMatch)[] = [];
+      
+      // --- Round 1: Preliminary Matches ---
+      if (numPrelimMatches > 0) {
+        const prelimRound: SchemeRound = {
+          roundNumber: 1,
+          name: `Babak Penyisihan (${bracketSize})`,
+          matches: [],
         };
 
-        setGeneratedScheme(newScheme);
-        setIsSchemeSaved(false);
-        setSchedulesGenerated(false);
-        alert(`Bagan Tanding untuk ${tandingClass} (${tandingAge}) berhasil dibuat!`);
+        for (let i = 0; i < numPrelimMatches; i += 2) {
+          const match: SchemeMatch = {
+            id: `r1-m${prelimRound.matches.length + 1}`,
+            round: 1,
+            matchNumber: prelimRound.matches.length + 1,
+            participant1: prelimParticipants[i],
+            participant2: prelimParticipants[i + 1] || null, // Handle odd number of prelims
+            winnerId: null,
+            nextMatchId: null,
+            matchInternalId: `match-r1-m${prelimRound.matches.length + 1}-${Date.now()}`,
+            globalMatchNumber: globalMatchIdCounter++,
+            status: 'PENDING',
+          };
+          prelimRound.matches.push(match);
+        }
+        allRounds.push(prelimRound);
+        // Winners of prelims + bye participants go to the next round
+        nextRoundEntrants = [...byeParticipants, ...prelimRound.matches];
+      } else {
+        // No prelims, all participants go to the first main round
+        nextRoundEntrants = [...finalParticipants];
+      }
+
+      // --- Subsequent Rounds ---
+      let roundCounter = (numPrelimMatches > 0) ? 2 : 1;
+      while (nextRoundEntrants.length > 1) {
+        const currentRoundMatches: SchemeMatch[] = [];
+        const entrantsForVeryNextRound: SchemeMatch[] = [];
+
+        for (let i = 0; i < nextRoundEntrants.length; i += 2) {
+          const entrant1 = nextRoundEntrants[i];
+          const entrant2 = nextRoundEntrants[i + 1] || null;
+
+          const match: SchemeMatch = {
+            id: `r${roundCounter}-m${currentRoundMatches.length + 1}`,
+            round: roundCounter,
+            matchNumber: currentRoundMatches.length + 1,
+            participant1: entrant1 && 'name' in entrant1 ? entrant1 : null,
+            participant2: entrant2 && 'name' in entrant2 ? entrant2 : null,
+            winnerId: null,
+            nextMatchId: null,
+            matchInternalId: `match-r${roundCounter}-m${currentRoundMatches.length + 1}-${Date.now()}`,
+            globalMatchNumber: globalMatchIdCounter++,
+            status: 'PENDING',
+          };
+
+          // Link previous round matches to this new match
+          if (entrant1 && 'matchNumber' in entrant1) {
+            entrant1.nextMatchId = match.id;
+          }
+          if (entrant2 && 'matchNumber' in entrant2) {
+            entrant2.nextMatchId = match.id;
+          }
+          
+          currentRoundMatches.push(match);
+          entrantsForVeryNextRound.push(match);
+        }
+        
+        const roundName =
+          currentRoundMatches.length === 1 ? "Final" :
+          currentRoundMatches.length === 2 ? "Semi Final" :
+          currentRoundMatches.length === 4 ? "Perempat Final" :
+          `Babak ${currentRoundMatches.length * 2}`;
+
+        allRounds.push({
+          roundNumber: roundCounter,
+          name: roundName,
+          matches: currentRoundMatches,
+        });
+
+        nextRoundEntrants = entrantsForVeryNextRound;
+        roundCounter++;
+      }
+
+      const newScheme: Scheme = {
+        id: `tanding-${tandingAge.replace(/\s+/g, '_').toLowerCase()}-${tandingClass.replace(/\s+/g, '_').toLowerCase()}-${Date.now()}`,
+        type: 'Tanding',
+        ageCategory: tandingAge,
+        tandingClass: tandingClass.trim(),
+        gelanggangs: gelanggangs.split(',').map(g => g.trim()).filter(Boolean),
+        date: eventDate,
+        participantCount: numParticipants,
+        participants: finalParticipants,
+        rounds: allRounds,
+        createdAt: Timestamp.now(),
+      };
+      
+      setGeneratedScheme(newScheme);
+      setIsSchemeSaved(false);
+      setSchedulesGenerated(false);
+      alert(`Bagan Tanding untuk ${tandingClass} (${tandingAge}) berhasil dibuat!`);
 
     } catch (err) {
-        console.error("Error generating Tanding scheme:", err);
-        alert(`Gagal membuat skema: ${err instanceof Error ? err.message : String(err)}`);
+      console.error("Error generating Tanding scheme:", err);
+      alert(`Gagal membuat skema: ${err instanceof Error ? err.message : String(err)}`);
     } finally {
-        setIsLoading(false);
+      setIsLoading(false);
     }
   };
   
