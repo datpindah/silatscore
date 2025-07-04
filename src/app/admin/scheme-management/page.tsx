@@ -10,6 +10,7 @@ import { Alert, AlertTitle, AlertDescription } from '@/components/ui/alert';
 import { Loader2, AlertTriangle, Wand2, Copy, Upload, Minus, Plus } from 'lucide-react';
 import { generateBracket, type BracketGeneratorInput, type BracketGeneratorOutput } from '@/ai/flows/bracket-generator-flow';
 import * as XLSX from 'xlsx';
+import { BracketView } from '@/components/admin/BracketView';
 
 export default function BracketGeneratorPage() {
   const [participantCount, setParticipantCount] = useState(8);
@@ -120,13 +121,6 @@ export default function BracketGeneratorPage() {
     }
   };
 
-  const handleCopyJson = () => {
-    if (bracketData) {
-      navigator.clipboard.writeText(JSON.stringify(bracketData, null, 2));
-      alert('Struktur JSON bagan disalin ke clipboard!');
-    }
-  };
-
   return (
     <>
       <PageTitle title="Generator Bagan Pertandingan" description="Buat struktur bagan sistem gugur secara otomatis berdasarkan daftar peserta." />
@@ -206,26 +200,15 @@ export default function BracketGeneratorPage() {
         </Alert>
       )}
 
+      {isLoading && (
+        <div className="mt-6 text-center">
+            <Loader2 className="h-8 w-8 animate-spin text-primary" />
+            <p className="text-muted-foreground">Membuat bagan...</p>
+        </div>
+      )}
+
       {bracketData && (
-        <Card className="mt-6">
-          <CardHeader>
-            <div className="flex justify-between items-center">
-              <div>
-                <CardTitle>Hasil Struktur Bagan (JSON)</CardTitle>
-                <CardDescription>Berikut adalah struktur data bagan yang dihasilkan. Anda bisa menyalinnya untuk digunakan lebih lanjut.</CardDescription>
-              </div>
-              <Button variant="outline" size="icon" onClick={handleCopyJson}>
-                <Copy className="h-4 w-4" />
-                <span className="sr-only">Salin JSON</span>
-              </Button>
-            </div>
-          </CardHeader>
-          <CardContent>
-            <pre className="bg-muted p-4 rounded-md text-sm overflow-x-auto">
-              <code>{JSON.stringify(bracketData, null, 2)}</code>
-            </pre>
-          </CardContent>
-        </Card>
+        <BracketView data={bracketData} />
       )}
     </>
   );
