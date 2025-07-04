@@ -140,8 +140,8 @@ export default function SchemeManagementPage() {
         return;
     }
     const finalParticipants = tandingParticipants.filter(p => p.name.trim() && p.contingent.trim());
-    if (finalParticipants.length < 3) {
-        alert("Dibutuhkan minimal 3 peserta yang valid.");
+    if (finalParticipants.length < 2) {
+        alert("Dibutuhkan minimal 2 peserta yang valid.");
         return;
     }
 
@@ -151,99 +151,138 @@ export default function SchemeManagementPage() {
     // Simulate processing delay for complex brackets
     setTimeout(() => {
         try {
-            const participantsWithSeed: SchemeParticipant[] = finalParticipants.map((p, index) => ({
-              id: `p-${index + 1}`,
+            const participants: SchemeParticipant[] = finalParticipants.map((p, index) => ({
+              id: `p-${index + 1}-${p.name.replace(/\s+/g, '-')}`,
               name: p.name,
               contingent: p.contingent,
               seed: index + 1
             }));
 
-            const numParticipants = participantsWithSeed.length;
+            const numParticipants = participants.length;
             const bracketSize = Math.pow(2, Math.ceil(Math.log2(numParticipants)));
             const numByes = bracketSize - numParticipants;
             const numPlayInMatches = numParticipants - bracketSize / 2;
 
             const allRounds: SchemeRound[] = [];
-            let matchCounter = 1;
+            let globalMatchCounter = 1;
 
-            let currentCompetitors: (SchemeParticipant | null)[] = [...participantsWithSeed];
+            let round1Matches: SchemeMatch[] = [];
             
-            // --- Round 1: Play-in matches for non-power-of-2 numbers ---
+            // Generate play-in matches if necessary
             if (numPlayInMatches > 0) {
-              const playInRound: SchemeRound = { roundNumber: 1, name: "Babak Penyisihan", matches: [] };
-              const byes = participantsWithSeed.slice(0, numByes);
-              const players = participantsWithSeed.slice(numByes);
-              
-              const nextRoundCompetitors: (SchemeParticipant | null)[] = [...byes];
-
-              for (let i = 0; i < numPlayInMatches; i++) {
-                const match: SchemeMatch = {
-                  id: `r1-m${i + 1}`,
-                  round: 1,
-                  matchNumber: matchCounter++,
-                  participant1: players[i],
-                  participant2: players[players.length - 1 - i],
-                  winnerId: null,
-                  nextMatchId: null // will be set later
-                };
-                playInRound.matches.push(match);
-                nextRoundCompetitors.push(null); // Placeholder for winner
-              }
-              allRounds.push(playInRound);
-              currentCompetitors = nextRoundCompetitors;
+                const playInParticipants = participants.slice(numByes * 2);
+                for (let i = 0; i < numPlayInMatches; i++) {
+                    const match: SchemeMatch = {
+                        id: `r0-m${i + 1}`,
+                        round: 0, // Play-in round
+                        matchNumber: globalMatchCounter++,
+                        participant1: playInParticipants[i],
+                        participant2: playInParticipants[playInParticipants.length - 1 - i],
+                        winnerId: null,
+                        nextMatchId: null, // Will be linked later
+                    };
+                    round1Matches.push(match);
+                }
             }
 
-            // --- Subsequent rounds ---
-            let roundNum = allRounds.length + 1;
-            while(currentCompetitors.length > 1) {
-              const nextRoundCompetitors: (SchemeParticipant | null)[] = [];
-              const roundMatches: SchemeMatch[] = [];
-              
-              for (let i = 0; i < currentCompetitors.length; i += 2) {
-                const match: SchemeMatch = {
-                  id: `r${roundNum}-m${(i/2) + 1}`,
-                  round: roundNum,
-                  matchNumber: matchCounter++,
-                  participant1: currentCompetitors[i],
-                  participant2: currentCompetitors[i+1],
-                  winnerId: null,
-                  nextMatchId: null
-                };
-                
-                // Handle BYEs automatically
-                if(match.participant2 === undefined) { // Odd number of competitors, last one gets a bye
-                  match.participant2 = null;
-                }
-                if (match.participant2 === null) {
-                  match.winnerId = match.participant1?.id ?? null;
-                }
-                
-                roundMatches.push(match);
-                nextRoundCompetitors.push(null); // Placeholder for the winner
-              }
-              
-              let roundName;
-              switch (roundMatches.length) {
-                case 1: roundName = "Final"; break;
-                case 2: roundName = "Semi Final"; break;
-                case 4: roundName = "Perempat Final"; break;
-                case 8: roundName = "Babak 16 Besar"; break;
-                case 16: roundName = "Babak 32 Besar"; break;
-                default: roundName = `Babak ${roundMatches.length * 2} Besar`;
-              }
-
-              allRounds.push({ roundNumber: roundNum, name: roundName, matches: roundMatches });
-              currentCompetitors = nextRoundCompetitors;
-              roundNum++;
+            // Generate main bracket matches
+            const mainDrawSize = bracketSize / 2;
+            let currentRoundMatches: (SchemeParticipant | null)[] = [];
+            
+            // Add BYE participants and winners of play-in rounds
+            const byes = participants.slice(0, numByes);
+            byes.forEach(p => currentRoundMatches.push(p));
+            for(let i=0; i< numPlayInMatches; i++){
+                currentRoundMatches.push(null); // Placeholder for play-in winners
             }
 
-            // Link matches to their next match
-            for (let i = 0; i < allRounds.length - 1; i++) {
-              const currentRound = allRounds[i];
-              const nextRound = allRounds[i+1];
-              for(let j = 0; j < currentRound.matches.length; j++){
-                currentRound.matches[j].nextMatchId = nextRound.matches[Math.floor(j/2)].id;
+            let roundNum = 1;
+            while(currentRoundMatches.length < bracketSize) {
+                 currentRoundMatches.push(null);
+            }
+
+            // Create Round 1 from byes and play-in placeholders
+            const firstProperRound: SchemeMatch[] = [];
+            const standardSeeding: Record<number, number[]> = {
+              4: [1,4,2,3],
+              8: [1,8,4,5,2,7,3,6],
+              16: [1,16,8,9,5,12,4,13,2,15,7,10,6,11,3,14],
+              32: [1,32,16,17,8,25,9,24,5,28,12,21,4,29,13,20,2,31,15,18,7,26,10,23,6,27,11,22,3,30,14,19],
+            };
+            const seedOrder = standardSeeding[bracketSize as keyof typeof standardSeeding];
+            
+            const seededParticipants: (SchemeParticipant|null)[] = [];
+            const playInWinners = Array(numPlayInMatches).fill(null).map((_, i) => `winner-r0-m${i+1}`);
+            const initialCompetitors = [...byes, ...playInWinners];
+            seedOrder.forEach(seed => {
+                const competitor = initialCompetitors[seed -1];
+                if(competitor){
+                    seededParticipants.push(participants.find(p => p.id === competitor.id) || null)
+                } else {
+                     seededParticipants.push(null); // Should be a placeholder
+                }
+            });
+
+
+            const finalSeededParticipants: (SchemeParticipant|null)[] = seedOrder.map(seed => {
+              if (seed <= byes.length) {
+                return byes[seed - 1];
               }
+              const playInIndex = seed - byes.length - 1;
+              if (playInIndex < numPlayInMatches * 2) {
+                 return participants[numByes + playInIndex];
+              }
+              return null;
+            });
+
+            const round1Participants = finalSeededParticipants.slice(0, bracketSize);
+            
+            for(let i = 0; i < bracketSize; i += 2) {
+                const p1 = round1Participants[i];
+                const p2 = round1Participants[i+1];
+                if (p1 || p2) { // Create match if at least one participant exists
+                    const match: SchemeMatch = {
+                       id: `r1-m${globalMatchCounter}`,
+                       round: 1,
+                       matchNumber: globalMatchCounter++,
+                       participant1: p1,
+                       participant2: p2,
+                       winnerId: p2 === null ? p1?.id ?? null : null, // Auto-win for byes
+                       nextMatchId: null
+                    };
+                    firstProperRound.push(match);
+                }
+            }
+            if(playInMatches.length > 0) {
+               allRounds.push({roundNumber: 0, name: "Babak Penyisihan", matches: playInMatches});
+            }
+            allRounds.push({ roundNumber: 1, name: `Babak ${bracketSize}`, matches: firstProperRound});
+
+
+            let previousRoundMatches = allRounds[allRounds.length - 1].matches;
+            roundNum = 2;
+            while(previousRoundMatches.length > 1) {
+                const nextRoundMatches: SchemeMatch[] = [];
+                for(let i=0; i < previousRoundMatches.length; i+=2){
+                    const match: SchemeMatch = {
+                        id: `r${roundNum}-m${globalMatchCounter}`,
+                        round: roundNum,
+                        matchNumber: globalMatchCounter++,
+                        participant1: null,
+                        participant2: null,
+                        winnerId: null,
+                        nextMatchId: null
+                    };
+                    previousRoundMatches[i].nextMatchId = match.id;
+                    if(previousRoundMatches[i+1]) {
+                      previousRoundMatches[i+1].nextMatchId = match.id;
+                    }
+                    nextRoundMatches.push(match);
+                }
+                const roundName = nextRoundMatches.length === 1 ? "Final" : nextRoundMatches.length === 2 ? "Semi Final" : nextRoundMatches.length === 4 ? "Perempat Final" : `Babak ${nextRoundMatches.length * 2}`;
+                allRounds.push({roundNumber: roundNum, name: roundName, matches: nextRoundMatches});
+                previousRoundMatches = nextRoundMatches;
+                roundNum++;
             }
             
             const newScheme: Scheme = {
@@ -254,7 +293,7 @@ export default function SchemeManagementPage() {
                 gelanggangs: gelanggangList,
                 date: eventDate,
                 participantCount: numParticipants,
-                participants: participantsWithSeed,
+                participants: participants,
                 rounds: allRounds,
                 createdAt: Timestamp.now(),
             };
@@ -459,7 +498,7 @@ export default function SchemeManagementPage() {
                 <FormField id="tandingClass" label="Nama Kelas Tanding" value={tandingClass} onChange={(e) => setTandingClass(e.target.value)} placeholder="cth: Kelas A Putra" disabled={isLoading} required/>
                 
                 <div>
-                  <Label htmlFor="tandingParticipants">Jumlah Peserta (3-32)</Label>
+                  <Label htmlFor="tandingParticipants">Jumlah Peserta (2-32)</Label>
                   <div className="flex items-center gap-2">
                     <Button variant="outline" size="icon" onClick={() => handleParticipantCountChange(tandingParticipants.length - 1, setTandingParticipants)} disabled={isLoading}>
                       <Minus className="h-4 w-4" />
@@ -614,3 +653,4 @@ export default function SchemeManagementPage() {
     </>
   );
 }
+
