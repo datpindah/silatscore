@@ -333,41 +333,37 @@ export interface SchemeParticipant {
   id: string;
   name: string;
   contingent: string;
-  seed?: number;
+  seed: number;
 }
 
 export interface SchemeMatch {
-  matchInternalId: string;
-  globalMatchNumber: number;
-  roundName: string;
-  participant1: { name: string; contingent: string } | null;
-  participant2: { name: string; contingent: string } | null;
-  winnerToMatchId: string | null; // Not used in current model but could be useful
-  scheduleId?: string; // Link to the actual schedule document
-  status: 'PENDING' | 'SCHEDULED' | 'COMPLETED';
-  winnerId?: string | null;
+  id: string;
+  round: number;
+  matchNumber: number; // Order within the round
+  participant1: SchemeParticipant | null;
+  participant2: SchemeParticipant | null;
+  winnerId: string | null;
+  // This helps UI find the next match for the winner
+  nextMatchId: string | null;
 }
 
 export interface SchemeRound {
   roundNumber: number;
-  name: string;
+  name: string; // e.g., 'Babak Penyisihan', 'Perempat Final'
   matches: SchemeMatch[];
 }
 
 export interface Scheme {
-  id: string; // e.g., 'tanding-dewasa-kelas-a-putra'
+  id: string;
   type: 'Tanding' | 'TGR';
   ageCategory: string;
   gelanggangs: string[];
   date: string;
-  round: string;
   tandingClass?: string;
   tgrCategory?: TGRCategoryType;
   participantCount: number;
   participants: SchemeParticipant[];
-  rounds: SchemeRound[];
+  rounds: SchemeRound[]; // This will hold the hierarchical bracket structure
   createdAt: FirebaseTimestamp;
 }
 // --- END SCHEME MANAGEMENT TYPES ---
-
-

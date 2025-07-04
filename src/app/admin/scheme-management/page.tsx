@@ -1,14 +1,13 @@
 
 "use client";
 
-import { useState, useCallback, useRef } from 'react';
+import { useState, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { PageTitle } from '@/components/shared/PageTitle';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { GitBranch, Users, Minus, Plus, Loader2, Upload, Download, Save, LayoutGrid, CalendarPlus } from 'lucide-react';
 import { db } from '@/lib/firebase';
@@ -22,16 +21,6 @@ interface Participant {
   name: string;
   contingent: string;
 }
-
-const roundOptions = [
-  { value: 'Penyisihan', label: 'Penyisihan' },
-  { value: 'Babak 64 Besar', label: 'Babak 64 Besar' },
-  { value: 'Babak 32 Besar', label: 'Babak 32 Besar' },
-  { value: 'Babak 16 Besar', label: 'Babak 16 Besar' },
-  { value: 'Perempat Final', label: 'Perempat Final' },
-  { value: 'Semi Final', label: 'Semi Final' },
-  { value: 'Final', label: 'Final' },
-];
 
 export default function SchemeManagementPage() {
   const router = useRouter();
@@ -48,12 +37,11 @@ export default function SchemeManagementPage() {
   // General State
   const [gelanggangs, setGelanggangs] = useState('Gelanggang 1, Gelanggang 2');
   const [eventDate, setEventDate] = useState(new Date().toISOString().split('T')[0]);
-  const [eventRound, setEventRound] = useState('Penyisihan');
-
+  
   // Tanding State
   const [tandingAge, setTandingAge] = useState<string>('Dewasa');
   const [tandingClass, setTandingClass] = useState('Kelas A Putra');
-  const [tandingParticipants, setTandingParticipants] = useState<Participant[]>(() => Array.from({ length: 20 }, () => ({ name: '', contingent: '' })));
+  const [tandingParticipants, setTandingParticipants] = useState<Participant[]>(() => Array.from({ length: 8 }, () => ({ name: '', contingent: '' })));
 
   // TGR State
   const [tgrAge, setTgrAge] = useState<string>('Remaja');
@@ -64,7 +52,7 @@ export default function SchemeManagementPage() {
     newCount: number,
     setParticipants: React.Dispatch<React.SetStateAction<Participant[]>>
   ) => {
-    const clampedCount = Math.max(2, isNaN(newCount) ? 2 : newCount);
+    const clampedCount = Math.max(2, Math.min(32, isNaN(newCount) ? 2 : newCount));
     setParticipants(currentParticipants => {
       const newParticipants = [...currentParticipants];
       while (newParticipants.length < clampedCount) {
@@ -152,102 +140,110 @@ export default function SchemeManagementPage() {
         return;
     }
     const finalParticipants = tandingParticipants.filter(p => p.name.trim() && p.contingent.trim());
-    if (finalParticipants.length < 2) {
-        alert("Dibutuhkan minimal 2 peserta yang valid.");
+    if (finalParticipants.length < 3) {
+        alert("Dibutuhkan minimal 3 peserta yang valid.");
         return;
     }
 
     setIsLoading(true);
     setGeneratedScheme(null);
-
+    
+    // Simulate processing delay for complex brackets
     setTimeout(() => {
         try {
-            const numParticipants = finalParticipants.length;
-            const bracketSize = Math.pow(2, Math.ceil(Math.log2(numParticipants)));
-            const numByes = bracketSize - numParticipants;
-            const numPlayInMatches = numParticipants > (bracketSize / 2) ? numParticipants - (bracketSize / 2) : 0;
-            
-            const participants: SchemeParticipant[] = finalParticipants.map((p, index) => ({
-                id: `p-${index}`,
-                name: p.name,
-                contingent: p.contingent,
-                seed: index + 1,
+            const participantsWithSeed: SchemeParticipant[] = finalParticipants.map((p, index) => ({
+              id: `p-${index + 1}`,
+              name: p.name,
+              contingent: p.contingent,
+              seed: index + 1
             }));
 
-            const byeParticipants = participants.slice(0, numByes);
-            const playInParticipants = participants.slice(numByes);
+            const numParticipants = participantsWithSeed.length;
+            const bracketSize = Math.pow(2, Math.ceil(Math.log2(numParticipants)));
+            const numByes = bracketSize - numParticipants;
+            const numPlayInMatches = numParticipants - bracketSize / 2;
 
-            let allRounds: SchemeRound[] = [];
-            let globalMatchCounter = 1;
-            let competitorsForNextRound: (SchemeParticipant | { name: string, contingent: string })[] = [];
+            const allRounds: SchemeRound[] = [];
+            let matchCounter = 1;
+
+            let currentCompetitors: (SchemeParticipant | null)[] = [...participantsWithSeed];
             
-            // Add participants with byes directly to the next round's list
-            competitorsForNextRound.push(...byeParticipants);
+            // --- Round 1: Play-in matches for non-power-of-2 numbers ---
+            if (numPlayInMatches > 0) {
+              const playInRound: SchemeRound = { roundNumber: 1, name: "Babak Penyisihan", matches: [] };
+              const byes = participantsWithSeed.slice(0, numByes);
+              const players = participantsWithSeed.slice(numByes);
+              
+              const nextRoundCompetitors: (SchemeParticipant | null)[] = [...byes];
 
-            if (playInParticipants.length > 0) {
-                const preliminaryRound: SchemeRound = {
-                    roundNumber: 1,
-                    name: "Babak Penyisihan",
-                    matches: [],
+              for (let i = 0; i < numPlayInMatches; i++) {
+                const match: SchemeMatch = {
+                  id: `r1-m${i + 1}`,
+                  round: 1,
+                  matchNumber: matchCounter++,
+                  participant1: players[i],
+                  participant2: players[players.length - 1 - i],
+                  winnerId: null,
+                  nextMatchId: null // will be set later
                 };
-                for (let i = 0; i < numPlayInMatches; i++) {
-                    const p1 = playInParticipants[i * 2];
-                    const p2 = playInParticipants[i * 2 + 1];
-                    const match: SchemeMatch = {
-                        matchInternalId: `R0-M${globalMatchCounter}`,
-                        globalMatchNumber: globalMatchCounter,
-                        roundName: 'Babak Penyisihan',
-                        participant1: p1,
-                        participant2: p2,
-                        status: 'PENDING',
-                        winnerId: null,
-                    };
-                    preliminaryRound.matches.push(match);
-                    competitorsForNextRound.push({ name: `Pemenang Partai ${globalMatchCounter}`, contingent: 'TBD' });
-                    globalMatchCounter++;
-                }
-                allRounds.push(preliminaryRound);
+                playInRound.matches.push(match);
+                nextRoundCompetitors.push(null); // Placeholder for winner
+              }
+              allRounds.push(playInRound);
+              currentCompetitors = nextRoundCompetitors;
             }
 
-            let currentRoundCompetitors = competitorsForNextRound;
-            
-            while (currentRoundCompetitors.length > 1) {
-                const roundMatches: SchemeMatch[] = [];
-                const winnersForNextRound: ({ name: string, contingent: string })[] = [];
-
-                for (let i = 0; i < currentRoundCompetitors.length; i += 2) {
-                    const p1 = currentRoundCompetitors[i] || null;
-                    const p2 = currentRoundCompetitors[i + 1] || null;
-                    const match: SchemeMatch = {
-                        matchInternalId: `R${allRounds.length + 1}-M${globalMatchCounter}`,
-                        globalMatchNumber: globalMatchCounter,
-                        roundName: '', // Will be set later
-                        participant1: p1,
-                        participant2: p2,
-                        status: 'PENDING',
-                        winnerId: null,
-                    };
-                    roundMatches.push(match);
-                    winnersForNextRound.push({ name: `Pemenang Partai ${globalMatchCounter}`, contingent: 'TBD' });
-                    globalMatchCounter++;
+            // --- Subsequent rounds ---
+            let roundNum = allRounds.length + 1;
+            while(currentCompetitors.length > 1) {
+              const nextRoundCompetitors: (SchemeParticipant | null)[] = [];
+              const roundMatches: SchemeMatch[] = [];
+              
+              for (let i = 0; i < currentCompetitors.length; i += 2) {
+                const match: SchemeMatch = {
+                  id: `r${roundNum}-m${(i/2) + 1}`,
+                  round: roundNum,
+                  matchNumber: matchCounter++,
+                  participant1: currentCompetitors[i],
+                  participant2: currentCompetitors[i+1],
+                  winnerId: null,
+                  nextMatchId: null
+                };
+                
+                // Handle BYEs automatically
+                if(match.participant2 === undefined) { // Odd number of competitors, last one gets a bye
+                  match.participant2 = null;
+                }
+                if (match.participant2 === null) {
+                  match.winnerId = match.participant1?.id ?? null;
                 }
                 
-                let roundName: string;
-                const numMatchesInRound = roundMatches.length;
-                if (numMatchesInRound === 1) roundName = "Final";
-                else if (numMatchesInRound === 2) roundName = "Semi Final";
-                else if (numMatchesInRound === 4) roundName = "Perempat Final";
-                else roundName = `Babak ${numMatchesInRound * 2} Besar`;
+                roundMatches.push(match);
+                nextRoundCompetitors.push(null); // Placeholder for the winner
+              }
+              
+              let roundName;
+              switch (roundMatches.length) {
+                case 1: roundName = "Final"; break;
+                case 2: roundName = "Semi Final"; break;
+                case 4: roundName = "Perempat Final"; break;
+                case 8: roundName = "Babak 16 Besar"; break;
+                case 16: roundName = "Babak 32 Besar"; break;
+                default: roundName = `Babak ${roundMatches.length * 2} Besar`;
+              }
 
-                roundMatches.forEach(m => m.roundName = roundName);
-                
-                allRounds.push({
-                    roundNumber: allRounds.length + 1,
-                    name: roundName,
-                    matches: roundMatches,
-                });
-                
-                currentRoundCompetitors = winnersForNextRound;
+              allRounds.push({ roundNumber: roundNum, name: roundName, matches: roundMatches });
+              currentCompetitors = nextRoundCompetitors;
+              roundNum++;
+            }
+
+            // Link matches to their next match
+            for (let i = 0; i < allRounds.length - 1; i++) {
+              const currentRound = allRounds[i];
+              const nextRound = allRounds[i+1];
+              for(let j = 0; j < currentRound.matches.length; j++){
+                currentRound.matches[j].nextMatchId = nextRound.matches[Math.floor(j/2)].id;
+              }
             }
             
             const newScheme: Scheme = {
@@ -257,9 +253,8 @@ export default function SchemeManagementPage() {
                 tandingClass: tandingClass.trim(),
                 gelanggangs: gelanggangList,
                 date: eventDate,
-                round: eventRound,
                 participantCount: numParticipants,
-                participants: participants,
+                participants: participantsWithSeed,
                 rounds: allRounds,
                 createdAt: Timestamp.now(),
             };
@@ -274,7 +269,7 @@ export default function SchemeManagementPage() {
         } finally {
             setIsLoading(false);
         }
-    }, 100);
+    }, 500); // 500ms delay to show loading state
   };
 
 
@@ -284,8 +279,8 @@ export default function SchemeManagementPage() {
       return;
     }
      const gelanggangList = gelanggangs.split(',').map(g => g.trim()).filter(Boolean);
-     if (gelanggangList.length === 0 || !eventDate || !eventRound) {
-      alert("Gelanggang, Tanggal, dan Babak tidak boleh kosong.");
+     if (gelanggangList.length === 0 || !eventDate) {
+      alert("Gelanggang dan Tanggal tidak boleh kosong.");
       return;
     }
     
@@ -307,7 +302,6 @@ export default function SchemeManagementPage() {
       tgrCategory: tgrCategory,
       gelanggangs: gelanggangList,
       date: eventDate,
-      round: eventRound,
       participantCount: tgrParticipants.length,
       participants: schemeParticipants,
       rounds: [], 
@@ -338,7 +332,7 @@ export default function SchemeManagementPage() {
 
         await setDoc(doc(db, "schemes", generatedScheme.id), dataToSave);
         setIsSchemeSaved(true);
-        alert(`Bagan "${generatedScheme.tandingClass || generatedScheme.tgrCategory}" berhasil disimpan! Anda sekarang dapat membuat jadwal pertandingannya.`);
+        alert(`Bagan "${generatedScheme.tandingClass || generatedScheme.tgrCategory}" berhasil disimpan! Anda sekarang dapat melihatnya di Daftar Bagan.`);
     } catch(err) {
         console.error("Error saving scheme:", err);
         alert(`Gagal menyimpan skema: ${err instanceof Error ? err.message : String(err)}`);
@@ -374,24 +368,24 @@ export default function SchemeManagementPage() {
 
       for (const round of generatedScheme.rounds) {
         for (const match of round.matches) {
-          // A match only becomes a schedule if it has two participants with names.
+          // A match only becomes a schedule if it has two named participants. BYEs are not scheduled.
           if (match.participant1?.name && match.participant2?.name) {
             const assignedGelanggang = gelanggangList[gelanggangIndex % gelanggangList.length];
             gelanggangIndex++;
 
-            const scheduleDocRef = doc(db, 'schedules_tanding', match.matchInternalId);
+            const scheduleDocRef = doc(db, 'schedules_tanding', match.id);
             
             const scheduleData: Omit<ScheduleTanding, 'id'> = {
-              matchNumber: match.globalMatchNumber,
+              matchNumber: match.matchNumber,
               date: generatedScheme.date, 
               place: assignedGelanggang,
               pesilatMerahName: match.participant1.name,
               pesilatMerahContingent: match.participant1.contingent,
               pesilatBiruName: match.participant2.name,
               pesilatBiruContingent: match.participant2.contingent,
-              round: match.roundName,
+              round: round.name,
               class: generatedScheme.tandingClass || '',
-              matchInternalId: match.matchInternalId,
+              matchInternalId: match.id,
             };
             
             const scheduleDataForFirestore = {
@@ -443,16 +437,6 @@ export default function SchemeManagementPage() {
             <CardContent className="space-y-6">
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                 <FormField id="date" label="Tanggal Pertandingan" type="date" value={eventDate} onChange={(e) => setEventDate(e.target.value)} required />
-                <FormField
-                  id="round"
-                  label="Babak Awal"
-                  as="select"
-                  value={eventRound}
-                  onSelectChange={setEventRound}
-                  options={roundOptions}
-                  placeholder="Pilih Babak"
-                  required
-                />
                  <div>
                     <Label htmlFor="gelanggangs" className="block text-sm font-medium font-headline mb-1">
                       Nama Gelanggang
@@ -475,7 +459,7 @@ export default function SchemeManagementPage() {
                 <FormField id="tandingClass" label="Nama Kelas Tanding" value={tandingClass} onChange={(e) => setTandingClass(e.target.value)} placeholder="cth: Kelas A Putra" disabled={isLoading} required/>
                 
                 <div>
-                  <Label htmlFor="tandingParticipants">Jumlah Peserta</Label>
+                  <Label htmlFor="tandingParticipants">Jumlah Peserta (3-32)</Label>
                   <div className="flex items-center gap-2">
                     <Button variant="outline" size="icon" onClick={() => handleParticipantCountChange(tandingParticipants.length - 1, setTandingParticipants)} disabled={isLoading}>
                       <Minus className="h-4 w-4" />
@@ -529,16 +513,6 @@ export default function SchemeManagementPage() {
             <CardContent className="space-y-6">
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                 <FormField id="date" label="Tanggal Pertandingan" type="date" value={eventDate} onChange={(e) => setEventDate(e.target.value)} required />
-                <FormField
-                  id="round"
-                  label="Babak Awal"
-                  as="select"
-                  value={eventRound}
-                  onSelectChange={setEventRound}
-                  options={roundOptions}
-                  placeholder="Pilih Babak"
-                  required
-                />
                  <div>
                     <Label htmlFor="gelanggangs" className="block text-sm font-medium font-headline mb-1">
                       Nama Gelanggang
