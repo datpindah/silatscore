@@ -150,17 +150,16 @@ export default function SchemeManagementPage() {
       return;
     }
 
-
     setIsLoading(true);
     setGeneratedScheme(null);
     
     setTimeout(() => {
         try {
-            // 1. Determine bracket size and byes
+            // 1. Determine bracket size
             const bracketSize = Math.pow(2, Math.ceil(Math.log2(numParticipants)));
             const numRounds = Math.log2(bracketSize);
-            const numByes = bracketSize - numParticipants;
 
+            // 2. Create seeded participant list
             const participantsWithSeeds: SchemeParticipant[] = finalParticipants.map((p, index) => ({
               id: `p-${index + 1}-${p.name.replace(/\s+/g, '-')}`,
               name: p.name,
@@ -168,39 +167,30 @@ export default function SchemeManagementPage() {
               seed: index + 1
             }));
 
-            // 2. Standard Seeding Maps
-            const seedOrderMaps: { [key: number]: number[] } = {
-                4: [1, 4, 2, 3],
-                8: [1, 8, 4, 5, 2, 7, 3, 6],
-                16: [1, 16, 8, 9, 5, 12, 4, 13, 3, 14, 6, 11, 7, 10, 2, 15],
-                32: [1, 32, 16, 17, 9, 24, 8, 25, 5, 28, 12, 21, 4, 29, 13, 20, 3, 30, 14, 19, 6, 27, 11, 22, 7, 26, 10, 23, 2, 31, 15, 18],
-            };
-            const seedOrder = seedOrderMaps[bracketSize];
-            if (!seedOrder) throw new Error(`Ukuran bagan ${bracketSize} tidak didukung.`);
-
-            // 3. Create participant map with BYEs assigned to top seeds
-            const participantsBySeed = new Map<number, SchemeParticipant | null>();
+            // Map of seed number -> participant
+            const participantsBySeed = new Map<number, SchemeParticipant>();
             participantsWithSeeds.forEach(p => participantsBySeed.set(p.seed, p));
-            
-            const seededTournamentSlots: (SchemeParticipant | null)[] = seedOrder.map(seed => {
-                // If seed is greater than numParticipants, it's a bye slot, but the opponent is a top seed.
-                // The correct way is to give BYEs to top seeds.
-                return participantsBySeed.get(seed) || null;
-            });
-            
-            const byesToDistribute = bracketSize - numParticipants;
-            const byeReceivingSeeds = seedOrder.slice(0, byesToDistribute);
 
-            // 4. Build the entire bracket structure first
+            // 3. Define standard seeding pairings
+            const seedPairings: { [key: number]: number[][] } = {
+                4: [[1, 4], [2, 3]],
+                8: [[1, 8], [4, 5], [3, 6], [2, 7]],
+                16: [[1, 16], [8, 9], [5, 12], [4, 13], [3, 14], [6, 11], [7, 10], [2, 15]],
+                32: [[1, 32], [16, 17], [9, 24], [8, 25], [5, 28], [12, 21], [4, 29], [13, 20], [3, 30], [14, 19], [6, 27], [11, 22], [7, 26], [10, 23], [2, 31], [15, 18]],
+            };
+            
+            // 4. Build the entire bracket structure first (empty matches)
             const allRounds: SchemeRound[] = [];
             let globalMatchCounter = 1;
-            let matchesInRound = bracketSize / 2;
+
             for (let r = 1; r <= numRounds; r++) {
+                const matchesInRound = bracketSize / Math.pow(2, r);
                 const roundMatches: SchemeMatch[] = [];
                 for (let i = 0; i < matchesInRound; i++) {
+                    const matchId = `r${r}-m${globalMatchCounter}`;
                     roundMatches.push({
-                        id: `r${r}-m${globalMatchCounter}`,
-                        matchInternalId: `match-${globalMatchCounter}`,
+                        id: matchId,
+                        matchInternalId: matchId, // Using same for simplicity
                         round: r,
                         matchNumber: globalMatchCounter++,
                         participant1: null,
@@ -210,13 +200,12 @@ export default function SchemeManagementPage() {
                         status: 'PENDING'
                     });
                 }
-                 let roundName = `Babak ${matchesInRound * 2}`;
+
+                let roundName = `Babak ${matchesInRound * 2}`;
                 if (matchesInRound === 1) roundName = "Final";
                 else if (matchesInRound === 2) roundName = "Semi Final";
                 else if (matchesInRound === 4) roundName = "Perempat Final";
-
                 allRounds.push({ roundNumber: r, name: roundName, matches: roundMatches });
-                matchesInRound /= 2;
             }
 
             // 5. Link rounds together
@@ -225,41 +214,40 @@ export default function SchemeManagementPage() {
                     allRounds[r].matches[i].nextMatchId = allRounds[r+1].matches[Math.floor(i / 2)].id;
                 }
             }
+            
+            // 6. Populate first round with participants and BYEs
+            const firstRoundMatches = allRounds[0].matches;
+            const round1Pairings = seedPairings[bracketSize];
 
-            // 6. Populate first round and handle BYEs correctly
-            let participantIndex = 0;
-            const firstRound = allRounds[0];
-
-            for (let i = 0; i < bracketSize; i += 2) {
-                const matchIndex = i / 2;
-                const match = firstRound.matches[matchIndex];
+            round1Pairings.forEach((pair, index) => {
+                const match = firstRoundMatches[index];
+                const [seed1, seed2] = pair;
                 
-                const p1Seed = seedOrder[i];
-                const p2Seed = seedOrder[i + 1];
+                const participant1 = participantsBySeed.get(seed1);
+                const participant2 = participantsBySeed.get(seed2);
 
-                const p1 = participantsBySeed.get(p1Seed) || null;
-                const p2 = participantsBySeed.get(p2Seed) || null;
-                
-                match.participant1 = p1;
-                match.participant2 = p2;
+                match.participant1 = participant1 || null; // Will be defined for seed1
+                match.participant2 = participant2 || null; // Might be undefined (BYE)
 
-                if (p1 && !p2) match.winnerId = p1.id;
-                if (!p1 && p2) match.winnerId = p2.id;
-            }
+                if (participant1 && !participant2) {
+                    match.winnerId = participant1.id;
+                }
+            });
 
-            // 7. Single pass to advance all winners (including BYEs)
+            // 7. Single pass to advance all winners from round 1 (including BYEs)
             for (let r = 0; r < numRounds - 1; r++) {
                 const currentRound = allRounds[r];
                 const nextRound = allRounds[r+1];
                 
-                for(const match of currentRound.matches) {
-                    if (match.winnerId && match.nextMatchId) {
+                for(let i = 0; i < currentRound.matches.length; i++) {
+                    const match = currentRound.matches[i];
+                    if (match.winnerId) {
                         const winner = match.participant1?.id === match.winnerId ? match.participant1 : match.participant2;
+                        
                         const nextMatch = nextRound.matches.find(m => m.id === match.nextMatchId);
 
                         if (nextMatch) {
-                             const parentIndex = currentRound.matches.findIndex(m => m.id === match.id);
-                             if (parentIndex % 2 === 0) { // Top parent match
+                             if (i % 2 === 0) { // Top parent match
                                 nextMatch.participant1 = winner;
                              } else { // Bottom parent match
                                 nextMatch.participant2 = winner;
@@ -268,7 +256,7 @@ export default function SchemeManagementPage() {
                     }
                 }
             }
-          
+
             const newScheme: Scheme = {
                 id: `tanding-${tandingAge.replace(/\s+/g, '_').toLowerCase()}-${tandingClass.replace(/\s+/g, '_').toLowerCase()}-${Date.now()}`,
                 type: 'Tanding',
@@ -286,6 +274,7 @@ export default function SchemeManagementPage() {
             setIsSchemeSaved(false);
             setSchedulesGenerated(false);
             alert(`Pratinjau Skema Tanding untuk ${tandingClass} (${tandingAge}) berhasil dibuat!`);
+
         } catch (err) {
             console.error("Error generating Tanding scheme:", err);
             alert(`Gagal membuat pratinjau skema: ${err instanceof Error ? err.message : String(err)}`);
