@@ -14,7 +14,7 @@ import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
-import type { ScheduleTanding, KetuaActionLogEntry, PesilatColorIdentity, KetuaActionType, VerificationType, VerificationRequest, JuriVoteValue, JuriVotes, TimerStatus as DewanTimerType, TimerMatchStatus, MatchResultTanding, TandingScoreBreakdown, TandingVictoryType, JuriMatchData as LibJuriMatchData, ScoreEntry as LibScoreEntry, Scheme, SchemeMatch } from '@/lib/types';
+import type { ScheduleTanding, KetuaActionLogEntry, PesilatColorIdentity, KetuaActionType, VerificationType, VerificationRequest, JuriVoteValue, JuriVotes, TimerStatus as DewanTimerType, TimerMatchStatus, MatchResultTanding, TandingScoreBreakdown, TandingVictoryType, JuriMatchData as LibJuriMatchData, ScoreEntry as LibScoreEntry } from '@/lib/types';
 import { JATUHAN_POINTS, TEGURAN_POINTS, PERINGATAN_POINTS_FIRST_PRESS, PERINGATAN_POINTS_SECOND_PRESS } from '@/lib/types';
 import { db } from '@/lib/firebase';
 import { doc, onSnapshot, getDoc, Timestamp, collection, addDoc, query, orderBy, deleteDoc, limit, getDocs, serverTimestamp, writeBatch, where, updateDoc } from 'firebase/firestore';
@@ -334,104 +334,6 @@ function KetuaPertandinganPageComponent({ gelanggangName }: { gelanggangName: st
     setIsWinnerModalOpen(true);
   };
 
-  const advanceWinnerInScheme = async (
-    matchId: string,
-    winnerInfo: { name: string; contingent: string }
-  ) => {
-    try {
-        const schemeId = matchId.split('-R')[0];
-        if (!schemeId) {
-            console.log("Match not part of a scheme, skipping bracket and schedule update.");
-            return;
-        }
-
-        const schemeDocRef = doc(db, 'schemes', schemeId);
-        const schemeDoc = await getDoc(schemeDocRef);
-        if (!schemeDoc.exists()) {
-            console.error(`Scheme with ID ${schemeId} not found.`);
-            return;
-        }
-
-        const schemeData = schemeDoc.data() as Scheme;
-        const batch = writeBatch(db); // Use a batch for atomic updates
-        let completedMatch: SchemeMatch | null = null;
-
-        // Find the completed match and mark it as complete
-        for (const round of schemeData.rounds) {
-            const match = round.matches.find(m => m.matchInternalId === matchId);
-            if (match) {
-                completedMatch = match;
-                match.status = 'COMPLETED';
-                match.winnerId = winnerInfo.name; 
-                break;
-            }
-        }
-
-        if (!completedMatch) {
-            console.error(`Match with internal ID ${matchId} not found in scheme.`);
-            return;
-        }
-
-        const placeholderText = `Pemenang Partai ${completedMatch.globalMatchNumber}`;
-        let placeholderFoundAndReplaced = false;
-
-        // Find the placeholder in subsequent rounds to update scheme and schedule
-        for (const round of schemeData.rounds) {
-            for (const match of round.matches) {
-                let participantToUpdate: 'participant1' | 'participant2' | null = null;
-                
-                if (match.participant1?.name === placeholderText) {
-                    participantToUpdate = 'participant1';
-                } else if (match.participant2?.name === placeholderText) {
-                    participantToUpdate = 'participant2';
-                }
-
-                if (participantToUpdate) {
-                    // Update the scheme data in memory
-                    match[participantToUpdate] = winnerInfo;
-
-                    // Prepare the update for the corresponding schedule document
-                    const scheduleDocRefToUpdate = doc(db, 'schedules_tanding', match.matchInternalId);
-                    const scheduleUpdatePayload: { [key: string]: string } = {};
-
-                    if (participantToUpdate === 'participant1') {
-                        scheduleUpdatePayload.pesilatMerahName = winnerInfo.name;
-                        scheduleUpdatePayload.pesilatMerahContingent = winnerInfo.contingent;
-                    } else { // participant2
-                        scheduleUpdatePayload.pesilatBiruName = winnerInfo.name;
-                        scheduleUpdatePayload.pesilatBiruContingent = winnerInfo.contingent;
-                    }
-                    
-                    // Add schedule update to the batch
-                    batch.update(scheduleDocRefToUpdate, scheduleUpdatePayload);
-                    
-                    placeholderFoundAndReplaced = true;
-                    break;
-                }
-            }
-            if (placeholderFoundAndReplaced) break;
-        }
-
-        if (placeholderFoundAndReplaced) {
-            console.log(`Updated schedule and bracket: ${winnerInfo.name} advances.`);
-        } else {
-            console.log(`Winner of match ${completedMatch.globalMatchNumber} determined. This may be the final match.`);
-        }
-        
-        // Add the scheme update to the batch
-        batch.update(schemeDocRef, { rounds: schemeData.rounds });
-        
-        // Commit all changes atomically
-        await batch.commit();
-
-    } catch (e) {
-        console.error("Error advancing winner in scheme and schedule:", e);
-        setError("Gagal memperbarui bagan dan jadwal pertandingan.");
-        alert("Gagal memperbarui bagan dan jadwal pertandingan.");
-    }
-  };
-
-
   const handleConfirmMatchResult = async () => {
     if (!activeMatchId || !matchDetails || !winnerSelectionDialog || !victoryTypeDialog) {
       alert("Data tidak lengkap untuk menyimpan hasil."); return;
@@ -458,14 +360,6 @@ function KetuaPertandinganPageComponent({ gelanggangName }: { gelanggangName: st
       const matchDocRef = doc(db, MATCHES_TANDING_COLLECTION, activeMatchId);
       await updateDoc(matchDocRef, { matchResult: resultData });
       
-      if (winnerSelectionDialog !== 'seri' && activeMatchId.includes('-R')) {
-        const winnerInfo = {
-          name: winnerSelectionDialog === 'merah' ? matchDetails.pesilatMerahName : matchDetails.pesilatBiruName,
-          contingent: winnerSelectionDialog === 'merah' ? matchDetails.pesilatMerahContingent : matchDetails.pesilatBiruContingent,
-        };
-        await advanceWinnerInScheme(activeMatchId, winnerInfo);
-      }
-
       setMatchResultSaved(resultData);
       setIsWinnerModalOpen(false);
       alert("Hasil pertandingan berhasil disimpan.");

@@ -69,7 +69,6 @@ export interface ScheduleTanding {
   round: string; // Babak
   class: string; // Kelas
   matchNumber: number;
-  matchInternalId?: string; // Link back to the match in a scheme
 }
 
 export type TGRCategoryType = 'Tunggal' | 'Ganda' | 'Regu' | 'Jurus Tunggal Bebas';
@@ -326,44 +325,3 @@ export interface TGRMatchData {
   matchResult?: TGRMatchResult;
 }
 // --- End TGR Scoring Types ---
-
-
-// --- SCHEME MANAGEMENT TYPES ---
-export interface SchemeParticipant {
-  id: string;
-  name: string;
-  contingent: string;
-  seed: number;
-}
-
-export interface SchemeMatch {
-  id: string;
-  round: number;
-  matchNumber: number; // Order within the round
-  participant1: SchemeParticipant | null;
-  participant2: SchemeParticipant | null;
-  winnerId: string | null;
-  // This helps UI find the next match for the winner
-  nextMatchId: string | null;
-}
-
-export interface SchemeRound {
-  roundNumber: number;
-  name: string; // e.g., 'Babak Penyisihan', 'Perempat Final'
-  matches: SchemeMatch[];
-}
-
-export interface Scheme {
-  id: string;
-  type: 'Tanding' | 'TGR';
-  ageCategory: string;
-  gelanggangs: string[];
-  date: string;
-  tandingClass?: string;
-  tgrCategory?: TGRCategoryType;
-  participantCount: number;
-  participants: SchemeParticipant[];
-  rounds: SchemeRound[]; // This will hold the hierarchical bracket structure
-  createdAt: FirebaseTimestamp;
-}
-// --- END SCHEME MANAGEMENT TYPES ---
