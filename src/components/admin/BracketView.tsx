@@ -37,9 +37,7 @@ function MatchBox({ match, onSetWinner, isFinal = false }: MatchBoxProps) {
   const renderParticipant = (participant: SchemeParticipant | null) => {
     if (!participant) {
       return (
-        <div className="italic text-muted-foreground px-2 py-1 h-8 flex items-center">
-          BYE
-        </div>
+        <div className="px-2 py-1 h-8 flex items-center" />
       );
     }
     
