@@ -52,7 +52,7 @@ export default function SchemeManagementPage() {
     newCount: number,
     setParticipants: React.Dispatch<React.SetStateAction<Participant[]>>
   ) => {
-    const clampedCount = Math.max(2, Math.min(32, isNaN(newCount) ? 2 : newCount));
+    const clampedCount = Math.max(2, Math.min(64, isNaN(newCount) ? 2 : newCount));
     setParticipants(currentParticipants => {
       const newParticipants = [...currentParticipants];
       while (newParticipants.length < clampedCount) {
@@ -166,7 +166,7 @@ export default function SchemeManagementPage() {
             const allRounds: SchemeRound[] = [];
             let globalMatchCounter = 1;
 
-            let round1Matches: SchemeMatch[] = [];
+            const playInMatches: SchemeMatch[] = [];
             
             // Generate play-in matches if necessary
             if (numPlayInMatches > 0) {
@@ -179,9 +179,12 @@ export default function SchemeManagementPage() {
                         participant1: playInParticipants[i],
                         participant2: playInParticipants[playInParticipants.length - 1 - i],
                         winnerId: null,
-                        nextMatchId: null, // Will be linked later
+                        nextMatchId: null,
+                        matchInternalId: `r0-m${i + 1}`,
+                        globalMatchNumber: 0,
+                        status: 'PENDING'
                     };
-                    round1Matches.push(match);
+                    playInMatches.push(match);
                 }
             }
 
@@ -204,51 +207,42 @@ export default function SchemeManagementPage() {
             // Create Round 1 from byes and play-in placeholders
             const firstProperRound: SchemeMatch[] = [];
             const standardSeeding: Record<number, number[]> = {
-              4: [1,4,2,3],
-              8: [1,8,4,5,2,7,3,6],
-              16: [1,16,8,9,5,12,4,13,2,15,7,10,6,11,3,14],
-              32: [1,32,16,17,8,25,9,24,5,28,12,21,4,29,13,20,2,31,15,18,7,26,10,23,6,27,11,22,3,30,14,19],
+              2: [1,2],
+              4: [1,4,3,2],
+              8: [1,8,5,4,3,6,7,2],
+              16: [1,16,9,8,5,12,13,4,3,14,11,6,7,10,15,2],
+              32: [1,32,17,16,9,24,25,8,5,28,21,12,13,20,29,4,3,30,19,14,11,22,27,6,7,26,23,10,15,18,31,2],
+              64: [1,64,33,32,17,48,49,16,9,56,41,24,25,40,57,8,5,60,37,28,21,44,53,12,13,52,45,20,29,36,61,4,3,62,35,30,19,46,51,14,11,54,43,22,27,38,59,6,7,58,39,26,23,42,55,10,15,50,47,18,31,34,63,2],
             };
-            const seedOrder = standardSeeding[bracketSize as keyof typeof standardSeeding];
+            const seedOrder = standardSeeding[bracketSize as keyof typeof standardSeeding] || [];
             
             const seededParticipants: (SchemeParticipant|null)[] = [];
-            const playInWinners = Array(numPlayInMatches).fill(null).map((_, i) => `winner-r0-m${i+1}`);
-            const initialCompetitors = [...byes, ...playInWinners];
-            seedOrder.forEach(seed => {
-                const competitor = initialCompetitors[seed -1];
-                if(competitor){
-                    seededParticipants.push(participants.find(p => p.id === competitor.id) || null)
-                } else {
-                     seededParticipants.push(null); // Should be a placeholder
-                }
-            });
+            
+            const initialCompetitors = [...participants];
+            while(initialCompetitors.length < bracketSize){
+                initialCompetitors.push(null); // Add BYEs
+            }
 
-
-            const finalSeededParticipants: (SchemeParticipant|null)[] = seedOrder.map(seed => {
-              if (seed <= byes.length) {
-                return byes[seed - 1];
-              }
-              const playInIndex = seed - byes.length - 1;
-              if (playInIndex < numPlayInMatches * 2) {
-                 return participants[numByes + playInIndex];
-              }
-              return null;
-            });
+            const finalSeededParticipants: (SchemeParticipant|null)[] = seedOrder.map(seed => initialCompetitors[seed -1] || null);
 
             const round1Participants = finalSeededParticipants.slice(0, bracketSize);
             
             for(let i = 0; i < bracketSize; i += 2) {
                 const p1 = round1Participants[i];
                 const p2 = round1Participants[i+1];
-                if (p1 || p2) { // Create match if at least one participant exists
+                 const matchId = `r1-m${globalMatchCounter}`;
+                if (p1) {
                     const match: SchemeMatch = {
-                       id: `r1-m${globalMatchCounter}`,
+                       id: matchId,
+                       matchInternalId: matchId,
                        round: 1,
                        matchNumber: globalMatchCounter++,
                        participant1: p1,
                        participant2: p2,
                        winnerId: p2 === null ? p1?.id ?? null : null, // Auto-win for byes
-                       nextMatchId: null
+                       nextMatchId: null,
+                       globalMatchNumber: 0,
+                       status: 'PENDING'
                     };
                     firstProperRound.push(match);
                 }
@@ -264,14 +258,18 @@ export default function SchemeManagementPage() {
             while(previousRoundMatches.length > 1) {
                 const nextRoundMatches: SchemeMatch[] = [];
                 for(let i=0; i < previousRoundMatches.length; i+=2){
+                     const matchId = `r${roundNum}-m${globalMatchCounter}`;
                     const match: SchemeMatch = {
-                        id: `r${roundNum}-m${globalMatchCounter}`,
+                        id: matchId,
+                        matchInternalId: matchId,
                         round: roundNum,
                         matchNumber: globalMatchCounter++,
                         participant1: null,
                         participant2: null,
                         winnerId: null,
-                        nextMatchId: null
+                        nextMatchId: null,
+                        globalMatchNumber: 0,
+                        status: 'PENDING'
                     };
                     previousRoundMatches[i].nextMatchId = match.id;
                     if(previousRoundMatches[i+1]) {
@@ -498,7 +496,7 @@ export default function SchemeManagementPage() {
                 <FormField id="tandingClass" label="Nama Kelas Tanding" value={tandingClass} onChange={(e) => setTandingClass(e.target.value)} placeholder="cth: Kelas A Putra" disabled={isLoading} required/>
                 
                 <div>
-                  <Label htmlFor="tandingParticipants">Jumlah Peserta (2-32)</Label>
+                  <Label htmlFor="tandingParticipants">Jumlah Peserta (2-64)</Label>
                   <div className="flex items-center gap-2">
                     <Button variant="outline" size="icon" onClick={() => handleParticipantCountChange(tandingParticipants.length - 1, setTandingParticipants)} disabled={isLoading}>
                       <Minus className="h-4 w-4" />
@@ -653,4 +651,3 @@ export default function SchemeManagementPage() {
     </>
   );
 }
-
