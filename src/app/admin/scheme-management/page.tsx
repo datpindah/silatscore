@@ -133,7 +133,7 @@ export default function SchemeManagementPage() {
     reader.readAsArrayBuffer(file);
   };
   
- const handleGenerateTandingScheme = () => {
+  const handleGenerateTandingScheme = () => {
     const gelanggangList = gelanggangs.split(',').map(g => g.trim()).filter(Boolean);
     if (gelanggangList.length === 0) {
         alert("Nama Gelanggang tidak boleh kosong.");
@@ -155,101 +155,110 @@ export default function SchemeManagementPage() {
     
     setTimeout(() => {
         try {
-            // 1. Determine bracket size (next power of 2)
-            const bracketSize = Math.pow(2, Math.ceil(Math.log2(numParticipants)));
-            const numRounds = Math.log2(bracketSize);
-
-            // 2. Create participant objects
-            const participantsWithSeeds: SchemeParticipant[] = finalParticipants.map((p, index) => ({
+            // 1. Create participant objects
+            const participantsWithSeeds: (SchemeParticipant | { id: 'bye' })[] = finalParticipants.map((p, index) => ({
               id: `p-${index + 1}-${p.name.replace(/\s+/g, '-')}`,
               name: p.name,
               contingent: p.contingent,
               seed: index + 1
             }));
 
-            // 3. Build the entire bracket structure first (empty matches)
-            const allRounds: SchemeRound[] = [];
-            let globalMatchCounter = 1;
+            const numRealParticipants = participantsWithSeeds.length;
+            const bracketSize = Math.pow(2, Math.ceil(Math.log2(numRealParticipants)));
+            const numRounds = Math.log2(bracketSize);
+            const numByes = bracketSize - numRealParticipants;
 
-            for (let r = 1; r <= numRounds; r++) {
-                const matchesInRound = bracketSize / Math.pow(2, r);
-                const roundMatches: SchemeMatch[] = [];
-                for (let i = 0; i < matchesInRound; i++) {
-                    const matchId = `r${r}-m${globalMatchCounter}`;
-                    roundMatches.push({
-                        id: matchId,
-                        matchInternalId: matchId,
+            // Add BYEs to the list
+            for (let i = 0; i < numByes; i++) {
+                participantsWithSeeds.push({ id: 'bye' });
+            }
+
+            // Standard seeding order for a 32-player bracket (can be sliced for smaller brackets)
+            const seedOrder32 = [
+                1, 32, 17, 16, 8, 25, 24, 9, 5, 28, 21, 12, 4, 29, 20, 13,
+                2, 31, 18, 15, 7, 26, 23, 10, 6, 27, 22, 11, 3, 30, 19, 14
+            ];
+
+            const currentSeedOrder = seedOrder32.slice(0, bracketSize);
+
+            const seededParticipants = currentSeedOrder.map(seed => {
+                // Find the participant with this seed number.
+                // Seeds are 1-based, array indices are 0-based.
+                const participant = participantsWithSeeds[seed - 1];
+                return participant || { id: 'bye' }; // Fallback to bye if participant not found (for empty slots)
+            });
+
+            const allRounds: SchemeRound[] = [];
+            let matchNumberCounter = 1;
+
+            // Create Round 1
+            const round1Matches: SchemeMatch[] = [];
+            for (let i = 0; i < bracketSize / 2; i++) {
+                const p1 = seededParticipants[i * 2];
+                const p2 = seededParticipants[i * 2 + 1];
+
+                const p1IsBye = p1.id === 'bye';
+                const p2IsBye = p2.id === 'bye';
+
+                round1Matches.push({
+                    id: `r1-m${i + 1}`,
+                    matchInternalId: `r1-m${i + 1}`,
+                    round: 1,
+                    matchNumber: matchNumberCounter++,
+                    participant1: p1IsBye ? null : p1 as SchemeParticipant,
+                    participant2: p2IsBye ? null : p2 as SchemeParticipant,
+                    winnerId: p1IsBye ? (p2 as SchemeParticipant).id : p2IsBye ? (p1 as SchemeParticipant).id : null,
+                    nextMatchId: `r2-m${Math.floor(i / 2) + 1}`
+                });
+            }
+            allRounds.push({ roundNumber: 1, name: `Babak ${bracketSize}`, matches: round1Matches });
+            
+            // Create subsequent rounds
+            for (let r = 2; r <= numRounds; r++) {
+                const matchesInPreviousRound = allRounds[r - 2].matches;
+                const currentRoundMatches: SchemeMatch[] = [];
+                const numMatchesInCurrentRound = matchesInPreviousRound.length / 2;
+
+                for (let i = 0; i < numMatchesInCurrentRound; i++) {
+                    const nextMatchId = (r < numRounds) ? `r${r + 1}-m${Math.floor(i / 2) + 1}` : null;
+                    currentRoundMatches.push({
+                        id: `r${r}-m${i + 1}`,
+                        matchInternalId: `r${r}-m${i + 1}`,
                         round: r,
-                        matchNumber: globalMatchCounter++,
+                        matchNumber: matchNumberCounter++,
                         participant1: null,
                         participant2: null,
                         winnerId: null,
-                        nextMatchId: null,
-                        status: 'PENDING'
+                        nextMatchId: nextMatchId
                     });
                 }
                 
                 let roundName = `Babak Penyisihan`;
-                if (matchesInThisRound === 1) roundName = "Final";
-                else if (matchesInThisRound === 2) roundName = "Semi Final";
-                else if (matchesInThisRound === 4) roundName = "Perempat Final";
-                else roundName = `Babak ${matchesInThisRound * 2}`;
-                allRounds.push({ roundNumber: r, name: roundName, matches: roundMatches });
+                if (numMatchesInCurrentRound === 1) roundName = "Final";
+                else if (numMatchesInCurrentRound === 2) roundName = "Semi Final";
+                else if (numMatchesInCurrentRound === 4) roundName = "Perempat Final";
+                else roundName = `Babak ${numMatchesInCurrentRound * 2}`;
+                
+                allRounds.push({ roundNumber: r, name: roundName, matches: currentRoundMatches });
             }
 
-            // 4. Link rounds together
-            for (let r = 0; r < numRounds - 1; r++) {
-                for (let i = 0; i < allRounds[r].matches.length; i++) {
-                    allRounds[r].matches[i].nextMatchId = allRounds[r+1].matches[Math.floor(i / 2)].id;
-                }
-            }
+            // Auto-advance winners from Round 1 byes
+            allRounds[0].matches.forEach((match, index) => {
+                if (match.winnerId) {
+                    const nextRound = allRounds[1];
+                    const nextMatchIndex = Math.floor(index / 2);
+                    const nextMatch = nextRound.matches[nextMatchIndex];
 
-            // 5. Place participants into the first round sequentially.
-            // This honors the user's input order for manual brackets.
-            const firstRoundMatches = allRounds[0].matches;
-            let participantIndex = 0;
-            for (let i = 0; i < firstRoundMatches.length; i++) {
-                const match = firstRoundMatches[i];
-                if (participantIndex < participantsWithSeeds.length) {
-                    match.participant1 = participantsWithSeeds[participantIndex++];
-                }
-                if (participantIndex < participantsWithSeeds.length) {
-                    match.participant2 = participantsWithSeeds[participantIndex++];
-                }
-            }
-            
-            // 6. Handle BYEs and auto-advance winners through all rounds
-            allRounds.forEach((round, roundIndex) => {
-                round.matches.forEach((match) => {
-                    // If a match in the current round has a bye, determine the winner
-                    if (match.participant1 && !match.participant2) {
-                        match.winnerId = match.participant1.id;
-                    } else if (!match.participant1 && match.participant2) {
-                        // This case shouldn't happen with sequential filling, but is a good safeguard
-                        match.winnerId = match.participant2.id;
+                    const winnerParticipant = match.participant1?.id === match.winnerId ? match.participant1 : match.participant2;
+
+                    if (index % 2 === 0) {
+                        nextMatch.participant1 = winnerParticipant;
+                    } else {
+                        nextMatch.participant2 = winnerParticipant;
                     }
-
-                    // If a winner has been determined (e.g., from a BYE), advance them
-                    if (match.winnerId && match.nextMatchId) {
-                        const winnerParticipant = match.participant1?.id === match.winnerId ? match.participant1 : match.participant2;
-
-                        // Find the next match in the next round
-                        const nextRound = allRounds[roundIndex + 1];
-                        if (nextRound) {
-                            const nextMatch = nextRound.matches.find(m => m.id === match.nextMatchId);
-                            if (nextMatch) {
-                                // Find out which slot (top/bottom) this winner goes into
-                                const matchIndexInCurrentRound = round.matches.findIndex(m => m.id === match.id);
-                                if (matchIndexInCurrentRound % 2 === 0) {
-                                    nextMatch.participant1 = winnerParticipant;
-                                } else {
-                                    nextMatch.participant2 = winnerParticipant;
-                                }
-                            }
-                        }
-                    }
-                });
+                }
             });
+
 
             const newScheme: Scheme = {
                 id: `tanding-${tandingAge.replace(/\s+/g, '_').toLowerCase()}-${tandingClass.replace(/\s+/g, '_').toLowerCase()}-${Date.now()}`,
@@ -259,7 +268,12 @@ export default function SchemeManagementPage() {
                 gelanggangs: gelanggangList,
                 date: eventDate,
                 participantCount: numParticipants,
-                participants: participantsWithSeeds,
+                participants: finalParticipants.map((p, index) => ({
+                    id: `p-${index + 1}-${p.name.replace(/\s+/g, '-')}`,
+                    name: p.name,
+                    contingent: p.contingent,
+                    seed: index + 1
+                })),
                 rounds: allRounds,
                 createdAt: Timestamp.now(),
             };
