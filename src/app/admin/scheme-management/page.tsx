@@ -138,7 +138,7 @@ const handleGenerateTandingScheme = () => {
     setGeneratedScheme(null);
 
     try {
-        const finalParticipants = tandingParticipants
+        const finalParticipants: SchemeParticipant[] = tandingParticipants
             .filter(p => p.name.trim() && p.contingent.trim())
             .map((p, index) => ({
                 id: `p-${index + 1}-${p.name.replace(/\s+/g, '-')}`,
@@ -155,48 +155,46 @@ const handleGenerateTandingScheme = () => {
         }
 
         const bracketSize = Math.pow(2, Math.ceil(Math.log2(numParticipants)));
+        const numByes = bracketSize - numParticipants;
 
-        // Standard seeding order generation
-        const getSeedingOrder = (size: number): number[] => {
-            if (size === 1) return [1];
-            if (size === 2) return [1, 2];
-            const prev = getSeedingOrder(size / 2);
-            const res: number[] = [];
-            for (let i = 0; i < prev.length; i += 2) {
-                res.push(prev[i]);
-                res.push(size + 1 - prev[i+1]);
-                res.push(size + 1 - prev[i]);
-                res.push(prev[i+1]);
-            }
-            return res;
+        // Standard seeding arrays for different bracket sizes
+        const seedingOrders: { [key: number]: number[] } = {
+            2: [1, 2],
+            4: [1, 4, 3, 2],
+            8: [1, 8, 5, 4, 3, 6, 7, 2],
+            16: [1, 16, 8, 9, 5, 12, 4, 13, 3, 14, 6, 11, 7, 10, 2, 15],
+            32: [1, 32, 16, 17, 8, 25, 9, 24, 5, 28, 12, 21, 4, 29, 13, 20, 3, 30, 14, 19, 6, 27, 11, 22, 7, 26, 10, 23, 2, 31],
         };
-        
-        const seedingOrder = getSeedingOrder(bracketSize);
 
-        const participantsBySeed: Map<number, SchemeParticipant> = new Map();
+        const seeds = seedingOrders[bracketSize];
+        if (!seeds) {
+            alert(`Ukuran bagan ${bracketSize} tidak didukung.`);
+            setIsLoading(false);
+            return;
+        }
+        
+        const participantsBySeed = new Map<number, SchemeParticipant>();
         finalParticipants.forEach(p => participantsBySeed.set(p.seed, p));
-        
-        // Create first round slots with participants and BYEs
-        const firstRoundSlots: (SchemeParticipant | null)[] = seedingOrder.map(seed => {
-            return participantsBySeed.get(seed) || null; // null represents a BYE for higher seeds
-        });
 
-        let allRounds: SchemeRound[] = [];
-        let currentRoundMatches: SchemeMatch[] = [];
+        const rounds: SchemeRound[] = [];
+        let currentMatches: SchemeMatch[] = [];
         let globalMatchCounter = 0;
 
-        // Create the first round of matches
+        // Create Round 1
         for (let i = 0; i < bracketSize; i += 2) {
             globalMatchCounter++;
-            const p1 = firstRoundSlots[i];
-            const p2 = firstRoundSlots[i+1];
+            const seed1 = seeds[i];
+            const seed2 = seeds[i+1];
+
+            const p1 = participantsBySeed.get(seed1);
+            const p2 = participantsBySeed.get(seed2);
 
             const match: SchemeMatch = {
                 id: `r1-m${globalMatchCounter}`,
                 round: 1,
                 matchNumber: globalMatchCounter,
-                participant1: p1,
-                participant2: p2,
+                participant1: p1 || null,
+                participant2: p2 || null,
                 winnerId: null,
                 nextMatchId: null,
                 matchInternalId: `match-internal-${globalMatchCounter}`,
@@ -204,76 +202,70 @@ const handleGenerateTandingScheme = () => {
                 status: 'PENDING'
             };
 
-            // This is the key fix: if one participant is null (BYE), the other is the winner of THIS match.
-            // They are NOT duplicated or manually advanced. They simply win their Round 1 match.
-            if (p1 && !p2) {
-                match.winnerId = p1.id;
-            } else if (!p1 && p2) {
-                match.winnerId = p2.id;
-            }
+            // Handle BYEs
+            if (!p1) match.winnerId = p2!.id;
+            if (!p2) match.winnerId = p1!.id;
             
-            currentRoundMatches.push(match);
+            currentMatches.push(match);
         }
         
-        allRounds.push({
+        let roundName = `Babak ${bracketSize}`;
+        if (bracketSize === 2) roundName = "Final";
+        else if (bracketSize === 4) roundName = "Semi Final";
+        else if (bracketSize === 8) roundName = "Perempat Final";
+
+        rounds.push({
             roundNumber: 1,
-            name: `Babak ${bracketSize}`,
-            matches: currentRoundMatches
+            name: roundName,
+            matches: currentMatches
         });
 
-        // Build subsequent rounds based on the winners of the previous round
+        // Build subsequent rounds
         let roundNum = 2;
-        while (currentRoundMatches.length > 1) {
+        while (currentMatches.length > 1) {
             const nextRoundMatches: SchemeMatch[] = [];
-            for (let i = 0; i < currentRoundMatches.length; i += 2) {
+            for (let i = 0; i < currentMatches.length; i += 2) {
                 globalMatchCounter++;
-                const parentMatch1 = currentRoundMatches[i];
-                const parentMatch2 = currentRoundMatches[i+1];
+                const parentMatch1 = currentMatches[i];
+                const parentMatch2 = currentMatches[i+1];
 
-                // Determine participants for the next match based on the WINNERS of parent matches
-                const nextP1 = parentMatch1.winnerId 
-                    ? (parentMatch1.participant1?.id === parentMatch1.winnerId ? parentMatch1.participant1 : parentMatch1.participant2) 
-                    : null;
-                const nextP2 = parentMatch2.winnerId 
-                    ? (parentMatch2.participant1?.id === parentMatch2.winnerId ? parentMatch2.participant1 : parentMatch2.participant2) 
-                    : null;
+                const winner1 = parentMatch1.winnerId ? (participantsBySeed.get(parseInt(parentMatch1.winnerId.split('-')[1])) || null) : null;
+                const winner2 = parentMatch2.winnerId ? (participantsBySeed.get(parseInt(parentMatch2.winnerId.split('-')[1])) || null) : null;
 
                 const match: SchemeMatch = {
                     id: `r${roundNum}-m${globalMatchCounter}`,
                     round: roundNum,
                     matchNumber: globalMatchCounter,
-                    participant1: nextP1,
-                    participant2: nextP2,
+                    participant1: winner1,
+                    participant2: winner2,
                     winnerId: null,
                     nextMatchId: null,
                     matchInternalId: `match-internal-${globalMatchCounter}`,
                     globalMatchNumber: globalMatchCounter,
                     status: 'PENDING'
                 };
-                
-                // Link parent matches to this new match
+
                 parentMatch1.nextMatchId = match.id;
                 parentMatch2.nextMatchId = match.id;
-                
+
                 nextRoundMatches.push(match);
             }
-
-            let roundName;
+            
             if (nextRoundMatches.length === 1) roundName = "Final";
             else if (nextRoundMatches.length === 2) roundName = "Semi Final";
             else if (nextRoundMatches.length === 4) roundName = "Perempat Final";
             else roundName = `Babak ${nextRoundMatches.length * 2}`;
 
-            allRounds.push({
+            rounds.push({
                 roundNumber: roundNum,
                 name: roundName,
                 matches: nextRoundMatches
             });
-            
-            currentRoundMatches = nextRoundMatches;
+
+            currentMatches = nextRoundMatches;
             roundNum++;
         }
-
+        
         const newScheme: Scheme = {
           id: `tanding-${tandingAge.replace(/\s+/g, '_').toLowerCase()}-${tandingClass.replace(/\s+/g, '_').toLowerCase()}-${Date.now()}`,
           type: 'Tanding',
@@ -283,7 +275,7 @@ const handleGenerateTandingScheme = () => {
           date: eventDate,
           participantCount: numParticipants,
           participants: finalParticipants,
-          rounds: allRounds,
+          rounds: rounds,
           createdAt: Timestamp.now(),
         };
 
