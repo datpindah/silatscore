@@ -138,14 +138,13 @@ const handleGenerateTandingScheme = () => {
     setGeneratedScheme(null);
 
     try {
-        // 1. Prepare participants from the form
         const finalParticipants = tandingParticipants
             .filter(p => p.name.trim() && p.contingent.trim())
             .map((p, index) => ({
                 id: `p-${index + 1}-${p.name.replace(/\s+/g, '-')}`,
                 name: p.name,
                 contingent: p.contingent,
-                seed: index + 1 // Seed based on input order
+                seed: index + 1
             }));
 
         const numParticipants = finalParticipants.length;
@@ -155,36 +154,42 @@ const handleGenerateTandingScheme = () => {
             return;
         }
 
-        // 2. Calculate bracket dimensions
         const bracketSize = Math.pow(2, Math.ceil(Math.log2(numParticipants)));
 
-        // 3. Create a standard seeding order for the calculated bracket size
+        // Standard seeding order generation
         const getSeedingOrder = (size: number): number[] => {
+            if (size === 1) return [1];
             if (size === 2) return [1, 2];
             const prev = getSeedingOrder(size / 2);
-            const next = prev.map(seed => (size + 1) - seed).reverse();
-            return [...prev, ...next];
+            const res: number[] = [];
+            for (let i = 0; i < prev.length; i += 2) {
+                res.push(prev[i]);
+                res.push(size + 1 - prev[i+1]);
+                res.push(size + 1 - prev[i]);
+                res.push(prev[i+1]);
+            }
+            return res;
         };
+        
         const seedingOrder = getSeedingOrder(bracketSize);
 
-        // 4. Map participants to their seed number
         const participantsBySeed: Map<number, SchemeParticipant> = new Map();
         finalParticipants.forEach(p => participantsBySeed.set(p.seed, p));
-
-        // 5. Create the first round slots, filling with participants or null for BYE
+        
+        // Create first round slots with participants and BYEs
         const firstRoundSlots: (SchemeParticipant | null)[] = seedingOrder.map(seed => {
-            return participantsBySeed.get(seed) || null; // null represents a BYE
+            return participantsBySeed.get(seed) || null; // null represents a BYE for higher seeds
         });
 
         let allRounds: SchemeRound[] = [];
-        let globalMatchCounter = 0;
         let currentRoundMatches: SchemeMatch[] = [];
+        let globalMatchCounter = 0;
 
-        // 6. Create the first round of matches from the seeded slots
+        // Create the first round of matches
         for (let i = 0; i < bracketSize; i += 2) {
             globalMatchCounter++;
             const p1 = firstRoundSlots[i];
-            const p2 = firstRoundSlots[i + 1];
+            const p2 = firstRoundSlots[i+1];
 
             const match: SchemeMatch = {
                 id: `r1-m${globalMatchCounter}`,
@@ -193,13 +198,14 @@ const handleGenerateTandingScheme = () => {
                 participant1: p1,
                 participant2: p2,
                 winnerId: null,
-                nextMatchId: null, // will be set later
+                nextMatchId: null,
                 matchInternalId: `match-internal-${globalMatchCounter}`,
                 globalMatchNumber: globalMatchCounter,
                 status: 'PENDING'
             };
 
-            // If one participant is null (BYE), the other is the winner
+            // This is the key fix: if one participant is null (BYE), the other is the winner of THIS match.
+            // They are NOT duplicated or manually advanced. They simply win their Round 1 match.
             if (p1 && !p2) {
                 match.winnerId = p1.id;
             } else if (!p1 && p2) {
@@ -215,7 +221,7 @@ const handleGenerateTandingScheme = () => {
             matches: currentRoundMatches
         });
 
-        // 7. Build subsequent rounds iteratively
+        // Build subsequent rounds based on the winners of the previous round
         let roundNum = 2;
         while (currentRoundMatches.length > 1) {
             const nextRoundMatches: SchemeMatch[] = [];
@@ -224,12 +230,20 @@ const handleGenerateTandingScheme = () => {
                 const parentMatch1 = currentRoundMatches[i];
                 const parentMatch2 = currentRoundMatches[i+1];
 
+                // Determine participants for the next match based on the WINNERS of parent matches
+                const nextP1 = parentMatch1.winnerId 
+                    ? (parentMatch1.participant1?.id === parentMatch1.winnerId ? parentMatch1.participant1 : parentMatch1.participant2) 
+                    : null;
+                const nextP2 = parentMatch2.winnerId 
+                    ? (parentMatch2.participant1?.id === parentMatch2.winnerId ? parentMatch2.participant1 : parentMatch2.participant2) 
+                    : null;
+
                 const match: SchemeMatch = {
                     id: `r${roundNum}-m${globalMatchCounter}`,
                     round: roundNum,
                     matchNumber: globalMatchCounter,
-                    participant1: parentMatch1.winnerId ? (parentMatch1.participant1?.id === parentMatch1.winnerId ? parentMatch1.participant1 : parentMatch1.participant2) : null,
-                    participant2: parentMatch2.winnerId ? (parentMatch2.participant1?.id === parentMatch2.winnerId ? parentMatch2.participant1 : parentMatch2.participant2) : null,
+                    participant1: nextP1,
+                    participant2: nextP2,
                     winnerId: null,
                     nextMatchId: null,
                     matchInternalId: `match-internal-${globalMatchCounter}`,
@@ -237,6 +251,7 @@ const handleGenerateTandingScheme = () => {
                     status: 'PENDING'
                 };
                 
+                // Link parent matches to this new match
                 parentMatch1.nextMatchId = match.id;
                 parentMatch2.nextMatchId = match.id;
                 
