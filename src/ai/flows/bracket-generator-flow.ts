@@ -59,6 +59,8 @@ You MUST follow these specific rules for the number of participants. The input l
 5.  In the main bracket, the "bye" participants are seeded at the top. They will play against the winners of the qualification round or against other "bye" participants if there are more byes than qualification winners.
 6.  The 'pesertaLolosLangsung' array is identical to the 'pesertaBye' array.
 
+**CRITICAL RULE: Each participant name from 'participantList' may only appear ONCE in the initial bracket setup ('pertandinganKualifikasi' and 'jadwalBabakUtama' combined). A participant cannot be in two places at once. Double-check your output to ensure no participant is listed in more than one starting match.**
+
 **Specific Scenarios (MUST be followed exactly):**
 
 *   **9 Peserta (Target: 8 Besar):** 7 byes, 2 kualifikasi (1 match). The top 7 participants are 'pesertaBye'. The remaining 2 are 'pesertaKualifikasi'. In the 8-person bracket, 6 of the bye participants play each other, and 1 bye participant plays the winner of the qualification match.
