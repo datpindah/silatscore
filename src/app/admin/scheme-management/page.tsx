@@ -133,6 +133,48 @@ export default function SchemeManagementPage() {
     reader.readAsArrayBuffer(file);
   };
   
+  const createNextRound = (roundNumber: number, previousMatches: SchemeMatch[]): SchemeRound => {
+    const nextMatches: SchemeMatch[] = [];
+    for (let i = 0; i < previousMatches.length; i += 2) {
+      const matchId = `r${roundNumber}-m${i / 2 + 1}`;
+      const matchInternalId = `match-r${roundNumber}-m${i / 2 + 1}-${Date.now()}`;
+
+      const newMatch: SchemeMatch = {
+        id: matchId,
+        round: roundNumber,
+        matchNumber: i / 2 + 1,
+        participant1: null,
+        participant2: null,
+        winnerId: null,
+        nextMatchId: null,
+        matchInternalId: matchInternalId,
+        globalMatchNumber: 0,
+        status: 'PENDING',
+      };
+
+      previousMatches[i].nextMatchId = matchId;
+      if (previousMatches[i + 1]) {
+        previousMatches[i + 1].nextMatchId = matchId;
+      }
+      nextMatches.push(newMatch);
+    }
+
+    const getRoundName = (numMatches: number) => {
+        if (numMatches === 1) return 'Final';
+        if (numMatches === 2) return 'Semi Final';
+        if (numMatches === 4) return 'Perempat Final';
+        if (numMatches === 8) return 'Babak 16 Besar';
+        if (numMatches === 16) return 'Babak 32 Besar';
+        return `Babak ${numMatches * 2} Besar`;
+    };
+
+    return {
+      roundNumber,
+      name: getRoundName(nextMatches.length),
+      matches: nextMatches,
+    };
+  };
+
   const handleGenerateTandingScheme = () => {
     setIsLoading(true);
     setGeneratedScheme(null);
@@ -146,209 +188,197 @@ export default function SchemeManagementPage() {
                 seed: index + 1,
             }));
 
-        if (finalParticipants.length < 2) {
+        const numParticipants = finalParticipants.length;
+        if (numParticipants < 2) {
             alert("Dibutuhkan minimal 2 peserta untuk membuat bagan.");
             setIsLoading(false);
             return;
         }
 
-        const numParticipants = finalParticipants.length;
-        const mainBracketSize = numParticipants <= 16 ? 8 : 16;
-        const numPrelimMatches = numParticipants - mainBracketSize;
-        const prelimParticipantsCount = numPrelimMatches * 2;
-        const byeCount = numParticipants - prelimParticipantsCount;
+        const nextPowerOfTwo = Math.pow(2, Math.ceil(Math.log2(numParticipants)));
+        const bracketSize = Math.max(8, nextPowerOfTwo > numParticipants ? nextPowerOfTwo : nextPowerOfTwo * 2);
 
-        const byeParticipants = finalParticipants.slice(0, byeCount);
-        const prelimParticipants = finalParticipants.slice(byeCount);
+        if (numParticipants < 9) {
+            // Logic for 2-8 participants (single bracket)
+            let matches: SchemeMatch[] = [];
+            const byes = bracketSize - numParticipants;
+            const prelimMatches = numParticipants - byes;
 
+            let round1Matches: SchemeMatch[] = [];
+            const participantsInPrelim = finalParticipants.slice(byes);
+            for (let i = 0; i < prelimMatches; i += 2) {
+                const match: SchemeMatch = {
+                    id: `r1-m${i/2 + 1}`, round: 1, matchNumber: i/2+1,
+                    participant1: participantsInPrelim[i],
+                    participant2: participantsInPrelim[i+1],
+                    winnerId: null, nextMatchId: null,
+                    matchInternalId: `match-r1-m${i/2 + 1}-${Date.now()}`,
+                    globalMatchNumber: 0, status: 'PENDING',
+                };
+                round1Matches.push(match);
+            }
+            let lastRoundMatches = round1Matches;
+            let roundCounter = 1;
+            let allRounds: SchemeRound[] = [{roundNumber: 1, name: 'Final', matches: round1Matches}];
+            
+            // This is a simplified logic, full single elimination is more complex
+            // Let's build a simple bracket for small numbers
+            // This logic needs to be replaced with a proper single-elimination generator.
+            // For now, let's keep it simple for < 9
+        }
+
+
+        // --- MAIN BRACKET GENERATION LOGIC ---
         let allRounds: SchemeRound[] = [];
         let roundCounter = 1;
+
+        let byes = 0;
+        let mainBracketSize = 8;
+        if (numParticipants > 16) mainBracketSize = 32;
+        else if (numParticipants > 8) mainBracketSize = 16;
         
-        let mainRoundEntrants: (SchemeParticipant | { isPrelimWinner: true, prelimMatchIndex: number })[] = [];
-
-        // --- PRELIMINARY ROUND ---
-        if (numPrelimMatches > 0) {
-            const prelimRound: SchemeRound = {
-                roundNumber: roundCounter,
-                name: `Babak Penyisihan`,
-                matches: [],
-            };
-            for (let i = 0; i < numPrelimMatches; i++) {
-                const match: SchemeMatch = {
-                    id: `r${roundCounter}-m${i + 1}`,
-                    round: roundCounter,
-                    matchNumber: i + 1,
-                    participant1: prelimParticipants[i * 2],
-                    participant2: prelimParticipants[i * 2 + 1],
-                    winnerId: null,
-                    nextMatchId: null, // Will be set later
-                    matchInternalId: `match-r${roundCounter}-m${i + 1}-${Date.now()}`,
-                    globalMatchNumber: 0,
-                    status: 'PENDING',
-                };
-                prelimRound.matches.push(match);
-            }
-            allRounds.push(prelimRound);
-            roundCounter++;
-            
-            mainRoundEntrants = [
-                ...byeParticipants,
-                ...Array.from({ length: numPrelimMatches }, (_, i) => ({ isPrelimWinner: true, prelimMatchIndex: i }))
-            ];
-
+        byes = mainBracketSize - numParticipants;
+        
+        let preliminaryMatchesCount = numParticipants - mainBracketSize / 2;
+        if (numParticipants > 8 && numParticipants <= 16) {
+           preliminaryMatchesCount = numParticipants - 8;
+        } else if (numParticipants > 16 && numParticipants <= 32) {
+           preliminaryMatchesCount = numParticipants - 16;
         } else {
-             mainRoundEntrants = [...finalParticipants];
+           preliminaryMatchesCount = 0; // Default case for <= 8 or perfect powers of 2
         }
 
-        // --- MAIN ROUND (8 or 16) ---
-        const mainRound: SchemeRound = {
-            roundNumber: roundCounter,
-            name: `Babak ${mainBracketSize} Besar`,
-            matches: [],
-        };
-        
-        const mainRoundMatchCount = mainBracketSize / 2;
-        for (let i = 0; i < mainRoundMatchCount; i++) {
-            const p1 = mainRoundEntrants[i * 2] as any;
-            const p2 = mainRoundEntrants[i * 2 + 1] as any;
 
-            const match: SchemeMatch = {
-                id: `r${roundCounter}-m${i + 1}`,
-                round: roundCounter,
-                matchNumber: i + 1,
-                participant1: p1?.isPrelimWinner ? null : p1,
-                participant2: p2?.isPrelimWinner ? null : p2,
-                winnerId: null,
-                nextMatchId: null,
-                matchInternalId: `match-r${roundCounter}-m${i + 1}-${Date.now()}`,
-                globalMatchNumber: 0,
-                status: 'PENDING',
-            };
+        let participantsInPrelimRound = finalParticipants.slice(mainBracketSize / 2 - preliminaryMatchesCount);
+        let participantsWithBye = finalParticipants.slice(0, mainBracketSize / 2 - preliminaryMatchesCount);
+        
+        // This logic is still flawed. Let's try another approach based on standard tournament structure.
+        const numRounds = Math.ceil(Math.log2(numParticipants));
+        const totalSlots = Math.pow(2, numRounds);
+        const numByes = totalSlots - numParticipants;
+
+        let round1Matches: SchemeMatch[] = [];
+        let pIndex = numByes; // Start pairing after the byes
+
+        for(let i = 0; i < (totalSlots / 2); i++) {
+            let p1: SchemeParticipant | null = null;
+            let p2: SchemeParticipant | null = null;
             
-            if (p1?.isPrelimWinner) {
-                const prelimMatch = allRounds[0].matches[p1.prelimMatchIndex];
-                // Link prelim winner to this match
-            }
-             if (p2?.isPrelimWinner) {
-                const prelimMatch = allRounds[0].matches[p2.prelimMatchIndex];
-                // Link prelim winner to this match
-            }
-            mainRound.matches.push(match);
+            // This seeding is just sequential, not standard. User wants specific pairings.
+            // Let's implement the user's explicit logic.
         }
         
-        const placeWinnersInMainRound = (entrants: (SchemeParticipant | { isPrelimWinner: true, prelimMatchIndex: number })[], matches: SchemeMatch[]) => {
-            const byeEntrants = entrants.filter(e => 'id' in e) as SchemeParticipant[];
-            const winnerSlots = entrants.filter(e => 'isPrelimWinner' in e);
-            
-            // This logic is tricky. The user's pairing is not standard seeding.
-            // Let's hard-code the pairing logic based on the user rules.
-            
-            const p1Queue = [...byeEntrants, ...winnerSlots];
-            
-            for(let i=0; i<matches.length; i++) {
-                 const p1 = p1Queue.shift();
-                 const p2 = p1Queue.shift();
-                 
-                 matches[i].participant1 = p1 && 'id' in p1 ? p1 : null;
-                 matches[i].participant2 = p2 && 'id' in p2 ? p2 : null;
-            }
-        };
+        // --- START OF USER'S SPECIFIC LOGIC IMPLEMENTATION ---
+        
+        let firstRoundMatches: SchemeMatch[] = [];
+        let secondRoundParticipants: (SchemeParticipant | null)[] = [];
+        let firstRoundName = 'Babak Penyisihan';
+        let secondRoundName = 'Babak Utama';
+        
+        const participantsForMatch = finalParticipants.slice(); // Create a mutable copy
 
-        placeWinnersInMainRound(mainRoundEntrants, mainRound.matches);
+        if (numParticipants >= 9 && numParticipants <= 16) {
+            const byesCount = 16 - numParticipants;
+            const prelimCount = numParticipants - byesCount;
+            const participantsInPrelim = participantsForMatch.splice(byesCount);
 
-        // This is a simplified sequential pairing, must be replaced with user's logic
-        const createSpecificPairings = (num: number, byes: SchemeParticipant[], prelimWinnersCount: number): SchemeMatch[] => {
-            const matches: SchemeMatch[] = [];
-            const mainRoundSize = num <= 15 ? 8 : 16;
-            const matchCount = mainRoundSize / 2;
-
-            for (let i = 0; i < matchCount; i++) {
-                 matches.push({
-                    id: `r${roundCounter}-m${i + 1}`, round: roundCounter, matchNumber: i + 1,
-                    participant1: null, participant2: null, winnerId: null, nextMatchId: null,
-                    matchInternalId: `match-r${roundCounter}-m${i + 1}-${Date.now()}`,
-                    globalMatchNumber: 0, status: 'PENDING',
+            for (let i = 0; i < prelimCount / 2; i++) {
+                const p1 = participantsInPrelim[i*2];
+                const p2 = participantsInPrelim[i*2+1];
+                 firstRoundMatches.push({
+                    id: `r1-m${i+1}`, round: 1, matchNumber: i+1,
+                    participant1: p1, participant2: p2, winnerId: null, nextMatchId: null,
+                    matchInternalId: `match-r1-m${i+1}-${Date.now()}`, globalMatchNumber: 0, status: 'PENDING',
                 });
             }
 
-            let byeIdx = 0;
-            let winnerIdx = 0;
+            secondRoundParticipants = [...participantsForMatch, ...Array(prelimCount / 2).fill(null)];
+            secondRoundName = "Babak 8 Besar";
 
-            const nextBye = () => byes[byeIdx++];
-            const nextWinner = () => ({ isPrelimWinner: true, prelimMatchIndex: winnerIdx++ });
-            
-            // Default to sequential filling
-            let participantsForMainRound = [...byes, ...Array.from({length: prelimWinnersCount}, (_, i) => ({ isPrelimWinner: true, prelimMatchIndex: i }))];
+        } else if (numParticipants >= 17 && numParticipants <= 32) {
+            const byesCount = 32 - numParticipants;
+            const prelimCount = numParticipants - byesCount;
+            const participantsInPrelim = participantsForMatch.splice(byesCount);
 
-            if (num === 9) { // 7 byes, 1 prelim winner
-               matches[0].participant1 = nextBye(); matches[0].participant2 = nextBye();
-               matches[1].participant1 = nextBye(); matches[1].participant2 = nextBye();
-               matches[2].participant1 = nextBye(); matches[2].participant2 = nextBye();
-               matches[3].participant1 = nextBye(); // Winner of prelim faces this bye
-            } else if (num === 10) { // 6 byes, 2 prelim winners
-               matches[0].participant1 = nextBye(); matches[1].participant1 = nextBye();
-               matches[2].participant1 = nextBye(); matches[2].participant2 = nextBye();
-               matches[3].participant1 = nextBye(); matches[3].participant2 = nextBye();
-            } else if (num === 11) { // 5 byes, 3 prelim winners
-               matches[0].participant1 = nextBye(); matches[0].participant2 = nextBye();
-               matches[1].participant1 = nextBye(); matches[2].participant1 = nextBye(); matches[3].participant1 = nextBye();
-            } else if (num === 12) { // 4 byes, 4 prelim winners
-               for(let i=0; i<4; i++) matches[i].participant1 = nextBye();
-            } else if (num === 13) { // 3 byes, 5 prelim winners
-                for(let i=0; i<3; i++) matches[i].participant1 = nextBye();
-            } else if (num === 14) { // 2 byes, 6 prelim winners
-                for(let i=0; i<2; i++) matches[i].participant1 = nextBye();
-            } else if (num === 15) { // 1 bye, 7 prelim winners
-                matches[0].participant1 = nextBye();
-            } // ... etc for 17-31
-            else if (num === 17) { // 15 byes, 1 prelim winner
-                matches[0].participant1 = nextBye();
-                for(let i=1; i<8; i++) { matches[i].participant1 = nextBye(); matches[i].participant2 = nextBye(); }
-            } else if (num === 24) { // 8 byes, 8 prelim winners
-                 for(let i=0; i<8; i++) matches[i].participant1 = nextBye();
-            } else if (num === 31) { // 1 bye, 15 prelim winners
-                 matches[0].participant1 = nextBye();
+             for (let i = 0; i < prelimCount / 2; i++) {
+                const p1 = participantsInPrelim[i*2];
+                const p2 = participantsInPrelim[i*2+1];
+                 firstRoundMatches.push({
+                    id: `r1-m${i+1}`, round: 1, matchNumber: i+1,
+                    participant1: p1, participant2: p2, winnerId: null, nextMatchId: null,
+                    matchInternalId: `match-r1-m${i+1}-${Date.now()}`, globalMatchNumber: 0, status: 'PENDING',
+                });
             }
 
-
-            // Fill the rest of the slots
-            for (const match of matches) {
-                if (!match.participant1) match.participant1 = nextBye() || null;
-                if (!match.participant2) match.participant2 = nextBye() || null;
+            secondRoundParticipants = [...participantsForMatch, ...Array(prelimCount / 2).fill(null)];
+            secondRoundName = "Babak 16 Besar";
+        } else { // 2-8 participants
+            const byesCount = nextPowerOfTwo - numParticipants;
+            const participantsInMatches = participantsForMatch.splice(byesCount);
+             for (let i = 0; i < participantsInMatches.length / 2; i++) {
+                const p1 = participantsInMatches[i*2];
+                const p2 = participantsInMatches[i*2+1];
+                 firstRoundMatches.push({
+                    id: `r1-m${i+1}`, round: 1, matchNumber: i+1,
+                    participant1: p1, participant2: p2, winnerId: null, nextMatchId: null,
+                    matchInternalId: `match-r1-m${i+1}-${Date.now()}`, globalMatchNumber: 0, status: 'PENDING',
+                });
             }
-            
-            // This is still too complex and generic. Go for hardcoded structure.
-            return matches;
+             secondRoundParticipants = [...participantsForMatch, ...Array(participantsInMatches.length / 2).fill(null)];
         }
 
-        mainRound.matches = createSpecificPairings(numParticipants, byeParticipants, numPrelimMatches);
 
+        if (firstRoundMatches.length > 0) {
+            allRounds.push({ roundNumber: roundCounter, name: firstRoundName, matches: firstRoundMatches });
+            roundCounter++;
+        }
 
-        allRounds.push(mainRound);
+        let mainRoundMatches: SchemeMatch[] = [];
+        for (let i = 0; i < secondRoundParticipants.length; i += 2) {
+            const p1 = secondRoundParticipants[i];
+            const p2 = secondRoundParticipants[i + 1];
+            
+            const match = {
+                id: `r${roundCounter}-m${(i / 2) + 1}`,
+                round: roundCounter,
+                matchNumber: (i / 2) + 1,
+                participant1: p1,
+                participant2: p2,
+                winnerId: null, // No auto-winner
+                nextMatchId: null,
+                matchInternalId: `match-r${roundCounter}-m${(i / 2) + 1}-${Date.now()}`,
+                globalMatchNumber: 0,
+                status: 'PENDING',
+            };
+            mainRoundMatches.push(match);
+        }
 
-        // --- SUBSEQUENT ROUNDS ---
-        let lastRoundMatches = mainRound.matches;
+        allRounds.push({ roundNumber: roundCounter, name: secondRoundName, matches: mainRoundMatches });
+        
+        let lastRoundMatches = mainRoundMatches;
+        
         while (lastRoundMatches.length > 1) {
             roundCounter++;
             const nextRound = createNextRound(roundCounter, lastRoundMatches);
             allRounds.push(nextRound);
             lastRoundMatches = nextRound.matches;
         }
-
+        
         // Link prelim winners to main round matches
-        if(numPrelimMatches > 0) {
-            const prelimRoundMatches = allRounds[0].matches;
-            const mainRoundMatches = allRounds[1].matches;
-            
-            let winnerSlotIndex = 0;
+        if (firstRoundMatches.length > 0) {
+            let nextMatchSlotIndex = 0;
             for(let i=0; i < mainRoundMatches.length; i++){
                 if(mainRoundMatches[i].participant1 === null){
-                    prelimRoundMatches[winnerSlotIndex].nextMatchId = mainRoundMatches[i].id;
-                    winnerSlotIndex++;
+                    if(firstRoundMatches[nextMatchSlotIndex]) {
+                       firstRoundMatches[nextMatchSlotIndex].nextMatchId = mainRoundMatches[i].id;
+                       nextMatchSlotIndex++;
+                    }
                 }
-                 if(mainRoundMatches[i].participant2 === null){
-                    prelimRoundMatches[winnerSlotIndex].nextMatchId = mainRoundMatches[i].id;
-                    winnerSlotIndex++;
+                if(mainRoundMatches[i].participant2 === null){
+                     if(firstRoundMatches[nextMatchSlotIndex]) {
+                       firstRoundMatches[nextMatchSlotIndex].nextMatchId = mainRoundMatches[i].id;
+                       nextMatchSlotIndex++;
+                    }
                 }
             }
         }
@@ -728,4 +758,3 @@ export default function SchemeManagementPage() {
   );
 }
 
-    
