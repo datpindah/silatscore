@@ -1,49 +1,26 @@
 # See https://help.github.com/articles/ignoring-files/ for more about ignoring files.
 
+# Firebase/Firestore debug logs
+firestore-debug.log
+*-debug.log
+
 # Dependencies
 /node_modules
-/.pnp
-.pnp.js
-.yarn/install-state.gz
 
-# Testing
-/coverage
-
-# Next.js
+# Next.js build folder
 /.next/
-/out/
 
-# Production
+# Environment variables
+.env
+.env*.local
+
+# Production build
 /build
+/dist
 
 # Misc
 .DS_Store
-*.pem
-
-# Debug files
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 pnpm-debug.log*
-
-# Local Environment Variables
-.env.local
-.env.development.local
-.env.test.local
-.env.production.local
-
-# Firebase
-*.firebase
-*.firebaserc
-firebase-debug.log
-firebase-crashlytics-build.json
-apphosting.yaml # For Firebase App Hosting, not needed for Netlify
-
-# Netlify - local build testing/state
-.netlify
-
-# Turbopack
-.turbo
-
-# IDX project files
-.idx
