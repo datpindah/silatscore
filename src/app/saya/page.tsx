@@ -1,4 +1,3 @@
-
 "use client";
 
 import { useState, type FormEvent, useEffect, Suspense } from 'react';
@@ -11,7 +10,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter }
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import { LogIn, AlertCircle, Loader2, Users, Sword, Mail, Shield, UserPlus } from 'lucide-react';
+import { LogIn, AlertCircle, Loader2, Users, Sword, Mail, Shield, UserPlus, Send } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import { AppLogo } from '@/components/layout/AppLogo';
 
@@ -27,22 +26,14 @@ const AppleIcon = () => (
 
 // New component for email/password form
 function EmailLoginForm({ onBack }: { onBack: () => void }) {
-  const { signIn, signUp, loading, error: authError, setError: setAuthError } = useAuth();
+  const { sendAuthLink, loading, error: authError, setError: setAuthError } = useAuth();
   const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
-  const [displayName, setDisplayName] = useState('');
-  const [isRegisterMode, setIsRegisterMode] = useState(false);
   const [pageError, setPageError] = useState<string | null>(null);
+  const [message, setMessage] = useState<string | null>(null);
 
   useEffect(() => {
     if (authError) {
-      if (authError.code === 'auth/invalid-credential') {
-        setPageError('Email atau password salah.');
-      } else if (authError.code === 'auth/email-already-in-use') {
-        setPageError('Email ini sudah terdaftar. Silakan login.');
-      } else {
-        setPageError(authError.message || 'Terjadi kesalahan.');
-      }
+      setPageError(authError.message || 'Terjadi kesalahan.');
       setAuthError(null); // Clear error after displaying
     }
   }, [authError, setAuthError]);
@@ -50,19 +41,19 @@ function EmailLoginForm({ onBack }: { onBack: () => void }) {
   const handleSubmit = async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     setPageError(null);
+    setMessage(null);
 
-    if (isRegisterMode) {
-      if (!displayName.trim()) {
-        setPageError('Nama lengkap tidak boleh kosong.');
-        return;
-      }
-      await signUp(email, password, displayName);
+    if (!email.trim()) {
+      setPageError('Email tidak boleh kosong.');
+      return;
+    }
+    
+    const result = await sendAuthLink(email);
+    
+    if (result.success) {
+      setMessage(result.message);
     } else {
-      if (!email || !password) {
-        setPageError('Email dan password tidak boleh kosong.');
-        return;
-      }
-      await signIn(email, password);
+      setPageError(result.message);
     }
   };
 
@@ -70,51 +61,39 @@ function EmailLoginForm({ onBack }: { onBack: () => void }) {
     <Card className="w-full max-w-md shadow-none border-none">
       <CardHeader>
         <CardTitle className="text-2xl font-headline text-primary text-center">
-            {isRegisterMode ? 'Registrasi dengan Email' : 'Login dengan Email'}
+            Login dengan Tautan Email
         </CardTitle>
+        <CardDescription className="text-center">
+          Masukkan email Anda yang terdaftar. Jika valid, kami akan mengirimkan tautan untuk masuk.
+        </CardDescription>
       </CardHeader>
       <form onSubmit={handleSubmit}>
         <CardContent className="space-y-4">
           {pageError && (
             <Alert variant="destructive">
               <AlertCircle className="h-4 w-4" />
-              <AlertTitle>{isRegisterMode ? 'Registrasi Gagal' : 'Login Gagal'}</AlertTitle>
+              <AlertTitle>Gagal</AlertTitle>
               <AlertDescription>{pageError}</AlertDescription>
             </Alert>
           )}
-          {isRegisterMode && (
-             <div className="space-y-2">
-                <Label htmlFor="displayName">Nama Lengkap</Label>
-                <Input id="displayName" value={displayName} onChange={(e) => setDisplayName(e.target.value)} placeholder="Nama Lengkap Anda" required={isRegisterMode} disabled={loading} />
-              </div>
+          {message && (
+             <Alert>
+              <AlertCircle className="h-4 w-4" />
+              <AlertTitle>Informasi</AlertTitle>
+              <AlertDescription>{message}</AlertDescription>
+            </Alert>
           )}
           <div className="space-y-2">
             <Label htmlFor="email">Email</Label>
             <Input id="email" type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="email@example.com" required disabled={loading} />
           </div>
-          <div className="space-y-2">
-            <Label htmlFor="password">Password</Label>
-            <Input id="password" type="password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="Masukkan password Anda" required disabled={loading} />
-          </div>
         </CardContent>
         <CardFooter className="flex flex-col gap-4">
           <Button type="submit" className="w-full bg-primary hover:bg-primary/90 text-primary-foreground" disabled={loading}>
-            {loading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : isRegisterMode ? <UserPlus className="mr-2 h-4 w-4" /> : <LogIn className="mr-2 h-4 w-4" />}
-            {isRegisterMode ? 'Registrasi' : 'Login'}
+            {loading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Send className="mr-2 h-4 w-4" />}
+            Kirim Tautan Login
           </Button>
           <Button type="button" variant="link" onClick={onBack}>Kembali ke pilihan lain</Button>
-           <div className="text-center text-sm">
-            <button
-                type="button"
-                className="underline text-muted-foreground hover:text-primary"
-                onClick={() => {
-                    setIsRegisterMode(!isRegisterMode);
-                    setPageError(null); // Clear errors on mode switch
-                }}
-            >
-                {isRegisterMode ? 'Sudah punya akun? Login di sini' : 'Belum punya akun? Registrasi di sini'}
-            </button>
-          </div>
         </CardFooter>
       </form>
     </Card>
