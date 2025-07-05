@@ -1,12 +1,12 @@
-
 import Image from 'next/image';
 import Link from 'next/link';
+import evokeLogo from './public/evoke.png';
 
 export function AppLogo() {
   return (
     <Link href="/" className="flex items-center gap-2 text-primary hover:text-primary/80 transition-colors">
       <Image 
-        src="https://placehold.co/40x40.png"
+        src={evokeLogo}
         alt="Evoke Skor Logo"
         width={32}
         height={32}
