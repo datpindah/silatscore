@@ -11,7 +11,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import { LogIn, AlertCircle, Loader2, Landmark } from 'lucide-react';
+import { LogIn, AlertCircle, Loader2, Landmark, Send } from 'lucide-react';
 import type { ScheduleTanding } from '@/lib/types';
 import { db } from '@/lib/firebase';
 import { doc, getDoc, onSnapshot } from 'firebase/firestore';
@@ -37,21 +37,21 @@ const halamanOptions = [
 function LoginPageContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const { user, signIn, loading: authLoading, error: authError, setError: setAuthError } = useAuth();
+  const { user, loading: authLoading, error: authError, setError: setAuthError, sendAuthLink } = useAuth();
 
   const [partaiInfo, setPartaiInfo] = useState<string>(defaultPartaiInfo);
   const [selectedPartaiId, setSelectedPartaiId] = useState<string>(NO_ACTIVE_SCHEDULE_VALUE);
   const [selectedHalaman, setSelectedHalaman] = useState<string>('');
   const [email, setEmail] = useState<string>('');
-  const [password, setPassword] = useState<string>('');
   const [gelanggang, setGelanggang] = useState<string>(searchParams.get('gelanggang') || '');
   
   const [pageError, setPageError] = useState<string | null>(null);
+  const [infoMessage, setInfoMessage] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
   const [scheduleLoading, setScheduleLoading] = useState<boolean>(false);
 
   useEffect(() => {
-    // Jika pengguna sudah login dan halaman tujuan serta gelanggang (jika perlu) sudah dipilih, redirect
+    // If user is logged in, redirect them.
     if (user) {
       if (selectedHalaman.startsWith('/admin')) {
         router.push(selectedHalaman);
@@ -68,13 +68,11 @@ function LoginPageContent() {
     }
     const redirectPage = searchParams.get('redirect');
      if (redirectPage && !selectedHalaman) {
-        // Ensure the redirect page is valid
         const isValidRedirect = halamanOptions.some(opt => opt.value === redirectPage);
         if (isValidRedirect) {
             setSelectedHalaman(redirectPage);
         }
     }
-
   }, [searchParams, gelanggang, selectedHalaman]);
 
 
@@ -129,11 +127,7 @@ function LoginPageContent() {
 
   useEffect(() => {
     if (authError) {
-      if (authError.code === 'auth/invalid-credential' || authError.code === 'auth/user-not-found' || authError.code === 'auth/wrong-password') {
-        setPageError('Email atau password salah.');
-      } else {
-        setPageError(`Login gagal: ${authError.message}`);
-      }
+      setPageError(authError.message);
       setAuthError(null);
     }
   }, [authError, setAuthError]);
@@ -142,6 +136,7 @@ function LoginPageContent() {
   const handleSubmit = async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     setPageError(null);
+    setInfoMessage(null);
     
     const targetGelanggang = gelanggang.trim();
 
@@ -157,25 +152,19 @@ function LoginPageContent() {
       setPageError('Silakan pilih halaman tujuan terlebih dahulu.');
       return;
     }
-    if (!email || !password) {
-      setPageError('Email dan password tidak boleh kosong.');
+    if (!email) {
+      setPageError('Email tidak boleh kosong.');
       return;
     }
     
     setIsSubmitting(true);
-    try {
-      const loggedInUser = await signIn(email, password);
-      if (loggedInUser) {
-        // Redirect is handled by the useEffect hook watching `user`, `selectedHalaman`, and `gelanggang`
-      }
-    } catch (submitError) {
-        // signIn function now handles setting authError, so this catch might be redundant
-        // unless signIn itself throws an error not caught internally.
-        console.error("Error during login handleSubmit calling signIn:", submitError);
-        setPageError("Terjadi kesalahan tak terduga saat mencoba login.");
-    } finally {
-        setIsSubmitting(false);
+    const result = await sendAuthLink(email);
+    if(result.success) {
+        setInfoMessage(result.message);
+    } else {
+        setPageError(result.message);
     }
+    setIsSubmitting(false);
   };
 
   const isLoadingOverall = authLoading || isSubmitting || scheduleLoading;
@@ -186,9 +175,9 @@ function LoginPageContent() {
       <main className="flex-1 flex items-center justify-center p-4 bg-gradient-to-br from-background to-muted/50">
         <Card className="w-full max-w-md shadow-2xl">
           <CardHeader>
-            <CardTitle className="text-3xl font-headline text-primary text-center">Login Panel SilatScore</CardTitle>
+            <CardTitle className="text-3xl font-headline text-primary text-center">Login Panel Tanding</CardTitle>
             <CardDescription className="text-center font-body">
-              Masukkan email, password, dan nama gelanggang. Pilih partai dan halaman tujuan jika relevan.
+              Masukkan email Anda. Tautan login akan dikirimkan jika email terdaftar.
             </CardDescription>
           </CardHeader>
           <form onSubmit={handleSubmit}>
@@ -196,8 +185,15 @@ function LoginPageContent() {
               {pageError && (
                 <Alert variant="destructive">
                   <AlertCircle className="h-4 w-4" />
-                  <AlertTitle>Login Gagal</AlertTitle>
+                  <AlertTitle>Gagal</AlertTitle>
                   <AlertDescription>{pageError}</AlertDescription>
+                </Alert>
+              )}
+              {infoMessage && (
+                <Alert>
+                  <LogIn className="h-4 w-4" />
+                  <AlertTitle>Informasi</AlertTitle>
+                  <AlertDescription>{infoMessage}</AlertDescription>
                 </Alert>
               )}
               <div className="space-y-2">
@@ -208,19 +204,6 @@ function LoginPageContent() {
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   placeholder="email@example.com"
-                  required
-                  disabled={isLoadingOverall}
-                  className="bg-background/80"
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="password">Password</Label>
-                <Input
-                  id="password"
-                  type="password"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  placeholder="Masukkan password Anda"
                   required
                   disabled={isLoadingOverall}
                   className="bg-background/80"
@@ -271,8 +254,8 @@ function LoginPageContent() {
                   </>
                 ) : (
                   <>
-                    <LogIn className="mr-2 h-4 w-4" />
-                    Login & Lanjutkan
+                    <Send className="mr-2 h-4 w-4" />
+                    Kirim Tautan Login
                   </>
                 )}
               </Button>
@@ -285,11 +268,9 @@ function LoginPageContent() {
 }
 
 export default function LoginPage() {
-  // Wrap with Suspense because LoginPageContent uses useSearchParams
   return (
     <Suspense fallback={<div className="flex h-screen items-center justify-center"><Loader2 className="h-12 w-12 animate-spin text-primary" /> Memuat Halaman Login...</div>}>
       <LoginPageContent />
     </Suspense>
   );
 }
-

@@ -1,3 +1,4 @@
+
 "use client";
 
 import type { ReactNode, Dispatch, SetStateAction } from 'react';
@@ -48,25 +49,32 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (isSignInWithEmailLink(auth, window.location.href)) {
         let email = window.localStorage.getItem('emailForSignIn');
         if (!email) {
-          // This can happen if the user opens the link on a different device.
-          email = window.prompt('Silakan masukkan email Anda untuk konfirmasi.');
+          email = window.prompt('Silakan masukkan kembali email Anda untuk konfirmasi.');
         }
-        if (email) {
-          setLoading(true);
-          try {
+        if (!email) {
+            setError({ code: 'auth/cancelled-popup-request', message: 'Proses login dibatalkan karena email tidak diberikan.' } as AuthError);
+            return;
+        }
+        
+        setLoading(true);
+        try {
             await signInWithEmailLink(auth, email, window.location.href);
-            // `onAuthStateChanged` will handle setting the user.
-          } catch (err) {
-            console.error("Error signing in with email link", err);
-            setError(err as AuthError);
-          } finally {
+        } catch (err) {
+            const authErr = err as AuthError;
+            let userMessage = `Gagal login: ${authErr.message}`;
+            if(authErr.code === 'auth/invalid-action-code') {
+                userMessage = "Tautan login tidak valid atau sudah kedaluwarsa. Silakan coba minta tautan baru.";
+            } else if (authErr.code === 'auth/user-disabled') {
+                userMessage = "Akun Anda telah dinonaktifkan.";
+            }
+            console.error("Error signing in with email link", authErr);
+            setError({ ...authErr, message: userMessage });
+        } finally {
             window.localStorage.removeItem('emailForSignIn');
-            // Clean the URL to remove login parameters
             if (window.history && window.history.replaceState) {
               window.history.replaceState({}, document.title, window.location.pathname);
             }
             setLoading(false);
-          }
         }
       }
     };
@@ -82,25 +90,26 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     try {
       const methods = await fetchSignInMethodsForEmail(auth, email);
       if (methods.length === 0) {
-        // Email does not exist, so don't send the link.
         return { success: false, message: "Email tidak terdaftar. Silakan hubungi admin untuk registrasi." };
       }
-
-      // Email exists, proceed with sending the sign-in link.
       const actionCodeSettings = {
-        url: `${window.location.origin}/saya`, // Redirect back to this page to complete sign-in
+        url: window.location.href, // Redirect back to the same page (Tanding login, TGR login, or Saya)
         handleCodeInApp: true,
       };
-
       await sendSignInLinkToEmail(auth, email, actionCodeSettings);
-      // Save the email locally to use when the user returns.
       window.localStorage.setItem('emailForSignIn', email);
       return { success: true, message: "Tautan login telah dikirim ke email Anda. Silakan cek kotak masuk Anda." };
-
     } catch (err) {
-      setError(err as AuthError);
-      console.error("Firebase send link error:", err);
-      return { success: false, message: `Gagal mengirim tautan: ${(err as AuthError).message}` };
+      const authErr = err as AuthError;
+      setError(authErr);
+      console.error("Firebase send link error:", authErr);
+      let userMessage = "Gagal mengirim tautan. Silakan coba lagi.";
+      if (authErr.code === 'auth/invalid-email') {
+          userMessage = "Format email yang Anda masukkan tidak valid.";
+      } else if (authErr.code === 'auth/network-request-failed') {
+          userMessage = "Gagal terhubung ke server. Periksa koneksi internet Anda.";
+      }
+      return { success: false, message: userMessage };
     } finally {
       setLoading(false);
     }

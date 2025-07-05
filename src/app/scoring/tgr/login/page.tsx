@@ -10,7 +10,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import { LogIn, AlertCircle, Loader2, Landmark } from 'lucide-react'; // Added Landmark
+import { LogIn, AlertCircle, Loader2, Landmark, Send } from 'lucide-react';
 import type { ScheduleTGR } from '@/lib/types';
 import { db } from '@/lib/firebase';
 import { doc, getDoc, onSnapshot } from 'firebase/firestore';
@@ -20,9 +20,7 @@ const ACTIVE_TGR_MATCHES_BY_GELANGGANG_PATH = 'app_settings/active_tgr_matches_b
 const SCHEDULE_TGR_COLLECTION = 'schedules_tgr';
 const NO_ACTIVE_TGR_SCHEDULE_VALUE = "NO_ACTIVE_TGR_SCHEDULE_SELECTED";
 
-const defaultPartaiOptions = [
-  { value: NO_ACTIVE_TGR_SCHEDULE_VALUE, label: 'Masukkan nama gelanggang untuk melihat partai aktif' },
-];
+const defaultPartaiInfo = 'Masukkan nama gelanggang untuk melihat partai aktif';
 
 const tgrHalamanOptions = [
   { value: '/scoring/tgr/timer-control', label: 'Kontrol Timer TGR' },
@@ -35,37 +33,38 @@ const tgrHalamanOptions = [
   { value: '/scoring/tgr/dewan-1', label: 'Dewan 1 (Input Penalti TGR)' },
   { value: '/scoring/tgr/ketua-pertandingan', label: 'Ketua Pertandingan (TGR)' },
   { value: '/scoring/tgr/monitoring-skor', label: 'Monitoring Skor (Display Umum TGR)' },
-  // Admin roles can be added here if needed, or handled separately
   { value: '/admin', label: 'Admin Panel' }
 ];
 
 
 function TGRLoginPageContent() {
   const router = useRouter();
-  const { user, signIn, loading: authLoading, error: authError, setError: setAuthError } = useAuth();
+  const { user, loading: authLoading, error: authError, setError: setAuthError, sendAuthLink } = useAuth();
 
-  const [partaiInfo, setPartaiInfo] = useState<string>(defaultPartaiOptions[0].label);
+  const [partaiInfo, setPartaiInfo] = useState<string>(defaultPartaiInfo);
   const [selectedPartaiId, setSelectedPartaiId] = useState<string>(NO_ACTIVE_TGR_SCHEDULE_VALUE);
   const [selectedHalaman, setSelectedHalaman] = useState<string>('');
   const [email, setEmail] = useState<string>('');
-  const [password, setPassword] = useState<string>('');
   const [gelanggang, setGelanggang] = useState<string>('');
   
   const [pageError, setPageError] = useState<string | null>(null);
+  const [infoMessage, setInfoMessage] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
   const [scheduleLoading, setScheduleLoading] = useState<boolean>(false);
 
   useEffect(() => {
-    if (user && selectedHalaman && gelanggang) {
-        router.push(`${selectedHalaman}?gelanggang=${encodeURIComponent(gelanggang)}`);
-    } else if (user && selectedHalaman && selectedHalaman.startsWith('/admin')) {
+    if (user && selectedHalaman) {
+      if (selectedHalaman.startsWith('/admin')) {
         router.push(selectedHalaman);
+      } else if (gelanggang.trim()) {
+        router.push(`${selectedHalaman}?gelanggang=${encodeURIComponent(gelanggang.trim())}`);
+      }
     }
   }, [user, selectedHalaman, gelanggang, router]);
   
   useEffect(() => {
     if (!gelanggang.trim()) {
-      setPartaiInfo(defaultPartaiOptions[0].label);
+      setPartaiInfo(defaultPartaiInfo);
       setSelectedPartaiId(NO_ACTIVE_TGR_SCHEDULE_VALUE);
       setScheduleLoading(false);
       return;
@@ -118,11 +117,7 @@ function TGRLoginPageContent() {
 
   useEffect(() => {
     if (authError) {
-      if (authError.code === 'auth/invalid-credential' || authError.code === 'auth/user-not-found' || authError.code === 'auth/wrong-password') {
-        setPageError('Email atau password salah.');
-      } else {
-        setPageError(`Login gagal: ${authError.message}`);
-      }
+      setPageError(authError.message);
       setAuthError(null);
     }
   }, [authError, setAuthError]);
@@ -131,6 +126,7 @@ function TGRLoginPageContent() {
   const handleSubmit = async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     setPageError(null);
+    setInfoMessage(null);
     
     if (!gelanggang.trim() && selectedHalaman && !selectedHalaman.startsWith('/admin')) {
         setPageError('Nama gelanggang tidak boleh kosong untuk halaman scoring.');
@@ -144,21 +140,19 @@ function TGRLoginPageContent() {
       setPageError('Silakan pilih halaman tujuan TGR terlebih dahulu.');
       return;
     }
-    if (!email || !password) {
-      setPageError('Email dan password tidak boleh kosong.');
+    if (!email) {
+      setPageError('Email tidak boleh kosong.');
       return;
     }
     
     setIsSubmitting(true);
-    try {
-      await signIn(email, password);
-      // Redirect is handled by useEffect watching `user`, `selectedHalaman`, and `gelanggang`
-    } catch (submitError) {
-      console.error("Error during TGR login handleSubmit calling signIn:", submitError);
-      setPageError("Terjadi kesalahan tak terduga saat mencoba login.");
-    } finally {
-      setIsSubmitting(false);
+    const result = await sendAuthLink(email);
+    if(result.success) {
+        setInfoMessage(result.message);
+    } else {
+        setPageError(result.message);
     }
+    setIsSubmitting(false);
   };
 
   const isLoadingOverall = authLoading || isSubmitting || scheduleLoading;
@@ -171,7 +165,7 @@ function TGRLoginPageContent() {
           <CardHeader>
             <CardTitle className="text-3xl font-headline text-primary text-center">Login Panel Scoring TGR</CardTitle>
             <CardDescription className="text-center font-body">
-              Masukkan email, password, dan nama gelanggang. Pilih halaman tujuan.
+              Masukkan email Anda. Tautan login akan dikirimkan jika email terdaftar.
             </CardDescription>
           </CardHeader>
           <form onSubmit={handleSubmit}>
@@ -179,31 +173,25 @@ function TGRLoginPageContent() {
               {pageError && (
                 <Alert variant="destructive">
                   <AlertCircle className="h-4 w-4" />
-                  <AlertTitle>Login Gagal</AlertTitle>
+                  <AlertTitle>Gagal</AlertTitle>
                   <AlertDescription>{pageError}</AlertDescription>
                 </Alert>
               )}
+               {infoMessage && (
+                <Alert>
+                  <LogIn className="h-4 w-4" />
+                  <AlertTitle>Informasi</AlertTitle>
+                  <AlertDescription>{infoMessage}</AlertDescription>
+                </Alert>
+              )}
               <div className="space-y-2">
-                <Label htmlFor="email">Email (Firebase Auth)</Label>
+                <Label htmlFor="email">Email</Label>
                 <Input
                   id="email"
                   type="email"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   placeholder="email@example.com"
-                  required
-                  disabled={isLoadingOverall}
-                  className="bg-background/80"
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="password">Password (Firebase Auth)</Label>
-                <Input
-                  id="password"
-                  type="password"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  placeholder="Masukkan password Anda"
                   required
                   disabled={isLoadingOverall}
                   className="bg-background/80"
@@ -254,8 +242,8 @@ function TGRLoginPageContent() {
                   </>
                 ) : (
                   <>
-                    <LogIn className="mr-2 h-4 w-4" />
-                    Login & Lanjutkan
+                    <Send className="mr-2 h-4 w-4" />
+                    Kirim Tautan Login
                   </>
                 )}
               </Button>
@@ -268,10 +256,6 @@ function TGRLoginPageContent() {
 }
 
 export default function TGRLoginPage() {
-  // Wrap with Suspense because TGRLoginPageContent might use hooks like useSearchParams indirectly
-  // or if it were to be used in a context that needs it.
-  // For now, standard export is fine if TGRLoginPageContent itself isn't Suspense-gated.
-  // However, to be safe and consistent with other login/scoring pages that will use useSearchParams:
   return (
     <Suspense fallback={<div className="flex h-screen items-center justify-center"><Loader2 className="h-12 w-12 animate-spin text-primary" /> Memuat Halaman Login TGR...</div>}>
       <TGRLoginPageContent />
