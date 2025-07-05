@@ -88,32 +88,45 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setLoading(true);
     setError(null);
     try {
+      // First, check if the email is registered
       const methods = await fetchSignInMethodsForEmail(auth, email);
       if (methods.length === 0) {
+        // If no methods, the email is not registered.
         return { success: false, message: "Email tidak terdaftar. Silakan hubungi admin untuk registrasi." };
       }
+
+      // If registered, proceed to send the link
       const actionCodeSettings = {
-        url: window.location.href, // Redirect back to the same page (Tanding login, TGR login, or Saya)
+        url: window.location.href, // This URL is where the user will be redirected back to after clicking the email link
         handleCodeInApp: true,
       };
+
       await sendSignInLinkToEmail(auth, email, actionCodeSettings);
       window.localStorage.setItem('emailForSignIn', email);
-      return { success: true, message: "Tautan login telah dikirim ke email Anda. Silakan cek kotak masuk Anda." };
+      
+      return { success: true, message: "Tautan login telah dikirim! Silakan periksa kotak masuk dan folder spam/junk di email Anda." };
+
     } catch (err) {
       const authErr = err as AuthError;
-      setError(authErr);
+      setError(authErr); // Set the full error for potential internal logging
       console.error("Firebase send link error:", authErr);
-      let userMessage = "Gagal mengirim tautan. Silakan coba lagi.";
+      
+      let userMessage = "Gagal mengirim tautan. Silakan coba lagi nanti.";
       if (authErr.code === 'auth/invalid-email') {
           userMessage = "Format email yang Anda masukkan tidak valid.";
       } else if (authErr.code === 'auth/network-request-failed') {
-          userMessage = "Gagal terhubung ke server. Periksa koneksi internet Anda.";
+          userMessage = "Gagal terhubung ke server. Periksa koneksi internet Anda dan coba lagi.";
+      } else if (authErr.code) {
+          // Provide a more generic but informative message for other auth errors
+          userMessage = `Terjadi kesalahan saat mengirim tautan. Silakan coba lagi. (Kode: ${authErr.code})`;
       }
+      
       return { success: false, message: userMessage };
     } finally {
       setLoading(false);
     }
   };
+
 
   const signInWithGoogle = async (): Promise<FirebaseUser | null> => {
     setLoading(true);
