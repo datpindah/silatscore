@@ -8,9 +8,9 @@ export function AppLogo() {
       <Image 
         src={evokeLogo}
         alt="Evoke Skor Logo"
-        width={48}
+        width={78}
         height={48}
-        className="h-12 w-12"
+        className="h-14 w-43"
         data-ai-hint="logo"
       />
     </Link>

@@ -1,4 +1,3 @@
-
 "use client";
 
 import Link from 'next/link';
@@ -13,7 +12,7 @@ import { useAuth } from '@/contexts/AuthContext';
 
 const navItems = [
   { href: '/', label: 'Home' },
-  { href: '/scoring', label: 'Scoring' },
+  { href: '/saya', label: 'Saya' },
   { href: '/admin', label: 'Admin' },
 ];
 

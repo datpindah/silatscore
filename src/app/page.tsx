@@ -1,4 +1,3 @@
-
 import { Button } from "@/components/ui/button";
 import { Header } from "@/components/layout/Header";
 import { PageTitle } from "@/components/shared/PageTitle";
@@ -32,8 +31,8 @@ export default function HomePage() {
                 <SectionCard
                   title="Live Scoring"
                   description="Go to the scoring page to manage a live match, track points, fouls, and time."
-                  buttonHref="/scoring"
-                  buttonLabel="Go to Scoring"
+                  buttonHref="/saya"
+                  buttonLabel="Login & Scoring"
                 />
                 <SectionCard
                   title="Admin Panel"
