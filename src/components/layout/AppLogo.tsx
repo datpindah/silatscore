@@ -8,12 +8,11 @@ export function AppLogo() {
       <Image 
         src={evokeLogo}
         alt="Evoke Skor Logo"
-        width={32}
-        height={32}
-        className="h-8 w-8"
+        width={48}
+        height={48}
+        className="h-12 w-12"
         data-ai-hint="logo"
       />
-      <span className="text-2xl font-headline font-semibold">Evoke Skor</span>
     </Link>
   );
 }
