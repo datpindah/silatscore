@@ -1,6 +1,6 @@
 import Image from 'next/image';
 import Link from 'next/link';
-import evokeLogo from './public/evoke.png';
+import evokeLogo from '@/components/layout/public/evoke.png';
 
 export function AppLogo() {
   return (
