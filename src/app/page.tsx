@@ -27,45 +27,12 @@ export default function HomePage() {
               <p className="text-lg font-body leading-relaxed">
                 Evoke Skor Digital provides a seamless experience for judges, officials, and enthusiasts to track scores, manage matches, and access rule clarifications with ease.
               </p>
-              <div className="space-y-4">
-                <SectionCard
-                  title="Live Scoring"
-                  description="Go to the scoring page to manage a live match, track points, fouls, and time."
-                  buttonHref="/saya"
-                  buttonLabel="Login & Scoring"
-                />
-                <SectionCard
-                  title="Admin Panel"
-                  description="Access the admin panel to manage schedules, review match data, and clarify rules."
-                  buttonHref="/admin"
-                  buttonLabel="Go to Admin"
-                />
-              </div>
             </div>
           </div>
         </div>
       </main>
       <Footer />
     </>
-  );
-}
-
-interface SectionCardProps {
-  title: string;
-  description: string;
-  buttonHref: string;
-  buttonLabel: string;
-}
-
-function SectionCard({ title, description, buttonHref, buttonLabel }: SectionCardProps) {
-  return (
-    <div className="p-6 bg-card rounded-lg shadow-md border border-border">
-      <h2 className="text-2xl font-headline text-primary mb-2">{title}</h2>
-      <p className="text-foreground/90 font-body mb-4">{description}</p>
-      <Button asChild className="bg-primary hover:bg-primary/90 text-primary-foreground">
-        <Link href={buttonHref}>{buttonLabel}</Link>
-      </Button>
-    </div>
   );
 }
 
