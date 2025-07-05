@@ -91,6 +91,14 @@ export function Header({ overrideBackgroundClass }: { overrideBackgroundClass?: 
     );
   }
 
+  // Filter nav items based on authentication status
+  const displayedNavItems = navItems.filter(item => {
+    if (item.href === '/admin') {
+      return !!user;
+    }
+    return true;
+  });
+
   return (
     <header
       className={finalClassName}
@@ -102,7 +110,7 @@ export function Header({ overrideBackgroundClass }: { overrideBackgroundClass?: 
 
         <div className="flex items-center gap-2">
           <nav className="hidden md:flex gap-1 items-center">
-            {navItems.map((item) => (
+            {displayedNavItems.map((item) => (
               <Button key={item.label} variant="ghost" asChild size="sm">
                 <Link href={item.href} className="text-sm font-medium text-foreground/80 hover:text-foreground">
                   {item.label}
@@ -137,7 +145,7 @@ export function Header({ overrideBackgroundClass }: { overrideBackgroundClass?: 
                     <SheetClose asChild>
                       <AppLogo />
                     </SheetClose>
-                    {navItems.map((item) => (
+                    {displayedNavItems.map((item) => (
                       <SheetClose key={item.label} asChild>
                         <Link
                           href={item.href}
