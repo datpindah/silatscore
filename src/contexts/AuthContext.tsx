@@ -12,6 +12,8 @@ import {
   GoogleAuthProvider,
   OAuthProvider,
   signInWithPopup,
+  createUserWithEmailAndPassword,
+  updateProfile,
 } from 'firebase/auth';
 import { useRouter } from 'next/navigation';
 
@@ -21,6 +23,7 @@ interface AuthContextType {
   error: AuthError | null;
   setError: Dispatch<SetStateAction<AuthError | null>>;
   signIn: (email: string, pass: string) => Promise<FirebaseUser | null>;
+  signUp: (email: string, pass: string, displayName: string) => Promise<FirebaseUser | null>;
   signInWithGoogle: () => Promise<FirebaseUser | null>;
   signInWithApple: () => Promise<FirebaseUser | null>;
   signOut: () => Promise<void>;
@@ -52,6 +55,24 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     } catch (err) {
       setError(err as AuthError);
       console.error("Firebase sign-in error:", err);
+      return null;
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const signUp = async (email: string, pass: string, displayName: string): Promise<FirebaseUser | null> => {
+    setLoading(true);
+    setError(null);
+    try {
+      const userCredential = await createUserWithEmailAndPassword(auth, email, pass);
+      await updateProfile(userCredential.user, { displayName });
+      // setUser will be updated by onAuthStateChanged, but we can set it here for immediate UI update
+      setUser({ ...userCredential.user, displayName });
+      return userCredential.user;
+    } catch (err) {
+      setError(err as AuthError);
+      console.error("Firebase sign-up error:", err);
       return null;
     } finally {
       setLoading(false);
@@ -113,6 +134,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     error,
     setError,
     signIn,
+    signUp,
     signInWithGoogle,
     signInWithApple,
     signOut,

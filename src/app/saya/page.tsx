@@ -11,7 +11,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter }
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import { LogIn, AlertCircle, Loader2, Users, Sword, Mail, Shield } from 'lucide-react';
+import { LogIn, AlertCircle, Loader2, Users, Sword, Mail, Shield, UserPlus } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import { AppLogo } from '@/components/layout/AppLogo';
 
@@ -27,17 +27,21 @@ const AppleIcon = () => (
 
 // New component for email/password form
 function EmailLoginForm({ onBack }: { onBack: () => void }) {
-  const { signIn, loading, error: authError, setError: setAuthError } = useAuth();
+  const { signIn, signUp, loading, error: authError, setError: setAuthError } = useAuth();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [displayName, setDisplayName] = useState('');
+  const [isRegisterMode, setIsRegisterMode] = useState(false);
   const [pageError, setPageError] = useState<string | null>(null);
 
   useEffect(() => {
     if (authError) {
-      if (authError.code === 'auth/invalid-credential' || authError.code === 'auth/user-not-found' || authError.code === 'auth/wrong-password') {
+      if (authError.code === 'auth/invalid-credential') {
         setPageError('Email atau password salah.');
+      } else if (authError.code === 'auth/email-already-in-use') {
+        setPageError('Email ini sudah terdaftar. Silakan login.');
       } else {
-        setPageError(authError.message || 'Login gagal.');
+        setPageError(authError.message || 'Terjadi kesalahan.');
       }
       setAuthError(null); // Clear error after displaying
     }
@@ -46,26 +50,43 @@ function EmailLoginForm({ onBack }: { onBack: () => void }) {
   const handleSubmit = async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     setPageError(null);
-    if (!email || !password) {
-      setPageError('Email dan password tidak boleh kosong.');
-      return;
+
+    if (isRegisterMode) {
+      if (!displayName.trim()) {
+        setPageError('Nama lengkap tidak boleh kosong.');
+        return;
+      }
+      await signUp(email, password, displayName);
+    } else {
+      if (!email || !password) {
+        setPageError('Email dan password tidak boleh kosong.');
+        return;
+      }
+      await signIn(email, password);
     }
-    await signIn(email, password);
   };
 
   return (
     <Card className="w-full max-w-md shadow-none border-none">
       <CardHeader>
-        <CardTitle className="text-2xl font-headline text-primary text-center">Login dengan Email</CardTitle>
+        <CardTitle className="text-2xl font-headline text-primary text-center">
+            {isRegisterMode ? 'Registrasi dengan Email' : 'Login dengan Email'}
+        </CardTitle>
       </CardHeader>
       <form onSubmit={handleSubmit}>
         <CardContent className="space-y-4">
           {pageError && (
             <Alert variant="destructive">
               <AlertCircle className="h-4 w-4" />
-              <AlertTitle>Login Gagal</AlertTitle>
+              <AlertTitle>{isRegisterMode ? 'Registrasi Gagal' : 'Login Gagal'}</AlertTitle>
               <AlertDescription>{pageError}</AlertDescription>
             </Alert>
+          )}
+          {isRegisterMode && (
+             <div className="space-y-2">
+                <Label htmlFor="displayName">Nama Lengkap</Label>
+                <Input id="displayName" value={displayName} onChange={(e) => setDisplayName(e.target.value)} placeholder="Nama Lengkap Anda" required={isRegisterMode} disabled={loading} />
+              </div>
           )}
           <div className="space-y-2">
             <Label htmlFor="email">Email</Label>
@@ -78,10 +99,22 @@ function EmailLoginForm({ onBack }: { onBack: () => void }) {
         </CardContent>
         <CardFooter className="flex flex-col gap-4">
           <Button type="submit" className="w-full bg-primary hover:bg-primary/90 text-primary-foreground" disabled={loading}>
-            {loading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <LogIn className="mr-2 h-4 w-4" />}
-            Login
+            {loading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : isRegisterMode ? <UserPlus className="mr-2 h-4 w-4" /> : <LogIn className="mr-2 h-4 w-4" />}
+            {isRegisterMode ? 'Registrasi' : 'Login'}
           </Button>
-          <Button variant="link" onClick={onBack}>Kembali</Button>
+          <Button type="button" variant="link" onClick={onBack}>Kembali ke pilihan lain</Button>
+           <div className="text-center text-sm">
+            <button
+                type="button"
+                className="underline text-muted-foreground hover:text-primary"
+                onClick={() => {
+                    setIsRegisterMode(!isRegisterMode);
+                    setPageError(null); // Clear errors on mode switch
+                }}
+            >
+                {isRegisterMode ? 'Sudah punya akun? Login di sini' : 'Belum punya akun? Registrasi di sini'}
+            </button>
+          </div>
         </CardFooter>
       </form>
     </Card>
