@@ -11,7 +11,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter }
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import { LogIn, AlertCircle, Loader2, Users, Sword, Mail } from 'lucide-react';
+import { LogIn, AlertCircle, Loader2, Users, Sword, Mail, Shield } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import { AppLogo } from '@/components/layout/AppLogo';
 
@@ -151,53 +151,75 @@ function ScoringSelection() {
   const { user, signOut } = useAuth();
 
   return (
-    <>
+    <div className="container mx-auto px-4 py-8 text-center w-full">
       <PageTitle
-        title={`Selamat Datang, ${user?.email || 'Pengguna'}`}
-        description="Pilih jenis pertandingan Pencak Silat yang ingin Anda nilai atau kelola."
+        title={`Selamat Datang, ${user?.displayName || user?.email || 'Pengguna'}`}
+        description="Pilih panel yang ingin Anda akses di bawah ini."
       />
 
-        <div className="grid md:grid-cols-2 gap-6 mt-8">
-          <Card className="shadow-lg hover:shadow-xl transition-shadow duration-300">
-            <CardHeader>
-              <CardTitle className="flex items-center font-headline text-primary">
-                <Sword className="mr-3 h-7 w-7" />
-                Scoring Tanding
-              </CardTitle>
-              <CardDescription className="font-body">
-                Masuk ke halaman login panel Tanding untuk memilih peran spesifik (Juri, Dewan, dll).
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <Button asChild className="w-full bg-primary hover:bg-primary/90 text-primary-foreground">
-                <Link href="/login">Buka Panel Tanding</Link>
-              </Button>
-            </CardContent>
-          </Card>
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mt-8 max-w-5xl mx-auto">
+        {/* Scoring Tanding Card */}
+        <Card className="shadow-lg hover:shadow-xl transition-shadow duration-300 flex flex-col text-left">
+          <CardHeader className="flex-grow">
+            <CardTitle className="flex items-center font-headline text-primary">
+              <Sword className="mr-3 h-6 w-6" />
+              Scoring Tanding
+            </CardTitle>
+            <CardDescription className="font-body pt-2">
+              Masuk ke panel scoring Tanding untuk memilih peran (Juri, Dewan, dll).
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <Button asChild className="w-full bg-primary hover:bg-primary/90 text-primary-foreground">
+              <Link href="/login">Buka Panel Tanding</Link>
+            </Button>
+          </CardContent>
+        </Card>
 
-          <Card className="shadow-lg hover:shadow-xl transition-shadow duration-300">
-            <CardHeader>
-              <CardTitle className="flex items-center font-headline text-primary">
-                <Users className="mr-3 h-7 w-7" />
-                Scoring TGR
-              </CardTitle>
-              <CardDescription className="font-body">
-                Masuk ke halaman login panel TGR untuk memilih peran spesifik.
-              </CardDescription>
+        {/* Scoring TGR Card */}
+        <Card className="shadow-lg hover:shadow-xl transition-shadow duration-300 flex flex-col text-left">
+          <CardHeader className="flex-grow">
+            <CardTitle className="flex items-center font-headline text-primary">
+              <Users className="mr-3 h-6 w-6" />
+              Scoring TGR
+            </CardTitle>
+            <CardDescription className="font-body pt-2">
+              Masuk ke panel scoring TGR untuk memilih peran spesifik.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <Button asChild className="w-full bg-primary hover:bg-primary/90 text-primary-foreground">
+              <Link href="/scoring/tgr/login">Buka Panel TGR</Link>
+            </Button>
+          </CardContent>
+        </Card>
+
+        {/* Admin Panel Card */}
+        <Card className="shadow-lg hover:shadow-xl transition-shadow duration-300 flex flex-col text-left border-accent">
+            <CardHeader className="flex-grow">
+                <CardTitle className="flex items-center font-headline text-accent">
+                    <Shield className="mr-3 h-6 w-6" />
+                    Panel Admin
+                </CardTitle>
+                <CardDescription className="font-body pt-2">
+                    Kelola jadwal, peserta, dan pengaturan pertandingan.
+                </CardDescription>
             </CardHeader>
             <CardContent>
-              <Button asChild className="w-full bg-primary hover:bg-primary/90 text-primary-foreground">
-                <Link href="/scoring/tgr/login">Buka Panel TGR</Link>
-              </Button>
+                <Button asChild className="w-full bg-accent hover:bg-accent/90 text-accent-foreground">
+                    <Link href="/admin">Buka Panel Admin</Link>
+                </Button>
             </CardContent>
-          </Card>
-        </div>
-        <div className="text-center mt-8">
-            <Button variant="outline" onClick={signOut}>Logout</Button>
-        </div>
-    </>
+        </Card>
+      </div>
+
+      <div className="text-center mt-12">
+        <Button variant="outline" onClick={signOut}>Logout</Button>
+      </div>
+    </div>
   );
 }
+
 
 function SayaPageComponent() {
   const { user, loading } = useAuth();
@@ -205,7 +227,7 @@ function SayaPageComponent() {
   return (
     <div className="flex flex-col min-h-screen">
       <Header />
-      <main className="flex-1 container mx-auto px-4 py-8 flex items-center justify-center">
+      <main className="flex-1 flex items-center justify-center">
         {loading ? (
           <div className="flex justify-center items-center h-64">
             <Loader2 className="h-12 w-12 animate-spin text-primary" />
