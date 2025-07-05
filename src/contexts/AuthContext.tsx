@@ -9,6 +9,9 @@ import {
   onAuthStateChanged,
   signInWithEmailAndPassword,
   signOut as firebaseSignOut,
+  GoogleAuthProvider,
+  OAuthProvider,
+  signInWithPopup,
 } from 'firebase/auth';
 import { useRouter } from 'next/navigation';
 
@@ -18,6 +21,8 @@ interface AuthContextType {
   error: AuthError | null;
   setError: Dispatch<SetStateAction<AuthError | null>>;
   signIn: (email: string, pass: string) => Promise<FirebaseUser | null>;
+  signInWithGoogle: () => Promise<FirebaseUser | null>;
+  signInWithApple: () => Promise<FirebaseUser | null>;
   signOut: () => Promise<void>;
 }
 
@@ -53,6 +58,40 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   };
 
+  const signInWithGoogle = async (): Promise<FirebaseUser | null> => {
+    setLoading(true);
+    setError(null);
+    try {
+      const googleProvider = new GoogleAuthProvider();
+      const result = await signInWithPopup(auth, googleProvider);
+      setUser(result.user);
+      return result.user;
+    } catch (err) {
+      setError(err as AuthError);
+      console.error("Firebase Google sign-in error:", err);
+      return null;
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const signInWithApple = async (): Promise<FirebaseUser | null> => {
+    setLoading(true);
+    setError(null);
+    try {
+      const appleProvider = new OAuthProvider('apple.com');
+      const result = await signInWithPopup(auth, appleProvider);
+      setUser(result.user);
+      return result.user;
+    } catch (err) {
+      setError(err as AuthError);
+      console.error("Firebase Apple sign-in error:", err);
+      return null;
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const signOut = async () => {
     setLoading(true);
     setError(null);
@@ -74,6 +113,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     error,
     setError,
     signIn,
+    signInWithGoogle,
+    signInWithApple,
     signOut,
   };
 
